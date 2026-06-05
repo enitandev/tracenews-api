@@ -98,12 +98,15 @@ ALTER TABLE bias_categories ENABLE ROW LEVEL SECURITY;
 ALTER TABLE outlet_bias_tags ENABLE ROW LEVEL SECURITY;
 ALTER TABLE story_bias_tags ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Public can read bias_categories" ON bias_categories;
 CREATE POLICY "Public can read bias_categories"
   ON bias_categories FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Public can read outlet_bias_tags" ON outlet_bias_tags;
 CREATE POLICY "Public can read outlet_bias_tags"
   ON outlet_bias_tags FOR SELECT USING (true);
 
+DROP POLICY IF EXISTS "Public can read story_bias_tags" ON story_bias_tags;
 CREATE POLICY "Public can read story_bias_tags"
   ON story_bias_tags FOR SELECT USING (true);
 
