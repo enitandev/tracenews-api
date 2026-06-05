@@ -8,6 +8,74 @@ from app.db import supabase
 logger = logging.getLogger(__name__)
 
 
+def extract_image_from_entry(entry: dict) -> str | None:
+    """Extract image URL from RSS entry using multiple fallback methods."""
+
+    # Method 1: media:content tag
+    media_content = entry.get("media_content", [])
+    if media_content:
+        for media in media_content:
+            url = media.get("url", "")
+            if url and any(ext in url.lower() for ext in [".jpg", ".jpeg", ".png", ".webp"]):
+                return url
+
+    # Method 2: media:thumbnail
+    media_thumbnail = entry.get("media_thumbnail", [])
+    if media_thumbnail:
+        url = media_thumbnail[0].get("url", "")
+        if url:
+            return url
+
+    # Method 3: enclosure tag
+    enclosures = entry.get("enclosures", [])
+    for enc in enclosures:
+        if enc.get("type", "").startswith("image/"):
+            return enc.get("href", "") or enc.get("url", "")
+
+    # Method 4: links with image type
+    links = entry.get("links", [])
+    for link in links:
+        if link.get("type", "").startswith("image/"):
+            return link.get("href", "")
+
+    # Method 5: parse og:image from summary/content HTML
+    content = entry.get("summary", "") or entry.get("content", [{}])[0].get("value", "")
+    if content and "<img" in content:
+        import re
+        match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
+        if match:
+            url = match.group(1)
+            if url.startswith("http"):
+                return url
+
+    return None
+
+
+def fetch_og_image(url: str) -> str | None:
+    """Fetch og:image from article URL as last resort."""
+    try:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; TraceNewsBot/1.0)"}
+        response = httpx.get(url, headers=headers, timeout=8, follow_redirects=True)
+        if response.status_code == 200:
+            import re
+            match = re.search(
+                r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
+                response.text
+            )
+            if match:
+                return match.group(1)
+            # Also try reversed attribute order
+            match = re.search(
+                r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
+                response.text
+            )
+            if match:
+                return match.group(1)
+    except Exception:
+        pass
+    return None
+
+
 def fetch_outlets() -> list[dict]:
     """Fetch all active outlets with RSS feeds from Supabase."""
     response = supabase.table("outlets").select(
@@ -36,18 +104,24 @@ def parse_feed(outlet: dict) -> list[dict]:
                 except Exception:
                     published_at = datetime.now(timezone.utc).isoformat()
 
+                # Extract image — try RSS first, fall back to og:image scrape
+                image_url = extract_image_from_entry(entry)
+                if not image_url:
+                    image_url = fetch_og_image(url)
+
                 stories.append({
-                    "outlet_id": outlet["id"],
-                    "outlet_name": outlet["name"],
-                    "outlet_slug": outlet["slug"],
-                    "geopolitical_lean": outlet["geopolitical_lean"],
-                    "party_proximity": outlet["party_proximity"],
-                    "ownership_type": outlet["ownership_type"],
-                    "title": title,
-                    "url": url,
-                    "summary": summary,
-                    "published_at": published_at,
-                    "fetched_at": datetime.now(timezone.utc).isoformat(),
+                    "outlet_id":        outlet["id"],
+                    "outlet_name":      outlet["name"],
+                    "outlet_slug":      outlet["slug"],
+                    "geopolitical_lean":outlet["geopolitical_lean"],
+                    "party_proximity":  outlet["party_proximity"],
+                    "ownership_type":   outlet["ownership_type"],
+                    "title":            title,
+                    "url":              url,
+                    "summary":          summary,
+                    "image_url":        image_url,
+                    "published_at":     published_at,
+                    "fetched_at":       datetime.now(timezone.utc).isoformat(),
                 })
         except Exception as e:
             logger.warning(f"Failed to parse feed {feed_url} for {outlet['name']}: {e}")
@@ -87,6 +161,6 @@ def run_fetch() -> dict:
     logger.info(f"Fetch complete. {saved}/{len(all_stories)} stories saved.")
     return {
         "outlets_fetched": len(outlets),
-        "stories_found": len(all_stories),
-        "stories_saved": saved,
+        "stories_found":   len(all_stories),
+        "stories_saved":   saved,
     }
