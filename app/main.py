@@ -69,26 +69,14 @@ def trigger_full_run():
     return {"status": "ok", "fetch": fetch, "cluster": cluster}
 
 
+from fastapi import BackgroundTasks
+from app.clusterer import run_full_recluster
+
 @app.post("/admin/recluster-all")
-def trigger_recluster_all():
-    """One-time recovery endpoint to recluster all stories."""
-    from app.clusterer import backfill_missing_embeddings
-    from app.scorer import run_scoring
-    
-    # 1. Backfill embeddings
-    backfill_missing_embeddings()
-    
-    # 2. Run full clustering
-    cluster_res = run_clustering(all_time=True)
-    
-    # 3. Run scoring
-    score_res = run_scoring(all_time=True)
-    
-    return {
-        "status": "ok",
-        "clustering": cluster_res,
-        "scoring": score_res
-    }
+async def recluster_all(background_tasks: BackgroundTasks):
+    """One-time recovery endpoint to recluster all stories in the background."""
+    background_tasks.add_task(run_full_recluster)
+    return {"status": "started", "message": "Full recluster running in background. Check Railway logs."}
 
 
 # ── STORIES API ─────────────────────────────────────

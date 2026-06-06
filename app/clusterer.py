@@ -181,6 +181,9 @@ def run_clustering(all_time: bool = False) -> dict:
         count_result = supabase.table("stories").select("id", count="exact").eq("cluster_id", cluster_id).execute()
         supabase.table("clusters").update({"outlet_count": count_result.count or 0}).eq("id", cluster_id).execute()
 
+        if assigned > 0 and assigned % 50 == 0:
+            logger.info(f"Progress: Clustered {assigned} stories so far...")
+
     # Run cleanup of old single-story clusters
     cleanup_old_clusters()
 
@@ -194,3 +197,22 @@ def run_clustering(all_time: bool = False) -> dict:
         "new_clusters": created,
         "total_clusters": total_clusters,
     }
+
+def run_full_recluster():
+    """Background task to run a full recluster."""
+    from app.scorer import run_scoring
+    
+    logger.info("--- STARTING FULL RECLUSTER BACKGROUND TASK ---")
+    
+    # 1. Backfill missing embeddings (it logs batches internally)
+    backfill_missing_embeddings()
+    
+    # 2. Run full clustering
+    cluster_res = run_clustering(all_time=True)
+    logger.info(f"Clustering finished: {cluster_res}")
+    
+    # 3. Run scoring
+    score_res = run_scoring(all_time=True)
+    logger.info(f"Scoring finished: {score_res}")
+    
+    logger.info("--- COMPLETED FULL RECLUSTER BACKGROUND TASK ---")
