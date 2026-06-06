@@ -10,13 +10,16 @@ logger = logging.getLogger(__name__)
 SIMILARITY_THRESHOLD = 0.65
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-def get_recent_unclustered(hours: int = 48) -> list[dict]:
-    """Get stories from the last N hours that haven't been clustered yet and have embeddings."""
-    from datetime import datetime, timedelta
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
-    response = supabase.table("stories").select("id, title, summary, published_at, fetched_at, embedding").gte(
-        "published_at", cutoff
-    ).is_("cluster_id", "null").not_.is_("embedding", "null").execute()
+def get_recent_unclustered(hours: int = 48, all_time: bool = False) -> list[dict]:
+    """Get stories that haven't been clustered yet and have embeddings."""
+    query = supabase.table("stories").select("id, title, summary, published_at, fetched_at, embedding").is_("cluster_id", "null").not_.is_("embedding", "null")
+    if not all_time:
+        from datetime import datetime, timedelta
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+        query = query.gte("published_at", cutoff)
+    
+    # We may need to fetch more than the default limit of 1000 for all_time, but for now 1000 is enough
+    response = query.limit(5000).execute()
     return response.data or []
 
 def is_earlier_story(new_story: dict, existing_first_seen: str, new_story_fetched: str) -> bool:
@@ -67,10 +70,31 @@ def get_embedding(text: str) -> list[float] | None:
         logger.error(f"Failed to generate single embedding: {e}")
         return None
 
-def run_clustering() -> dict:
+def backfill_missing_embeddings():
+    """Finds all stories without embeddings and generates them in batches."""
+    logger.info("Checking for stories missing embeddings...")
+    res = supabase.table("stories").select("id, title").is_("embedding", "null").execute()
+    stories = res.data or []
+    if not stories:
+        logger.info("No stories missing embeddings.")
+        return
+
+    logger.info(f"Backfilling embeddings for {len(stories)} stories...")
+    for i in range(0, len(stories), 100):
+        batch = stories[i:i+100]
+        titles = [s["title"] for s in batch]
+        try:
+            emb_res = openai_client.embeddings.create(input=titles, model="text-embedding-3-small")
+            for j, s in enumerate(batch):
+                supabase.table("stories").update({"embedding": emb_res.data[j].embedding}).eq("id", s["id"]).execute()
+            logger.info(f"Backfilled batch of {len(batch)} embeddings.")
+        except Exception as e:
+            logger.error(f"Error backfilling batch: {e}")
+
+def run_clustering(all_time: bool = False) -> dict:
     """Main clustering job using pgvector and OpenAI embeddings."""
     logger.info("Starting pgvector clustering run...")
-    stories = get_recent_unclustered()
+    stories = get_recent_unclustered(all_time=all_time)
     if not stories:
         logger.info("No unclustered stories with embeddings found.")
         cleanup_old_clusters()

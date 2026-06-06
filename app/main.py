@@ -69,6 +69,28 @@ def trigger_full_run():
     return {"status": "ok", "fetch": fetch, "cluster": cluster}
 
 
+@app.post("/admin/recluster-all")
+def trigger_recluster_all():
+    """One-time recovery endpoint to recluster all stories."""
+    from app.clusterer import backfill_missing_embeddings
+    from app.scorer import run_scoring
+    
+    # 1. Backfill embeddings
+    backfill_missing_embeddings()
+    
+    # 2. Run full clustering
+    cluster_res = run_clustering(all_time=True)
+    
+    # 3. Run scoring
+    score_res = run_scoring(all_time=True)
+    
+    return {
+        "status": "ok",
+        "clustering": cluster_res,
+        "scoring": score_res
+    }
+
+
 # ── STORIES API ─────────────────────────────────────
 
 @app.get("/stories")

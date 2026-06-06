@@ -1,5 +1,6 @@
 import logging
 import re
+from datetime import datetime, timezone, timedelta
 from app.db import supabase
 
 logger = logging.getLogger(__name__)
@@ -57,13 +58,16 @@ def score_verification_quality(stories):
     if ratio >= 0.3: return "Moderate"
     return "Low"
 
-def run_scoring():
+def run_scoring(all_time: bool = False):
     logger.info("Starting scoring engine run...")
     
     # Get all clusters that need scoring (we can just score all recent ones to keep them updated as new stories arrive)
-    from datetime import datetime, timezone, timedelta
-    cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
-    clusters_res = supabase.table("clusters").select("id, outlet_count").gte("first_seen_at", cutoff).execute()
+    query = supabase.table("clusters").select("id, outlet_count")
+    if not all_time:
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
+        query = query.gte("first_seen_at", cutoff)
+        
+    clusters_res = query.execute()
     clusters = clusters_res.data or []
     
     scored_count = 0
