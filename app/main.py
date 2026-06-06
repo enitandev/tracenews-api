@@ -96,14 +96,62 @@ def get_cluster_stories(cluster_id: str):
     }
 
 
-@app.get("/clusters")
-def get_clusters(limit: int = 30, offset: int = 0):
-    """Get story clusters ordered by outlet coverage."""
-    result = supabase.table("clusters").select("*").order(
-        "outlet_count", desc=True
-    ).range(offset, offset + limit - 1).execute()
+@app.get("/clusters/landing")
+def get_landing_clusters(limit: int = 40):
+    """Get optimized clusters for the landing page scrolling feed."""
+    # Note: In Supabase, joining via select("*, cluster_scores(*), stories(*)") works but fetching all stories is heavy.
+    # To keep it light, we'll fetch clusters + scores and just the first image.
+    result = supabase.table("clusters").select(
+        "id, representative_title, outlet_count, cluster_scores(dominant_bias_slug, dominant_bias_color), stories(image_url)"
+    ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(limit).execute()
+    
+    # Format for frontend
+    formatted = []
+    for c in result.data:
+        scores = c.get("cluster_scores", {}) or {}
+        # Get first valid image
+        image_url = None
+        for s in (c.get("stories") or []):
+            if s.get("image_url"):
+                image_url = s["image_url"]
+                break
+                
+        formatted.append({
+            "id": c["id"],
+            "representative_title": c["representative_title"],
+            "outlet_count": c["outlet_count"],
+            "dominant_bias_slug": scores.get("dominant_bias_slug"),
+            "dominant_bias_color": scores.get("dominant_bias_color"),
+            "image_url": image_url
+        })
+    return {"clusters": formatted, "count": len(formatted)}
+
+
+@app.get("/clusters/feed")
+def get_feed_clusters(limit: int = 30, offset: int = 0):
+    """Get full clusters with scores for the main feed."""
+    result = supabase.table("clusters").select(
+        "*, cluster_scores(*)"
+    ).gte("outlet_count", 2).order("first_seen_at", desc=True).range(offset, offset + limit - 1).execute()
     return {"clusters": result.data, "count": len(result.data)}
 
+
+@app.get("/clusters/{id}/deep-dive")
+def get_cluster_deep_dive(id: str):
+    """Get full detailed analytics for a cluster and its stories."""
+    cluster_res = supabase.table("clusters").select("*, cluster_scores(*)").eq("id", id).single().execute()
+    cluster = cluster_res.data
+    
+    stories_res = supabase.table("stories").select("*, story_bias_tags(bias_category_id, source)").eq("cluster_id", id).order("published_at", desc=False).execute()
+    stories = stories_res.data or []
+    
+    if stories:
+        stories[0]["broke_story_first"] = True
+    
+    return {
+        "cluster": cluster,
+        "stories": stories
+    }
 
 # ── OUTLETS API ─────────────────────────────────────
 

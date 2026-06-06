@@ -114,3 +114,76 @@ CREATE POLICY "Public can read story_bias_tags"
 CREATE INDEX IF NOT EXISTS outlet_bias_tags_outlet_id_idx ON outlet_bias_tags(outlet_id);
 CREATE INDEX IF NOT EXISTS story_bias_tags_story_id_idx ON story_bias_tags(story_id);
 CREATE INDEX IF NOT EXISTS stories_image_url_idx ON stories(image_url) WHERE image_url IS NOT NULL;
+
+-- Cluster scores table
+CREATE TABLE IF NOT EXISTS cluster_scores (
+  cluster_id             uuid primary key references clusters(id) on delete cascade,
+  government_pct         float,
+  opposition_pct         float,
+  neutral_pct            float,
+  north_pct              float,
+  southwest_pct          float,
+  southeast_pct          float,
+  national_pct           float,
+  niger_delta_pct        float,
+  gov_owned_pct          float,
+  private_pct            float,
+  foreign_pct            float,
+  sensationalism_score   float,
+  verification_quality   text,
+  dominant_bias_slug     text,
+  dominant_bias_color    text,
+  is_blindspot           boolean default false,
+  blindspot_region       text,
+  blindspot_type         text,
+  story_count            integer,
+  scored_at              timestamptz default now()
+);
+
+-- RLS for cluster_scores
+ALTER TABLE cluster_scores ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public can read cluster_scores" ON cluster_scores;
+CREATE POLICY "Public can read cluster_scores"
+  ON cluster_scores FOR SELECT USING (true);
+
+-- Enable pgvector
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Add embedding columns
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS embedding vector(1536);
+ALTER TABLE clusters ADD COLUMN IF NOT EXISTS embedding vector(1536);
+
+-- Add vector similarity indexes
+CREATE INDEX IF NOT EXISTS stories_embedding_idx 
+  ON stories USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+   
+CREATE INDEX IF NOT EXISTS clusters_embedding_idx 
+  ON clusters USING ivfflat (embedding vector_cosine_ops)
+  WITH (lists = 100);
+
+-- RPC for vector similarity search
+CREATE OR REPLACE FUNCTION match_clusters(
+  query_embedding vector(1536),
+  match_threshold float,
+  match_count int
+)
+RETURNS TABLE (
+  id uuid,
+  representative_title text,
+  similarity float
+)
+LANGUAGE sql
+AS $$
+  SELECT
+    clusters.id,
+    clusters.representative_title,
+    1 - (clusters.embedding <=> query_embedding) as similarity
+  FROM clusters
+  WHERE clusters.first_seen_at > now() - interval '72 hours'
+    AND clusters.embedding IS NOT NULL
+    AND 1 - (clusters.embedding <=> query_embedding) >= match_threshold
+  ORDER BY clusters.embedding <=> query_embedding
+  LIMIT match_count;
+$$;
+

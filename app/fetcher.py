@@ -1,16 +1,20 @@
 import feedparser
-import httpx
 import logging
 from datetime import datetime, timezone
 from dateutil import parser as dateparser
+import os
+from bs4 import BeautifulSoup
 from app.db import supabase
+from openai import OpenAI
 
 logger = logging.getLogger(__name__)
 
+openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+RSS_IMAGE_UNRELIABLE_OUTLETS = ['punch-nigeria', 'punch-metro']
 
 def extract_image_from_entry(entry: dict) -> str | None:
     """Extract image URL from RSS entry using multiple fallback methods."""
-
     # Method 1: media:content tag
     media_content = entry.get("media_content", [])
     if media_content:
@@ -38,43 +42,26 @@ def extract_image_from_entry(entry: dict) -> str | None:
         if link.get("type", "").startswith("image/"):
             return link.get("href", "")
 
-    # Method 5: parse og:image from summary/content HTML
+    # Method 5: parse img from summary/content HTML
     content = entry.get("summary", "") or entry.get("content", [{}])[0].get("value", "")
     if content and "<img" in content:
-        import re
-        match = re.search(r'<img[^>]+src=["\']([^"\']+)["\']', content)
-        if match:
-            url = match.group(1)
+        soup = BeautifulSoup(content, "html.parser")
+        img = soup.find("img")
+        if img and img.get("src"):
+            url = img["src"]
             if url.startswith("http"):
                 return url
 
     return None
 
-
-def fetch_og_image(url: str) -> str | None:
-    """Fetch og:image from article URL as last resort."""
-    try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; TraceNewsBot/1.0)"}
-        response = httpx.get(url, headers=headers, timeout=8, follow_redirects=True)
-        if response.status_code == 200:
-            import re
-            match = re.search(
-                r'<meta[^>]+property=["\']og:image["\'][^>]+content=["\']([^"\']+)["\']',
-                response.text
-            )
-            if match:
-                return match.group(1)
-            # Also try reversed attribute order
-            match = re.search(
-                r'<meta[^>]+content=["\']([^"\']+)["\'][^>]+property=["\']og:image["\']',
-                response.text
-            )
-            if match:
-                return match.group(1)
-    except Exception:
-        pass
-    return None
-
+def is_valid_image(url: str) -> bool:
+    if not url:
+        return False
+    lower_url = url.lower()
+    blacklist = ['logo', 'icon', 'avatar', 'default', 'brand', 'masthead']
+    if any(b in lower_url for b in blacklist):
+        return False
+    return True
 
 def fetch_outlets() -> list[dict]:
     """Fetch all active outlets with RSS feeds from Supabase."""
@@ -83,10 +70,11 @@ def fetch_outlets() -> list[dict]:
     ).eq("active", True).execute()
     return [o for o in response.data if o.get("rss_feeds")]
 
-
 def parse_feed(outlet: dict) -> list[dict]:
     """Parse all RSS feeds for a given outlet and return story dicts."""
     stories = []
+    is_unreliable = outlet["slug"] in RSS_IMAGE_UNRELIABLE_OUTLETS
+
     for feed_url in outlet["rss_feeds"]:
         try:
             feed = feedparser.parse(feed_url)
@@ -104,10 +92,12 @@ def parse_feed(outlet: dict) -> list[dict]:
                 except Exception:
                     published_at = datetime.now(timezone.utc).isoformat()
 
-                # Extract image — try RSS first, fall back to og:image scrape
-                image_url = extract_image_from_entry(entry)
-                if not image_url:
-                    image_url = fetch_og_image(url)
+                # Extract image
+                image_url = None
+                if not is_unreliable:
+                    extracted = extract_image_from_entry(entry)
+                    if is_valid_image(extracted):
+                        image_url = extracted
 
                 stories.append({
                     "outlet_id":        outlet["id"],
@@ -127,23 +117,59 @@ def parse_feed(outlet: dict) -> list[dict]:
             logger.warning(f"Failed to parse feed {feed_url} for {outlet['name']}: {e}")
     return stories
 
-
 def save_stories(stories: list[dict]) -> int:
-    """Insert stories, skip duplicates by URL."""
+    """Filter duplicates, batch embed, and insert new stories."""
     if not stories:
         return 0
-    saved = 0
-    for story in stories:
+
+    # Local deduplication
+    unique_stories = {}
+    for s in stories:
+        unique_stories[s["url"]] = s
+    incoming_urls = list(unique_stories.keys())
+    
+    # Check DB for existing URLs
+    existing_urls = set()
+    for i in range(0, len(incoming_urls), 200):
+        batch = incoming_urls[i:i+200]
         try:
-            supabase.table("stories").upsert(
-                story,
-                on_conflict="url"
-            ).execute()
+            res = supabase.table("stories").select("url").in_("url", batch).execute()
+            if res.data:
+                existing_urls.update(row["url"] for row in res.data)
+        except Exception as e:
+            logger.warning(f"Error checking existing URLs: {e}")
+
+    new_stories = [s for url, s in unique_stories.items() if url not in existing_urls]
+    if not new_stories:
+        return 0
+
+    logger.info(f"Generating embeddings for {len(new_stories)} new stories...")
+    texts_to_embed = [f"{s.get('title', '')} {s.get('summary', '')}".strip() for s in new_stories]
+    
+    all_embeddings = []
+    try:
+        for i in range(0, len(texts_to_embed), 2000):
+            batch = texts_to_embed[i:i+2000]
+            res = openai_client.embeddings.create(
+                input=batch,
+                model="text-embedding-3-small"
+            )
+            all_embeddings.extend([d.embedding for d in res.data])
+            
+        for story, emb in zip(new_stories, all_embeddings):
+            story["embedding"] = emb
+    except Exception as e:
+        logger.error(f"Failed to generate embeddings: {e}")
+        return 0
+
+    saved = 0
+    for story in new_stories:
+        try:
+            supabase.table("stories").insert(story).execute()
             saved += 1
         except Exception as e:
             logger.warning(f"Failed to save story {story.get('url')}: {e}")
     return saved
-
 
 def run_fetch() -> dict:
     """Main fetch job — runs on schedule."""
