@@ -3,6 +3,7 @@ import logging
 from datetime import datetime, timezone
 from dateutil import parser as dateparser
 import os
+import urllib.parse
 from bs4 import BeautifulSoup
 from app.db import supabase
 from openai import OpenAI
@@ -66,9 +67,9 @@ def is_valid_image(url: str) -> bool:
 def fetch_outlets() -> list[dict]:
     """Fetch all active outlets with RSS feeds from Supabase."""
     response = supabase.table("outlets").select(
-        "id, name, slug, rss_feeds, geopolitical_lean, party_proximity, ownership_type"
+        "id, name, slug, website, rss_feeds, geopolitical_lean, party_proximity, ownership_type"
     ).eq("active", True).execute()
-    return [o for o in response.data if o.get("rss_feeds")]
+    return [o for o in response.data if o.get("rss_feeds") or o.get("website")]
 
 def parse_feed(outlet: dict) -> list[dict]:
     """Parse all RSS feeds for a given outlet and return story dicts."""
@@ -81,6 +82,22 @@ def parse_feed(outlet: dict) -> list[dict]:
                 feed_url, 
                 agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             )
+            
+            # Fallback to Google News RSS if blocked by Cloudflare or 0 entries
+            if len(feed.entries) == 0 and outlet.get("website"):
+                website = outlet["website"]
+                if not website.startswith("http"):
+                    website = "https://" + website
+                parsed_url = urllib.parse.urlparse(website)
+                domain = parsed_url.netloc.replace("www.", "")
+                
+                fallback_url = f"https://news.google.com/rss/search?q=site:{domain}&hl=en-NG&gl=NG&ceid=NG:en"
+                logger.info(f"Using Google News fallback for {outlet['name']} ({domain})")
+                feed = feedparser.parse(
+                    fallback_url, 
+                    agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                )
+
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
                 url = entry.get("link", "").strip()
