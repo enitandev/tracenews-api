@@ -214,7 +214,7 @@ def get_cluster_framing(id: str, alignment: str):
         return {"bullets": []}
 
     stories_res = supabase.table("stories").select(
-        "title, summary, description, outlets(slug, government_alignment, independence_score, credibility_tier)"
+        "title, summary, outlets(slug, government_alignment, independence_score, credibility_tier)"
     ).eq("cluster_id", id).execute()
     
     stories = stories_res.data or []
