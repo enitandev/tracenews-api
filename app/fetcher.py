@@ -83,8 +83,11 @@ def parse_feed(outlet: dict) -> list[dict]:
                 agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             )
             
+            feed_str = str(feed)
+            is_cloudflare = "Just a moment" in feed_str or "Enable JavaScript and cookies" in feed_str
+            
             # Fallback to Google News RSS if blocked by Cloudflare or 0 entries
-            if len(feed.entries) == 0 and outlet.get("website"):
+            if (len(feed.entries) == 0 or is_cloudflare) and outlet.get("website"):
                 website = outlet["website"]
                 if not website.startswith("http"):
                     website = "https://" + website
@@ -100,6 +103,8 @@ def parse_feed(outlet: dict) -> list[dict]:
 
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
+                if "Archives -" in title or "Archives Page" in title:
+                    continue
                 url = entry.get("link", "").strip()
                 summary = entry.get("summary", "").strip()[:500]
                 published_raw = entry.get("published", entry.get("updated", ""))
