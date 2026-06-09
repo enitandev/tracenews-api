@@ -77,7 +77,10 @@ def parse_feed(outlet: dict) -> list[dict]:
 
     for feed_url in outlet["rss_feeds"]:
         try:
-            feed = feedparser.parse(feed_url)
+            feed = feedparser.parse(
+                feed_url, 
+                agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            )
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
                 url = entry.get("link", "").strip()
