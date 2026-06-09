@@ -168,32 +168,26 @@ def save_stories(stories: list[dict]) -> int:
     if not new_stories:
         return 0
 
-    logger.info(f"Generating embeddings for {len(new_stories)} new stories...")
-    texts_to_embed = [f"{s.get('title', '')} {s.get('summary', '')}".strip() for s in new_stories]
-    
-    all_embeddings = []
-    try:
-        for i in range(0, len(texts_to_embed), 2000):
-            batch = texts_to_embed[i:i+2000]
-            res = openai_client.embeddings.create(
-                input=batch,
-                model="text-embedding-3-small"
-            )
-            all_embeddings.extend([d.embedding for d in res.data])
-            
-        for story, emb in zip(new_stories, all_embeddings):
-            story["embedding"] = emb
-    except Exception as e:
-        logger.error(f"Failed to generate embeddings: {e}")
-        return 0
-
+    logger.info(f"Processing and saving {len(new_stories)} new stories...")
     saved = 0
     for story in new_stories:
         try:
+            text_to_embed = f"{story.get('title', '')} {story.get('summary', '')}".strip()
+            
+            # Generate embedding for the individual story
+            res = openai_client.embeddings.create(
+                input=[text_to_embed],
+                model="text-embedding-3-small"
+            )
+            story["embedding"] = res.data[0].embedding
+            
+            # Save the story
             supabase.table("stories").insert(story).execute()
             saved += 1
         except Exception as e:
-            logger.warning(f"Failed to save story {story.get('url')}: {e}")
+            logger.warning(f"Failed to process and save story {story.get('url')}: {e}")
+            continue
+            
     return saved
 
 def run_fetch() -> dict:
