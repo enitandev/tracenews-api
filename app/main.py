@@ -51,8 +51,14 @@ def health():
 @app.post("/admin/fetch")
 def trigger_fetch():
     """Manually trigger an RSS fetch run."""
-    result = run_fetch()
-    return {"status": "ok", **result}
+    try:
+        result = run_fetch()
+        return {"status": "ok", **result}
+    except Exception as e:
+        import traceback
+        trace = traceback.format_exc()
+        logger.error(f"Fetch failed with unhandled exception:\n{trace}")
+        return {"status": "error", "message": str(e), "traceback": trace}
 
 
 @app.post("/admin/cluster")
