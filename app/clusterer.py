@@ -12,7 +12,7 @@ openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 def get_recent_unclustered(hours: int = 48, all_time: bool = False) -> list[dict]:
     """Get stories that haven't been clustered yet and have embeddings."""
-    query = supabase.table("stories").select("id, title, summary, published_at, fetched_at, embedding").is_("cluster_id", "null").not_.is_("embedding", "null")
+    query = supabase.table("stories").select("id, title, summary, published_at, fetched_at, embedding").is_("cluster_id", "null").not_.is_("embedding", "null").neq("source_type", "fact_check")
     if not all_time:
         from datetime import datetime, timedelta
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()

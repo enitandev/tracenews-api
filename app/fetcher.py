@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 RSS_IMAGE_UNRELIABLE_OUTLETS = ['punch-nigeria', 'punch-metro']
+FACT_CHECKER_OUTLETS = ['dubawa', 'africa-check-nigeria', 'factcheckhub']
 
 def extract_image_from_entry(entry: dict) -> str | None:
     """Extract image URL from RSS entry using multiple fallback methods."""
@@ -124,6 +125,8 @@ def parse_feed(outlet: dict) -> list[dict]:
                     if is_valid_image(extracted):
                         image_url = extracted
 
+                source_type = 'fact_check' if outlet["slug"] in FACT_CHECKER_OUTLETS else 'news'
+                
                 stories.append({
                     "outlet_id":        outlet["id"],
                     "outlet_name":      outlet["name"],
@@ -137,6 +140,7 @@ def parse_feed(outlet: dict) -> list[dict]:
                     "image_url":        image_url,
                     "published_at":     published_at,
                     "fetched_at":       datetime.now(timezone.utc).isoformat(),
+                    "source_type":      source_type,
                 })
         except Exception as e:
             logger.warning(f"Failed to parse feed {feed_url} for {outlet['name']}: {e}")
