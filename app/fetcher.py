@@ -59,7 +59,7 @@ def is_valid_image(url: str) -> bool:
     if not url:
         return False
     lower_url = url.lower()
-    blacklist = ['logo', 'icon', 'avatar', 'default', 'brand', 'masthead']
+    blacklist = ['logo', 'icon', 'avatar', 'default', 'brand', 'masthead', 'googleusercontent.com']
     if any(b in lower_url for b in blacklist):
         return False
     return True
