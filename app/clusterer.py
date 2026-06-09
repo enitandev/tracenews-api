@@ -204,6 +204,17 @@ def run_full_recluster():
     
     logger.info("--- STARTING FULL RECLUSTER BACKGROUND TASK ---")
     
+    # 0. Wipe existing clusters to start fresh with new categorization
+    logger.info("Wiping existing clusters...")
+    try:
+        # We use a dummy filter .not_.is_("id", "null") to apply to all rows since Supabase prevents empty deletes
+        supabase.table("stories").update({"cluster_id": None}).not_.is_("id", "null").execute()
+        supabase.table("cluster_scores").delete().not_.is_("cluster_id", "null").execute()
+        supabase.table("clusters").delete().not_.is_("id", "null").execute()
+        logger.info("Wipe complete.")
+    except Exception as e:
+        logger.error(f"Failed to wipe existing clusters: {e}")
+    
     # 1. Backfill missing embeddings (it logs batches internally)
     backfill_missing_embeddings()
     

@@ -6,6 +6,7 @@ from app.scheduler import start_scheduler, stop_scheduler
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 from app.db import supabase
+from app.framer import generate_framing_summary
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -109,16 +110,13 @@ def get_cluster_stories(cluster_id: str):
 @app.get("/clusters/landing")
 def get_landing_clusters(limit: int = 40):
     """Get optimized clusters for the landing page scrolling feed."""
-    # Note: In Supabase, joining via select("*, cluster_scores(*), stories(*)") works but fetching all stories is heavy.
-    # To keep it light, we'll fetch clusters + scores and just the first image.
     result = supabase.table("clusters").select(
-        "id, representative_title, outlet_count, cluster_scores(dominant_bias_slug, dominant_bias_color), stories(image_url)"
+        "id, representative_title, outlet_count, category, coverage_stats, monitoring_flags, stories(image_url)"
     ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(limit).execute()
     
     # Format for frontend
     formatted = []
     for c in result.data:
-        scores = c.get("cluster_scores", {}) or {}
         # Get first valid image
         image_url = None
         for s in (c.get("stories") or []):
@@ -130,8 +128,9 @@ def get_landing_clusters(limit: int = 40):
             "id": c["id"],
             "representative_title": c["representative_title"],
             "outlet_count": c["outlet_count"],
-            "dominant_bias_slug": scores.get("dominant_bias_slug"),
-            "dominant_bias_color": scores.get("dominant_bias_color"),
+            "category": c.get("category", "General"),
+            "coverage_stats": c.get("coverage_stats"),
+            "monitoring_flags": c.get("monitoring_flags") or [],
             "image_url": image_url
         })
     return {"clusters": formatted, "count": len(formatted)}
@@ -152,9 +151,47 @@ def get_cluster_deep_dive(id: str):
     cluster_res = supabase.table("clusters").select("*, cluster_scores(*)").eq("id", id).single().execute()
     cluster = cluster_res.data
     
-    stories_res = supabase.table("stories").select("*, story_bias_tags(bias_category_id, source)").eq("cluster_id", id).order("published_at", desc=False).execute()
+    stories_res = supabase.table("stories").select(
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier)"
+    ).eq("cluster_id", id).order("published_at", desc=False).execute()
+    
     stories = stories_res.data or []
     
+    # Fetch behavioral scores
+    slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
+    behavioral_map = {}
+    if slugs:
+        behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
+        behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+    
+    # Flatten the outlet metadata directly onto the story object
+    for s in stories:
+        if s.get("outlets"):
+            out = s["outlets"]
+            slug = out.get("slug")
+            s["outlet_alignment"] = out.get("government_alignment")
+            s["outlet_independence"] = out.get("independence_score")
+            s["outlet_tier"] = out.get("credibility_tier")
+            
+            behav = behavioral_map.get(slug) if slug else None
+            tier = "unscored"
+            if behav and behav.get("independence_score") is not None:
+                if behav.get("brown_envelope_suspected"):
+                    tier = "captured"
+                else:
+                    score = behav.get("independence_score")
+                    if score >= 70: tier = "independent"
+                    elif score >= 35: tier = "deferential"
+                    else: tier = "captured"
+            else:
+                g_align = out.get("government_alignment")
+                if g_align == "pro_government": tier = "captured"
+                elif g_align == "opposition": tier = "independent"
+                elif g_align == "neutral": tier = "deferential"
+                
+            s["outlet_coverage_tier"] = tier
+            del s["outlets"]
+
     if stories:
         stories[0]["broke_story_first"] = True
     
@@ -162,6 +199,64 @@ def get_cluster_deep_dive(id: str):
         "cluster": cluster,
         "stories": stories
     }
+
+@app.get("/clusters/{id}/framing")
+def get_cluster_framing(id: str, alignment: str):
+    """Generate an on-demand AI framing summary for a specific alignment."""
+    # Map external requested alignment to internal tiers
+    tier_map = {
+        "government": "captured",
+        "balanced": "deferential",
+        "opposition": "independent"
+    }
+    target_tier = tier_map.get(alignment)
+    if not target_tier:
+        return {"bullets": []}
+
+    stories_res = supabase.table("stories").select(
+        "title, summary, description, outlets(slug, government_alignment, independence_score, credibility_tier)"
+    ).eq("cluster_id", id).execute()
+    
+    stories = stories_res.data or []
+    if not stories:
+        return {"bullets": []}
+
+    # Fetch behavioral scores
+    slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
+    behavioral_map = {}
+    if slugs:
+        behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
+        behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+
+    filtered_stories = []
+    for s in stories:
+        if s.get("outlets"):
+            out = s["outlets"]
+            slug = out.get("slug")
+            behav = behavioral_map.get(slug) if slug else None
+            tier = "unscored"
+            if behav and behav.get("independence_score") is not None:
+                if behav.get("brown_envelope_suspected"):
+                    tier = "captured"
+                else:
+                    score = behav.get("independence_score")
+                    if score >= 70: tier = "independent"
+                    elif score >= 35: tier = "deferential"
+                    else: tier = "captured"
+            else:
+                g_align = out.get("government_alignment")
+                if g_align == "pro_government": tier = "captured"
+                elif g_align == "opposition": tier = "independent"
+                elif g_align == "neutral": tier = "deferential"
+            
+            if tier == target_tier:
+                filtered_stories.append(s)
+
+    if not filtered_stories:
+        return {"bullets": []}
+
+    summary_json = generate_framing_summary(filtered_stories, alignment)
+    return summary_json
 
 # ── OUTLETS API ─────────────────────────────────────
 

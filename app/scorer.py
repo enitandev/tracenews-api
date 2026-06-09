@@ -45,11 +45,19 @@ def run_scoring(all_time: bool = False):
         outlets_res = supabase.table("outlets").select("*").in_("id", outlet_ids).execute()
         outlets_map = {o["id"]: o for o in (outlets_res.data or [])}
 
+        # Fetch behavioral scores using slugs
+        outlet_slugs = list(set(o.get("slug") for o in outlets_map.values() if o.get("slug")))
+        behavioral_map = {}
+        if outlet_slugs:
+            behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", outlet_slugs).execute()
+            behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+
         # 3. Calculate Coverage Math Variables
         regions = defaultdict(int)
         credibility = defaultdict(int)
         ownership = defaultdict(int)
         gov_alignment = defaultdict(int)
+        coverage_tier = defaultdict(int)
         total_independence = 0
         valid_independence_count = 0
 
@@ -59,20 +67,37 @@ def run_scoring(all_time: bool = False):
                 continue
                 
             outlet = outlets_map[oid]
+            slug = outlet.get("slug")
             
-            # Map region
+            # Map region, ownership, credibility, gov_alignment
             regions[outlet.get("geopolitical_lean", "National")] += 1
-            
-            # Map ownership
             ownership[outlet.get("ownership_type", "Independent")] += 1
-            
-            # Map credibility
             credibility[outlet.get("credibility_tier", "Institutional")] += 1
-            
-            # Map government alignment
             gov_alignment[outlet.get("government_alignment", "neutral")] += 1
             
-            # Aggregate independence score
+            # Calculate Coverage Tier
+            behav = behavioral_map.get(slug) if slug else None
+            tier = "unscored"
+            
+            if behav and behav.get("independence_score") is not None:
+                if behav.get("brown_envelope_suspected"):
+                    tier = "captured"
+                else:
+                    score = behav.get("independence_score")
+                    if score >= 70: tier = "independent"
+                    elif score >= 35: tier = "deferential"
+                    else: tier = "captured"
+            else:
+                g_align = outlet.get("government_alignment")
+                if g_align == "pro_government":
+                    tier = "captured"
+                elif g_align == "opposition":
+                    tier = "independent"
+                    
+            if tier != "unscored":
+                coverage_tier[tier] += 1
+            
+            # Aggregate independence score (legacy)
             ind_score = outlet.get("independence_score")
             if ind_score is not None:
                 total_independence += ind_score
@@ -86,6 +111,7 @@ def run_scoring(all_time: bool = False):
             "ownership_distribution": dict(ownership),
             "credibility_distribution": dict(credibility),
             "government_alignment_distribution": dict(gov_alignment),
+            "coverage_tier_distribution": dict(coverage_tier),
             "average_independence_score": avg_independence,
             "total_coverage": total_stories
         }
