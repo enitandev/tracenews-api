@@ -154,11 +154,12 @@ def get_feed_clusters(limit: int = 30, offset: int = 0):
 @app.get("/clusters/by-slug/{slug}")
 def get_cluster_by_slug(slug: str):
     """Get full detailed analytics for a cluster and its stories by slug."""
-    cluster_res = supabase.table("clusters").select("*, cluster_scores(*)").eq("slug", slug).single().execute()
-    cluster = cluster_res.data
+    cluster_res = supabase.table("clusters").select("*, cluster_scores(*)").eq("slug", slug).execute()
     
-    if not cluster:
+    if not cluster_res.data:
         return {"error": "Cluster not found"}
+        
+    cluster = cluster_res.data[0]
         
     stories_res = supabase.table("stories").select(
         "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier)"
