@@ -18,126 +18,72 @@ STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports']
 # AI PROMPTS
 # ---------------------------------------------------------
 
-PROMPT_S1 = """You are analyzing a Nigerian news article for a media intelligence platform.
+PROMPT_S1 = """You are analyzing a Nigerian news article for the TraceNews Independence Index.
 
-Determine how this article frames government officials and whether independent voices are present.
+You ONLY have access to the headline and the first ~500 characters of the article (a short summary). You must work with this limited text only.
 
-FRAMING CATEGORIES:
+Task: Determine how government officials or their actions are framed in the available text.
 
-"deferential" — The official is quoted positively, their claims are presented without challenge, no critical context or counter-evidence provided.
+Government framing categories:
+- "deferential": The text praises, supports, or presents government/official claims uncritically (e.g. "visionary governor", "landmark achievement", "committed leadership", "Renewed Hope Agenda" used positively).
+- "accountability": The text is critical, exposes wrongdoing, challenges official claims, or presents government actions negatively (e.g. "minister denies corruption", "EFCC arraigns governor", "leaked documents show...", "residents protest government failure").
+- "neutral": Factual reporting with no clear positive or negative framing of government.
+- "none": No government official or action is mentioned.
 
-Real Nigerian examples of deferential framing:
+Also check for non-government voices in the available text: opposition, civil society, expert, citizen, activist, etc.
 
-Example 1:
-"Reps Committee Chair commends President Bola Ahmed Tinubu for the flag-off of the one point two four five trillion naira Gombe-Biu Superhighway Dualisation Project, describing it as a landmark intervention for the North East region."
-Why deferential: Official praised, no critical context, no counter-voice present.
+Note: has_non_government_voice = true only counts toward "independent" if the non-government voice presents a perspective DIFFERENT from the official narrative — not if they are also praising the same government action.
 
-Example 2:
-"President Bola Tinubu has said his administration is making significant progress in delivering affordable housing to Nigerians, insisting that the promises contained in his Renewed Hope Agenda are being translated into tangible projects."
-Why deferential: Government claim presented as editorial fact with no challenge or verification.
-
-Example 3:
-"The Federal Government has reaffirmed its commitment to building a transparent, accountable and citizen-focused tax administration system as part of President Bola Ahmed Tinubu's Renewed Hope Agenda."
-Why deferential: PR language reproduced uncritically as if it were verified news.
-
-"accountability" — The official is quoted as the SUBJECT OF SCRUTINY. Their claims are challenged, contradicted, or presented alongside critical evidence. Quoting an official prominently in an exposure story still counts as accountability framing — it is the CONTEXT that matters.
-
-Real Nigerian examples of accountability framing:
-
-Example 1:
-"The MPs released video evidence showing the deputy House spokesperson Philip Agbese signing the nomination document, contradicting his allegation that his signature was forged."
-Why accountability: Official claim directly contradicted by independently obtained evidence.
-
-Example 2:
-An official denies wrongdoing. The article immediately follows with documents, witnesses, or expert analysis contradicting the denial.
-Why accountability: The denial is not treated as conclusive — it is challenged by evidence.
-
-Example 3:
-"The Minister claimed no funds were missing. However, documents obtained by this newspaper show N4.2 billion was diverted to a shell company."
-Why accountability: Government claim set against independently obtained contradicting evidence.
-
-"neutral" — Straight factual reporting with no praise and no challenge.
-
-Example:
-"The Governor signed the bill into law on Monday. The legislation takes effect immediately."
-Why neutral: Factual report, no praise, no scrutiny.
-
-CLASSIFICATION RULES:
-
-Return "independent" if:
-- government_source_framing = "accountability"
-- OR has_non_government_voice = true AND non_government_voice_position = "prominent"
-
-Return "captured" if:
-- government_source_framing = "deferential"
-- AND has_non_government_voice = false
-
-Return "neutral" for everything else.
-
-IMPORTANT: Do not apply Western journalism standards. In Nigerian media, accountability journalism frequently leads with the official quote and immediately follows with contradicting evidence. This is independence, not capture.
-
-Return ONLY a raw JSON object with no markdown:
+Return ONLY a raw JSON object with no markdown, no extra text:
 
 {
-  "government_source_framing": "deferential|accountability|neutral|none",
+  "government_framing": "deferential|accountability|neutral|none",
   "has_non_government_voice": true/false,
-  "non_government_voice_position": "prominent|late|none",
-  "s1_classification": "independent|captured|neutral",
-  "framing_explanation": "one sentence explaining why"
+  "framing_explanation": "one short sentence explaining the classification",
+  "s1_classification": "independent|captured|neutral"
 }
 
-Article:
+Classification rules for s1_classification:
+- "independent" if government_framing = "accountability" OR has_non_government_voice = true
+- "captured" if government_framing = "deferential" AND has_non_government_voice = false
+- "neutral" for everything else
+
+Article headline + summary:
 {article_text}"""
 
 
-PROMPT_S2 = """You are analyzing a Nigerian news article for a media intelligence platform.
+PROMPT_S2 = """You are analyzing a Nigerian news article for the TraceNews Independence Index.
 
-Determine whether this article is original journalism or a reproduction of a press release, government statement, or wire copy.
+You ONLY have access to the headline and the first ~500 characters of the article (a short summary). Work only with this limited text.
 
-Nigerian media context: The News Agency of Nigeria (NAN) distributes government press releases that many outlets publish verbatim. Brown envelope journalism involves publishing paid-for content that looks like news. These practices are common and are what you are detecting.
+Task: Determine whether this looks like original journalism or churnalism (reproduction of government press release, NAN wire copy, or paid statement).
 
-INDICATORS OF PRESS RELEASE REPRODUCTION:
-- Phrases like "according to a statement", "in a statement", "the statement read", "signed by", "issued by his office"
-- NAN attribution: "NAN reports", "from our correspondent (NAN)"
-- Bureaucratic formatting: long official titles before every name
-- No evidence of independent reporting, fieldwork, or original interviews
-- Generic bylines: "Staff Reporter", "Our Reporter", "Agency Report"
-- Entire article reads as transcription of an official speech or statement
+Strong indicators of churnalism even in short summaries:
+- Phrases like "in a statement", "according to a statement", "the statement read", "issued by", "signed by", "his office said", "government spokesman said"
+- NAN attribution: "NAN reports", "NAN correspondent", "from NAN"
+- Bureaucratic or promotional language with no critical context
+- Text reads like direct transcription of an official announcement
 
-INDICATORS OF ORIGINAL REPORTING:
-- Named journalist byline with specific reporting credit
-- Direct quotes from interviews clearly conducted by the reporter
-- Evidence of fieldwork: "visited the scene", "spoke to residents"
-- Multiple independently gathered perspectives
-- Reporter's own observations described
+Indicators of original reporting even in short text:
+- Investigative language: "leaked documents show", "our investigation revealed", "citizens allege", "whistleblower claims"
+- Citizen-sourced or social media evidence
+- Critical or questioning tone toward official claims
 
-IMPORTANT EXCEPTION — these are ALWAYS original reporting regardless of byline:
-- "documents obtained by"
-- "documents seen by our reporter"
-- "investigation by [outlet] reveals"
-- "exclusive documents show"
-- "a whistleblower told"
-- "video seen by this reporter"
-- "court documents show"
-- "leaked documents indicate"
-- Citizen videos or tips presented as evidence
-
-Return ONLY a raw JSON object with no markdown:
+Return ONLY a raw JSON object with no markdown, no extra text:
 
 {
   "has_statement_language": true/false,
   "has_nan_attribution": true/false,
-  "has_named_journalist_byline": true/false,
-  "has_original_interview_quotes": true/false,
-  "has_investigative_indicators": true/false,
+  "has_investigative_language": true/false,
   "reporting_type": "original|press_release|wire_copy|mixed",
   "is_churnalism": true/false,
-  "churnalism_evidence": "brief description"
+  "churnalism_evidence": "one short sentence describing what triggered this classification"
 }
 
-"is_churnalism" = true only if reporting_type is "press_release" or "wire_copy" AND has_investigative_indicators is false.
+"is_churnalism" = true only if reporting_type is "press_release" or "wire_copy".
+"is_churnalism" = false if reporting_type is "original" or "mixed".
 
-Article:
+Article headline + summary:
 {article_text}"""
 
 
@@ -422,7 +368,10 @@ def analyze_article(s):
     try:
         # Signal 1: Source Hierarchy
         r1 = ask_llm(PROMPT_S1, text)
-        if r1 and r1.get('s1_classification') == 'independent': results['s1_prominent'] = True
+        if r1:
+            if r1.get('s1_classification') == 'independent':
+                results['s1_prominent'] = True
+            results['government_framing'] = r1.get('government_framing')
             
         # Signal 2: Churnalism
         r2 = ask_llm(PROMPT_S2, text)
