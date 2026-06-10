@@ -331,7 +331,7 @@ def with_retry(func, max_retries=5, delay=5):
 def ask_llm(prompt_template, content):
     def _call():
         res = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[{"role": "user", "content": prompt_template.replace("{article_text}", content).replace("{headlines_list}", content).replace("{headline}", content)}],
             response_format={"type": "json_object"},
             temperature=0.0
