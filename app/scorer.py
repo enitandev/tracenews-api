@@ -93,6 +93,8 @@ def run_scoring(all_time: bool = False):
                     tier = "captured"
                 elif g_align == "opposition":
                     tier = "independent"
+                elif g_align == "neutral":
+                    tier = "deferential"
                     
             if tier != "unscored":
                 coverage_tier[tier] += 1
