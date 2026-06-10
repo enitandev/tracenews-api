@@ -287,16 +287,25 @@ def ask_llm(prompt_template, content):
         logger.error(f"LLM Error: {e}")
         return None
 
+def get_story_embedding(story_id):
+    res = supabase.table("stories")\
+        .select("embedding")\
+        .eq("id", story_id)\
+        .execute()
+    if res.data:
+        return res.data[0].get("embedding")
+    return None
+
 def fetch_sample(outlet_id):
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    res = supabase.table("stories").select("id, title, summary, embedding, cluster_id, published_at").eq("outlet_id", outlet_id).neq("source_type", "fact_check").execute()
+    res = supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).neq("source_type", "fact_check").execute()
     all_stories = res.data or []
     
     total = len(all_stories)
     if total < 50:
         return all_stories, "Insufficient Data"
     
-    res_30 = supabase.table("stories").select("id, title, summary, embedding, cluster_id, published_at").eq("outlet_id", outlet_id).gte("published_at", cutoff_date).neq("source_type", "fact_check").execute()
+    res_30 = supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).gte("published_at", cutoff_date).neq("source_type", "fact_check").execute()
     stories_30 = res_30.data or []
     total_30 = len(stories_30)
     
@@ -352,32 +361,49 @@ def analyze_outlet(outlet_id: int):
     be_layer2_flags = 0
     
     # 2-7. Per Article Analysis
-    for s in sample:
+    total_articles = len(sample)
+    for i, s in enumerate(sample):
+        start_time = time.time()
+        logger.info(f"Processing article {i+1}/{total_articles}: {s.get('title')}")
         text = f"{s.get('title', '')}\n\n{s.get('summary', '')}"
         
-        # Signal 1: Source Hierarchy
-        r1 = ask_llm(PROMPT_S1, text)
-        if r1 and r1.get('non_government_in_prominent_position'): s1_prominent_count += 1
+        try:
+            # Signal 1: Source Hierarchy
+            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 1 (Source Hierarchy)")
+            r1 = ask_llm(PROMPT_S1, text)
+            if r1 and r1.get('non_government_in_prominent_position'): s1_prominent_count += 1
+                
+            # Signal 2: Churnalism
+            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 2 (Churnalism)")
+            r2 = ask_llm(PROMPT_S2, text)
+            if r2 and not r2.get('is_churnalism'): s2_original_count += 1
+                
+            # Signal 4: Lexical Deference
+            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 4 (Lexical Deference)")
+            r4 = ask_llm(PROMPT_S4, text)
+            if r4: s4_densities.append(r4.get('deference_density_per_1000_words', 0.0))
+                
+            # Signal 6: Editorial Independence
+            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 6 (Editorial Independence)")
+            r6 = ask_llm(PROMPT_S6, text)
+            if r6 and r6.get('is_correction_or_retraction'): s6_corrections += 1
+                
+            # Brown Envelope Layer 2: Sentiment Triplet
+            logger.info(f"  [{i+1}/{total_articles}] Calling Brown Envelope Layer 2 (Sentiment)")
+            rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
+            if rb and rb.get('brown_envelope_suspected'): be_layer2_flags += 1
+                
+            # Brown Envelope Layer 1: Cosine Similarity
+            logger.info(f"  [{i+1}/{total_articles}] Calling Brown Envelope Layer 1 (Cosine Similarity)")
+            story_embedding = get_story_embedding(s['id'])
+            if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
+                be_layer1_flags += 1
+                
+        except Exception as e:
+            logger.error(f"  [{i+1}/{total_articles}] Exception processing article: {str(e)}", exc_info=True)
             
-        # Signal 2: Churnalism
-        r2 = ask_llm(PROMPT_S2, text)
-        if r2 and not r2.get('is_churnalism'): s2_original_count += 1
-            
-        # Signal 4: Lexical Deference
-        r4 = ask_llm(PROMPT_S4, text)
-        if r4: s4_densities.append(r4.get('deference_density_per_1000_words', 0.0))
-            
-        # Signal 6: Editorial Independence
-        r6 = ask_llm(PROMPT_S6, text)
-        if r6 and r6.get('is_correction_or_retraction'): s6_corrections += 1
-            
-        # Brown Envelope Layer 2: Sentiment Triplet
-        rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
-        if rb and rb.get('brown_envelope_suspected'): be_layer2_flags += 1
-            
-        # Brown Envelope Layer 1: Cosine Similarity
-        if run_brown_envelope_layer_1(s.get('embedding'), s.get('published_at')):
-            be_layer1_flags += 1
+        elapsed = time.time() - start_time
+        logger.info(f"Finished article {i+1}/{total_articles} in {elapsed:.2f} seconds.")
 
     # Signal Scores
     s1_score = (s1_prominent_count / len(sample)) * 100 if sample else 0
@@ -445,26 +471,26 @@ def analyze_outlet(outlet_id: int):
     # 13. Upsert
     payload = {
         "outlet_slug": outlet_slug,
-        "independence_score": final_tii,
-        "s1_score": s1_score,
-        "s2_score": s2_score,
-        "s3_score": s3_score,
-        "s4_score": s4_score,
-        "s5_score": s5_score,
-        "s6_score": s6_score,
+        "independence_score": int(round(final_tii)),
+        "s1_score": int(round(s1_score)),
+        "s2_score": int(round(s2_score)),
+        "s3_score": int(round(s3_score)),
+        "s4_score": int(round(s4_score)),
+        "s5_score": int(round(s5_score)),
+        "s6_score": int(round(s6_score)),
         "brown_envelope_suspected": brown_envelope_suspected,
         "confidence_level": confidence_badge,
         "story_sample_size": len(sample),
         "analyzed_at": datetime.now(timezone.utc).isoformat()
     }
     
-    logger.info(f"Scored {outlet['name']}: {final_tii}")
+    logger.info(f"Scored {outlet['name']}: {int(round(final_tii))}")
     
     # Upsert to behavioral scores (primary key is outlet_slug)
     supabase.table("outlet_behavioral_scores").upsert(payload).execute()
     
     # Update main outlets table
-    supabase.table("outlets").update({"independence_score": final_tii}).eq("id", outlet_id).execute()
+    supabase.table("outlets").update({"independence_score": int(round(final_tii))}).eq("id", outlet_id).execute()
 
 def main():
     outlets = supabase.table("outlets").select("id, name").eq("active", True).execute()
