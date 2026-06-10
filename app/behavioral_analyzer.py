@@ -80,6 +80,8 @@ Look for these specific indicators of original reporting:
 - Multiple independently gathered perspectives
 - Reporter's own observations described
 
+IMPORTANT: If an article contains phrases like 'according to documents obtained by [outlet]', 'documents seen by our reporter', 'investigation by [outlet] reveals', or 'exclusive documents' — these are indicators of ORIGINAL reporting, not press releases. Do not classify these as churnalism.
+
 Return ONLY a raw JSON object with no markdown formatting:
 
 {
@@ -325,7 +327,7 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
     try:
         res = supabase.rpc('match_stories_brown_envelope', {
             'query_embedding': story_embedding,
-            'match_threshold': 0.90,
+            'match_threshold': 0.95,
             'pub_time': published_at,
             'time_window_hours': 24
         }).execute()
@@ -334,7 +336,20 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
         unique_outlets = set([m['outlet_id'] for m in matches])
         
         # >= 3 different outlets
-        return len(unique_outlets) >= 3
+        if len(unique_outlets) >= 3:
+            matched_ids = [m['id'] for m in matches]
+            # Fetch text of matched articles
+            stories_res = supabase.table("stories").select("title, summary").in_("id", matched_ids).execute()
+            
+            # Check if any matched article is flagged as brown envelope
+            for matched_story in (stories_res.data or []):
+                text = f"{matched_story.get('title', '')}\n\n{matched_story.get('summary', '')}"
+                rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
+                if rb and rb.get('brown_envelope_suspected'):
+                    return True
+            return False
+            
+        return False
     except Exception as e:
         logger.error(f"Error querying Layer 1 Brown Envelope vector search: {e}")
         return False
