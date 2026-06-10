@@ -1,142 +1,476 @@
-import logging
 import os
 import json
-from datetime import datetime, timezone
-from app.db import supabase
+import time
+import random
+import logging
+from datetime import datetime, timedelta, timezone
 from openai import OpenAI
+from app.db import supabase
 
 logger = logging.getLogger(__name__)
-
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-PROMPT_TEMPLATE = """You are the 'Monitoring Spirit' – an uncompromising Nigerian media intelligence engine.
-Your task is to analyze a batch of recent articles from a specific Nigerian news outlet and evaluate their editorial independence, critical distance, and structural behavior.
+FEDERAL_GOVT_OUTLETS = ['nta', 'nan', 'voice-of-nigeria', 'radio-nigeria']
+STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports']
 
-You must evaluate the outlet based on these 4 core journalistic signals, agnostic of the topics (politics, crime, business, etc.) they cover:
+# ---------------------------------------------------------
+# AI PROMPTS
+# ---------------------------------------------------------
 
-1. Critical Distance (Voice & Sourcing): Does the outlet maintain an objective distance from power structures (state, corporate, elite)? Do they simply parrot press releases and official statements as unquestioned facts, or do they seek out affected citizens, independent experts, and alternative voices? 
-2. Accountability vs. Sycophancy (Story Selection): Does the outlet actively pursue original, investigative, or accountability journalism (exposing failures, corruption, or public grievances)? Or does their selection systematically avoid controversy to amplify the achievements and PR narratives of those in power?
-3. Brown Envelope Detection (Tone & Framing): ONLY flag this as true if there is undeniable, structural evidence of paid PR masquerading as news. Standard journalistic reporting of press releases or verbatim quoting of officials DOES NOT qualify. You must find the author actively injecting subjective praise without attribution (e.g., "the visionary governor", "proactive leadership") or completely uncritical replication of rhetoric in a way that breaks basic journalistic norms. If it is standard reporting or you are in doubt, you MUST default to false.
-4. Anchored Independence Score (0-100): Assign a score strictly governed by these behavioral anchors:
-   - 90-100 (Fiercely Independent): Consistently holds power to account. Breaks original investigative stories. Demonstrates clear critical distance from all official sources.
-   - 70-89 (Strongly Independent): Maintains journalistic integrity and balanced sourcing, though occasionally relies on official narratives for standard reporting.
-   - 50-69 (Mixed/Institutional): High reliance on official statements and access journalism. Covers accountability issues but rarely originates them. Tone is overly cautious around power.
-   - 30-49 (Highly Deferential): Systematically favors elite/official narratives. Avoids sensitive accountability stories. Frequent evidence of press release replication.
-   - 0-29 (Captured/PR Arm): Functions as a mouthpiece for state or corporate interests. Complete absence of critical distance. Overt sycophancy.
+PROMPT_S1 = """You are analyzing a Nigerian news article for a media intelligence platform.
 
-Respond in strict JSON format:
+Your task is to identify ALL sources quoted or referenced in this article.
+For each source, identify their category and where they appear.
+
+Source categories:
+- "government": Ministers, presidents, governors, government agency spokespeople, military/police spokespersons speaking in official capacity, state-controlled media (NAN, NTA, Voice of Nigeria)
+- "opposition": Opposition party politicians, activists running against the government, political critics of the current administration
+- "civil_society": NGOs, human rights organizations, labor unions, religious leaders (when commenting on public affairs), professional bodies
+- "expert": Academics, independent researchers, lawyers, economists, analysts with no stated political affiliation
+- "citizen": Ordinary Nigerians, victims, eyewitnesses, unnamed sources
+
+Position categories:
+- "headline_or_first_paragraph": Source appears in the headline or first paragraph
+- "early": Source appears in paragraphs 2–5
+- "late": Source appears after paragraph 5 or at the end of the article
+
+Count only sources that are actually quoted, paraphrased, or specifically referenced — not sources mentioned in passing.
+
+Return ONLY a raw JSON object with no markdown formatting:
+
 {
-  "critical_distance_notes": "...",
-  "accountability_notes": "...",
-  "brown_envelope_suspected": true/false,
-  "brown_envelope_evidence": "...",
-  "independence_score": <integer 0-100>
+  "sources": [
+    {
+      "category": "government|opposition|civil_society|expert|citizen",
+      "position": "headline_or_first_paragraph|early|late",
+      "quote_count": integer
+    }
+  ],
+  "non_government_in_prominent_position": true/false,
+  "total_sources": integer,
+  "government_source_count": integer,
+  "non_government_source_count": integer
 }
-"""
 
-def analyze_outlet(outlet_id: int, limit: int = 50):
-    logger.info(f"Starting behavioral analysis for outlet ID {outlet_id}")
-    
-    outlet_res = supabase.table("outlets").select("name, slug, ownership_type, geopolitical_lean").eq("id", outlet_id).execute()
-    if not outlet_res.data:
-        logger.error("Outlet not found.")
-        return
-    
-    outlet = outlet_res.data[0]
-    logger.info(f"Analyzing {outlet['name']}...")
+"non_government_in_prominent_position" = true if at least one opposition, civil_society, expert, or citizen source appears in headline_or_first_paragraph OR early position.
 
-    from datetime import timedelta
-    from collections import defaultdict
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    
-    # Pull stories from last 30 days
-    stories_res = supabase.table("stories").select("title, summary, published_at").eq("outlet_id", outlet_id).gte("published_at", cutoff_date).order("published_at", desc=True).limit(1000).execute()
-    all_stories = stories_res.data or []
-    
-    # Fallback to all stories if none found in 30 days
-    if not all_stories:
-        stories_res = supabase.table("stories").select("title, summary, published_at").eq("outlet_id", outlet_id).order("published_at", desc=True).limit(150).execute()
-        all_stories = stories_res.data or []
-        
-    if not all_stories:
-        logger.warning("No stories found for this outlet.")
-        return
-        
-    # Group by day and pick top 5 longest summaries per day
-    stories_by_day = defaultdict(list)
-    for s in all_stories:
-        pub_at = s.get("published_at")
-        if pub_at:
-            day = pub_at[:10]  # simple YYYY-MM-DD grouping
-            stories_by_day[day].append(s)
-            
-    selected_stories = []
-    for day, day_stories in stories_by_day.items():
-        # Sort by summary length desc
-        day_stories.sort(key=lambda x: len(x.get("summary") or ""), reverse=True)
-        selected_stories.extend(day_stories[:5])
-        
-    # Prepare text batch for LLM
-    content_batch = []
-    for s in selected_stories:
-        content_batch.append(f"Title: {s.get('title')}\nSummary: {s.get('summary')}")
-        
-    batch_text = "\n\n---\n\n".join(content_batch)
-    
+Article:
+{article_text}"""
+
+
+PROMPT_S2 = """You are analyzing a Nigerian news article for a media intelligence platform.
+
+Your task is to determine whether this article is original journalism or a reproduction of a press release, government statement, or wire copy.
+
+Nigerian media context: The News Agency of Nigeria (NAN) distributes government press releases that many outlets publish verbatim. Brown envelope journalism involves publishing paid-for content that looks like news. These practices are common and are what you are detecting.
+
+Look for these specific indicators of press release reproduction:
+- Phrases like "according to a statement", "in a statement", "the statement read", "signed by", "issued by his office"
+- NAN attribution ("NAN reports", "from our correspondent (NAN)")
+- Bureaucratic formatting: long official titles before every name
+- No evidence of independent reporting, fieldwork, or original interviews
+- Generic bylines like "Staff Reporter", "Our Reporter", "Agency Report"
+- The entire article reads as a transcription of an official speech or statement
+
+Look for these specific indicators of original reporting:
+- Named journalist byline with specific reporting credit
+- Direct quotes from interviews clearly conducted by the reporter
+- Evidence of fieldwork: "visited the scene", "spoke to residents"
+- Multiple independently gathered perspectives
+- Reporter's own observations described
+
+Return ONLY a raw JSON object with no markdown formatting:
+
+{
+  "has_statement_language": true/false,
+  "has_nan_attribution": true/false,
+  "has_named_journalist_byline": true/false,
+  "has_original_interview_quotes": true/false,
+  "reporting_type": "original|press_release|wire_copy|mixed",
+  "is_churnalism": true/false,
+  "churnalism_evidence": "brief description of what triggered this classification"
+}
+
+"is_churnalism" = true if reporting_type is "press_release" or "wire_copy"
+"is_churnalism" = false if reporting_type is "original" or "mixed"
+
+Article:
+{article_text}"""
+
+
+PROMPT_S4 = """You are analyzing a Nigerian news article for a media intelligence platform.
+
+Your task is to count the use of deferential language applied to government officials, politicians, or government policies in EDITORIAL COPY ONLY.
+
+IMPORTANT: Do NOT count anything inside direct quotation marks. You are only counting language the journalist or editor chose to use themselves — not language attributed to a speaker.
+
+You are looking for:
+
+1. Repeated unnecessary honorifics in editorial text:
+   Standard journalism: "Governor Sanwo-Olu said..." (acceptable once)
+   Deferential: "His Excellency, the Executive Governor, His Excellency Sanwo-Olu..." (excessive, counts as deferential)
+   
+   Deferential honorifics to count (when used repeatedly beyond first formal mention):
+   "His Excellency", "Her Excellency", "His Royal Highness", "The Executive Governor", "The Distinguished Senator", "The Honourable Minister", "The Rt. Honourable Speaker", "The Visionary Governor", "The Performing Governor"
+
+2. Sanitizing adjectives applied to officials or their actions in editorial voice (NOT in quotes):
+   "visionary", "performing", "hardworking", "amiable", "magnanimous", "sagacious", "indefatigable", "diligent", "proactive", "passionate", "tireless", "selfless", "dedicated", "purposeful", "astute", "illustrious", "eminent", "distinguished", "esteemed"
+
+3. Government PR phrases reproduced uncritically as editorial voice:
+   "Renewed Hope Agenda", "moving the nation forward", "building a better Nigeria", "transformational leadership", "landmark achievement", "historic initiative", "game-changing policy", "people-oriented governance"
+
+Do NOT count:
+- Any of the above when inside direct quotation marks
+- Standard formal titles used once at first mention
+- Neutral descriptive language
+
+Count the total words in the article (approximate).
+
+Return ONLY a raw JSON object with no markdown formatting:
+
+{
+  "deferential_terms_found": ["exact terms found in editorial copy"],
+  "deferential_count": integer,
+  "approximate_word_count": integer,
+  "deference_density_per_1000_words": float,
+  "is_high_deference": true/false
+}
+
+"deference_density_per_1000_words" = (deferential_count / word_count) * 1000
+"is_high_deference" = true if deference_density_per_1000_words > 3.0
+
+Article:
+{article_text}"""
+
+
+PROMPT_S5_HEADLINES = """You are analyzing a sample of Nigerian news headlines for a media intelligence platform.
+
+Classify each headline into exactly one category:
+
+"accountability": The story investigates or reports government failure, corruption, misconduct, policy failure, court rulings against the state, protests against the government, security failures, or holds officials to account for their actions.
+  Examples:
+  - "EFCC arraigns minister for N4bn fraud"
+  - "Court orders government to pay compensation to victims"
+  - "Residents protest over abandoned road project"
+
+"government_announcement": The story reports what the government says it is doing, achievements, inaugurations, appointments, policy launches presented from the government's perspective without challenge.
+  Examples:
+  - "Governor commissions new hospital"
+  - "FG launches N50bn youth empowerment scheme"
+  - "President swears in new ministers"
+
+"neutral": Crime unrelated to government, international news, sports, entertainment, accidents, business news with no government accountability dimension.
+
+Return ONLY a raw JSON object with no markdown formatting:
+
+{
+  "classifications": [
+    {
+      "index": 0,
+      "headline": "headline text",
+      "type": "accountability|government_announcement|neutral"
+    }
+  ],
+  "accountability_count": integer,
+  "government_announcement_count": integer,
+  "neutral_count": integer,
+  "total_classified": integer,
+  "accountability_ratio": float
+}
+
+"accountability_ratio" = accountability_count / (accountability_count + government_announcement_count)
+Exclude neutral stories from this ratio.
+If both accountability and government_announcement are 0, return 0.5.
+
+Headlines:
+{headlines_list}"""
+
+
+PROMPT_S6 = """You are analyzing a Nigerian news article for a media intelligence platform.
+
+Your task is to determine whether this article is a correction, retraction, clarification, or follow-up that challenges the outlet's own previous reporting.
+
+Look for these indicators:
+- Explicit correction language: "Correction:", "Retraction:", "Clarification:", "Editor's Note:", "We earlier reported..."
+- Follow-up stories that contradict or update a previous report: "Contrary to our earlier report...", "We have since established...", "New information shows..."
+- Acknowledgment of error or inaccuracy in previous coverage
+
+This does NOT include:
+- Updates to breaking news (new developments, not corrections)
+- Opinion pieces or letters to the editor
+- Corrections to quotes attributed to other outlets
+
+Return ONLY a raw JSON object with no markdown formatting:
+
+{
+  "is_correction_or_retraction": true/false,
+  "correction_type": "correction|retraction|clarification|follow_up|none",
+  "evidence": "exact phrase that triggered this classification or null"
+}
+
+Article:
+{article_text}"""
+
+
+PROMPT_BROWN_ENVELOPE = """You are analyzing a Nigerian news article for a media intelligence platform.
+
+Detect whether this article is likely "brown envelope journalism" — paid-for or politically sponsored content published as if it were independent journalism.
+
+Brown envelope journalism in Nigeria has a specific textual fingerprint. Check for ALL THREE of these conditions simultaneously:
+
+Condition 1 — OVERWHELMINGLY POSITIVE SENTIMENT toward a specific politician, government official, or government agency:
+The article contains extensive praise, positive framing, or celebratory language directed at a specific named individual or agency. The overall tone is promotional, not informational.
+
+Condition 2 — NO CLEAR NEWS HOOK:
+There is no recent event (election, policy announcement, crisis, court ruling, inauguration) in the last 48–72 hours that justifies this story being published today. The story is not pegged to anything newsworthy — it just praises the subject.
+
+Condition 3 — SINGLE SOURCE DEPENDENCY:
+The article quotes only the subject of the praise or their close allies or spokespersons. No independent, opposing, or unaffiliated voices are present.
+
+IMPORTANT: Do NOT consider language inside direct quotation marks when evaluating Condition 1. Only evaluate editorial framing — the journalist's own words and choices.
+
+Return ONLY a raw JSON object with no markdown formatting:
+
+{
+  "overwhelmingly_positive_toward_official": true/false,
+  "has_clear_news_hook": true/false,
+  "single_source_dependent": true/false,
+  "brown_envelope_suspected": true/false,
+  "subject_of_praise": "name of politician/official/agency or null",
+  "evidence": "one sentence describing what triggered this flag or null"
+}
+
+"brown_envelope_suspected" = true ONLY if ALL THREE conditions are met:
+overwhelmingly_positive_toward_official = true
+AND has_clear_news_hook = false
+AND single_source_dependent = true
+
+Article:
+{article_text}"""
+
+
+PROMPT_CLUSTER_CLASS = """You are classifying a Nigerian news story for a media intelligence platform.
+
+Classify this story headline into exactly one of these categories:
+
+"accountability": Stories about government failure, corruption allegations, court rulings against the government or officials, protests, policy failures, budget misuse, security failures, human rights violations, official misconduct, investigations of public officials, mismanagement of public funds
+
+"government_announcement": Routine government press releases, official inaugurations, government achievement reports, policy launches presented positively, official appointments, state visits
+
+"neutral_news": Crime unrelated to government accountability, international news, sports, entertainment, accidents, natural disasters, business news with no government accountability dimension
+
+Return ONLY a raw JSON object:
+
+{
+  "classification": "accountability|government_announcement|neutral_news",
+  "confidence": "high|medium|low",
+  "reasoning": "one sentence explanation"
+}
+
+Headline: {headline}"""
+
+
+# ---------------------------------------------------------
+# HELPER FUNCTIONS
+# ---------------------------------------------------------
+
+def ask_llm(prompt_template, content):
     try:
         res = openai_client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": PROMPT_TEMPLATE},
-                {"role": "user", "content": f"Outlet: {outlet['name']}\nOwnership: {outlet['ownership_type']}\n\nRecent Articles:\n{batch_text}"}
-            ],
-            response_format={ "type": "json_object" },
+            messages=[{"role": "user", "content": prompt_template.replace("{article_text}", content).replace("{headlines_list}", content).replace("{headline}", content)}],
+            response_format={"type": "json_object"},
             temperature=0.0
         )
-        
-        analysis = json.loads(res.choices[0].message.content)
-        
-        logger.info(f"Analysis complete for {outlet['name']}. Score: {analysis.get('independence_score')}")
-        
-        # Update outlet with new behavioral data
-        update_data = {
-            "independence_score": analysis.get("independence_score"),
-            "last_behavioral_scan": datetime.now(timezone.utc).isoformat(),
-        }
-        
-        # We can also track brown envelope violations by incrementing the tally if suspected
-        if analysis.get("brown_envelope_suspected"):
-            # Fetch current count
-            curr_res = supabase.table("outlets").select("brown_envelope_count").eq("id", outlet_id).execute()
-            curr_count = curr_res.data[0].get("brown_envelope_count") or 0
-            update_data["brown_envelope_count"] = curr_count + 1
-            
-            # Change track record status if it gets too high
-            if update_data["brown_envelope_count"] >= 3:
-                update_data["track_record_status"] = "Problematic"
-            elif update_data["brown_envelope_count"] >= 1:
-                update_data["track_record_status"] = "Flagged"
-                
-        supabase.table("outlets").update(update_data).eq("id", outlet_id).execute()
-        return analysis
-        
+        return json.loads(res.choices[0].message.content)
     except Exception as e:
-        logger.error(f"Failed to analyze outlet: {e}")
+        logger.error(f"LLM Error: {e}")
         return None
 
-def run_pilot():
-    print("Running Pilot Behavioral Analysis...")
-    target_slugs = ["punch-ng", "vanguard", "sahara-reporters", "nta"]
-    res = supabase.table("outlets").select("id, name, slug").in_("slug", target_slugs).execute()
+def fetch_sample(outlet_id):
+    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    res = supabase.table("stories").select("id, title, summary, embedding, cluster_id, published_at").eq("outlet_id", outlet_id).neq("source_type", "fact_check").execute()
+    all_stories = res.data or []
     
-    if not res.data:
-        print("No target outlets found in the database.")
+    total = len(all_stories)
+    if total < 50:
+        return all_stories, "Insufficient Data"
+    
+    res_30 = supabase.table("stories").select("id, title, summary, embedding, cluster_id, published_at").eq("outlet_id", outlet_id).gte("published_at", cutoff_date).neq("source_type", "fact_check").execute()
+    stories_30 = res_30.data or []
+    total_30 = len(stories_30)
+    
+    if total < 150:
+        return stories_30, "Low Confidence"
+    elif total < 300:
+        return sorted(stories_30, key=lambda x: x.get('published_at', ''), reverse=True)[:150], "Standard"
+    else:
+        return random.sample(stories_30, min(200, total_30)), "High Confidence"
+
+def run_brown_envelope_layer_1(story_embedding, published_at):
+    """Layer 1: Cosine similarity via pgvector RPC."""
+    if not story_embedding or not published_at:
+        return False
+        
+    try:
+        res = supabase.rpc('match_stories_brown_envelope', {
+            'query_embedding': story_embedding,
+            'match_threshold': 0.90,
+            'pub_time': published_at,
+            'time_window_hours': 24
+        }).execute()
+        
+        matches = res.data or []
+        unique_outlets = set([m['outlet_id'] for m in matches])
+        
+        # >= 3 different outlets
+        return len(unique_outlets) >= 3
+    except Exception as e:
+        logger.error(f"Error querying Layer 1 Brown Envelope vector search: {e}")
+        return False
+
+def analyze_outlet(outlet_id: int):
+    logger.info(f"Analyzing outlet {outlet_id}")
+    
+    outlet_res = supabase.table("outlets").select("*").eq("id", outlet_id).execute()
+    if not outlet_res.data:
+        return
+    outlet = outlet_res.data[0]
+    outlet_slug = outlet['slug']
+    
+    sample, confidence_badge = fetch_sample(outlet_id)
+    if not sample:
+        logger.warning(f"No stories for {outlet['name']}")
         return
         
-    for o in res.data:
-        print(f"\n--- Analyzing {o['name']} ({o['slug']}) ---")
-        result = analyze_outlet(o['id'], limit=20)
-        print(json.dumps(result, indent=2))
+    s1_prominent_count = 0
+    s2_original_count = 0
+    s4_densities = []
+    s6_corrections = 0
+    
+    be_layer1_flags = 0
+    be_layer2_flags = 0
+    
+    # 2-7. Per Article Analysis
+    for s in sample:
+        text = f"{s.get('title', '')}\n\n{s.get('summary', '')}"
+        
+        # Signal 1: Source Hierarchy
+        r1 = ask_llm(PROMPT_S1, text)
+        if r1 and r1.get('non_government_in_prominent_position'): s1_prominent_count += 1
+            
+        # Signal 2: Churnalism
+        r2 = ask_llm(PROMPT_S2, text)
+        if r2 and not r2.get('is_churnalism'): s2_original_count += 1
+            
+        # Signal 4: Lexical Deference
+        r4 = ask_llm(PROMPT_S4, text)
+        if r4: s4_densities.append(r4.get('deference_density_per_1000_words', 0.0))
+            
+        # Signal 6: Editorial Independence
+        r6 = ask_llm(PROMPT_S6, text)
+        if r6 and r6.get('is_correction_or_retraction'): s6_corrections += 1
+            
+        # Brown Envelope Layer 2: Sentiment Triplet
+        rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
+        if rb and rb.get('brown_envelope_suspected'): be_layer2_flags += 1
+            
+        # Brown Envelope Layer 1: Cosine Similarity
+        if run_brown_envelope_layer_1(s.get('embedding'), s.get('published_at')):
+            be_layer1_flags += 1
+
+    # Signal Scores
+    s1_score = (s1_prominent_count / len(sample)) * 100 if sample else 0
+    s2_score = (s2_original_count / len(sample)) * 100 if sample else 0
+    avg_density = sum(s4_densities) / len(s4_densities) if s4_densities else 0
+    s4_score = max(0, 100 - (avg_density * 10))
+    
+    if s6_corrections == 0: s6_score = 40
+    elif s6_corrections <= 2: s6_score = 60
+    elif s6_corrections <= 5: s6_score = 80
+    else: s6_score = 100
+
+    # 8. Signal 5 (Batch Story Selection)
+    headlines = [s['title'] for s in sample if s.get('title')]
+    # Send in chunks of 100 if needed, but per spec "up to 100"
+    headlines_text = "\\n".join([f"{i}. {h}" for i, h in enumerate(headlines[:100])])
+    r5 = ask_llm(PROMPT_S5_HEADLINES, headlines_text)
+    s5_score = (r5.get('accountability_ratio', 0.5) * 100) if r5 else 50.0
+
+    # 9. Signal 3 (Omission Penalty)
+    # Calculate Total Active Outlets
+    active_res = supabase.table("outlets").select("id", count="exact").eq("active", True).execute()
+    total_active_outlets = active_res.count if active_res.count else 144
+    ecosystem_threshold = int(total_active_outlets * 0.60)
+    
+    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    clusters_res = supabase.table("clusters").select("id, representative_title, outlet_count").gte("created_at", cutoff_date).gte("outlet_count", ecosystem_threshold).execute()
+    
+    major_clusters = []
+    for c in clusters_res.data or []:
+        r = ask_llm(PROMPT_CLUSTER_CLASS, c['representative_title'])
+        if r and r.get('classification') == 'accountability':
+            major_clusters.append(c['id'])
+            
+    if not major_clusters:
+        s3_score = 70.0
+    else:
+        total_major = len(major_clusters)
+        outlet_covered = 0
+        for s in sample:
+            if s.get('cluster_id') in major_clusters:
+                outlet_covered += 1
+                major_clusters.remove(s.get('cluster_id')) 
+                
+        s3_score = (outlet_covered / total_major) * 100
+
+    # 10. TII Calculation
+    tii_raw = (s1_score * 0.30) + (s2_score * 0.25) + (s3_score * 0.20) + (s4_score * 0.10) + (s5_score * 0.10) + (s6_score * 0.05)
+    
+    # Apply structural caps based on specific slugs
+    final_tii = tii_raw
+    if outlet.get('ownership_type') == 'government':
+        if outlet_slug in FEDERAL_GOVT_OUTLETS:
+            final_tii = min(30.0, tii_raw)
+        elif outlet_slug in STATE_GOVT_OUTLETS:
+            final_tii = min(40.0, tii_raw)
+        else:
+            final_tii = min(40.0, tii_raw) # Default fallback for unlisted government outlets
+            
+    # Brown Envelope Override
+    layer1_rate = be_layer1_flags / len(sample) if sample else 0
+    layer2_rate = be_layer2_flags / len(sample) if sample else 0
+    brown_envelope_suspected = layer1_rate >= 0.10 or layer2_rate >= 0.10
+    
+    # 13. Upsert
+    payload = {
+        "outlet_slug": outlet_slug,
+        "independence_score": final_tii,
+        "s1_score": s1_score,
+        "s2_score": s2_score,
+        "s3_score": s3_score,
+        "s4_score": s4_score,
+        "s5_score": s5_score,
+        "s6_score": s6_score,
+        "brown_envelope_suspected": brown_envelope_suspected,
+        "confidence_level": confidence_badge,
+        "story_sample_size": len(sample),
+        "analyzed_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    logger.info(f"Scored {outlet['name']}: {final_tii}")
+    
+    # Upsert to behavioral scores (primary key is outlet_slug)
+    supabase.table("outlet_behavioral_scores").upsert(payload).execute()
+    
+    # Update main outlets table
+    supabase.table("outlets").update({"independence_score": final_tii}).eq("id", outlet_id).execute()
+
+def main():
+    outlets = supabase.table("outlets").select("id, name").eq("active", True).execute()
+    for o in outlets.data:
+        analyze_outlet(o['id'])
+        time.sleep(3)
 
 if __name__ == "__main__":
-    run_pilot()
+    main()
