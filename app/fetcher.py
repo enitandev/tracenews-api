@@ -107,6 +107,11 @@ def parse_feed(outlet: dict) -> list[dict]:
                 if "Archives -" in title or "Archives Page" in title:
                     continue
                 url = entry.get("link", "").strip()
+                if "news.google.com" in url:
+                    source_dict = entry.get("source", {})
+                    if "href" in source_dict:
+                        url = source_dict["href"]
+                        
                 summary = entry.get("summary", "").strip()[:500]
                 published_raw = entry.get("published", entry.get("updated", ""))
 

@@ -70,7 +70,7 @@ def run_scoring(all_time: bool = False):
             slug = outlet.get("slug")
             
             # Map region, ownership, credibility, gov_alignment
-            regions[outlet.get("geopolitical_lean", "National")] += 1
+            regions[outlet.get("geopolitical_lean") or "National"] += 1
             ownership[outlet.get("ownership_type", "Independent")] += 1
             credibility[outlet.get("credibility_tier", "Institutional")] += 1
             gov_alignment[outlet.get("government_alignment", "neutral")] += 1
@@ -122,16 +122,16 @@ def run_scoring(all_time: bool = False):
         monitoring_flags = []
 
         # Rule 1: The Coverage Gap (Dead Angle)
-        # If heavily covered (5+ stories) but zero coverage from a major region, flag it.
-        # Major regions: North, Southwest, Southeast, South-South
         if total_stories >= 5:
             major_regions = ["North", "Southwest", "Southeast", "South-South"]
+            covered_regions = [r for r in major_regions if regions.get(r, 0) > 0]
             missing_regions = [r for r in major_regions if regions.get(r, 0) == 0]
-            if missing_regions:
+            
+            if covered_regions and missing_regions:
                 monitoring_flags.append({
                     "type": "COVERAGE_GAP",
                     "severity": "high",
-                    "message": f"Zero coverage from {', '.join(missing_regions)}.",
+                    "message": "This story is only being covered by national outlets. No regional publications from the North, Southwest, Southeast or South-South have picked it up.",
                     "icon": "eye-off"
                 })
 
