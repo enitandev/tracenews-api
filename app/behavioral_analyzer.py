@@ -4,6 +4,7 @@ import time
 import random
 import logging
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
 from app.db import supabase
 
@@ -338,6 +339,51 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
         logger.error(f"Error querying Layer 1 Brown Envelope vector search: {e}")
         return False
 
+def analyze_article(s):
+    start_time = time.time()
+    text = f"{s.get('title', '')}\n\n{s.get('summary', '')}"
+    results = {
+        's1_prominent': False,
+        's2_original': False,
+        's4_density': None,
+        's6_correction': False,
+        'be_layer2_flag': False,
+        'be_layer1_flag': False,
+        'elapsed': 0.0
+    }
+    
+    try:
+        # Signal 1: Source Hierarchy
+        r1 = ask_llm(PROMPT_S1, text)
+        if r1 and r1.get('non_government_in_prominent_position'): results['s1_prominent'] = True
+            
+        # Signal 2: Churnalism
+        r2 = ask_llm(PROMPT_S2, text)
+        if r2 and not r2.get('is_churnalism'): results['s2_original'] = True
+            
+        # Signal 4: Lexical Deference
+        r4 = ask_llm(PROMPT_S4, text)
+        if r4: results['s4_density'] = r4.get('deference_density_per_1000_words', 0.0)
+            
+        # Signal 6: Editorial Independence
+        r6 = ask_llm(PROMPT_S6, text)
+        if r6 and r6.get('is_correction_or_retraction'): results['s6_correction'] = True
+            
+        # Brown Envelope Layer 2: Sentiment Triplet
+        rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
+        if rb and rb.get('brown_envelope_suspected'): results['be_layer2_flag'] = True
+            
+        # Brown Envelope Layer 1: Cosine Similarity
+        story_embedding = get_story_embedding(s['id'])
+        if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
+            results['be_layer1_flag'] = True
+            
+    except Exception as e:
+        logger.error(f"Exception processing article {s.get('title')}: {str(e)}", exc_info=True)
+        
+    results['elapsed'] = time.time() - start_time
+    return results
+
 def analyze_outlet(outlet_id: int):
     logger.info(f"Analyzing outlet {outlet_id}")
     
@@ -360,50 +406,26 @@ def analyze_outlet(outlet_id: int):
     be_layer1_flags = 0
     be_layer2_flags = 0
     
-    # 2-7. Per Article Analysis
     total_articles = len(sample)
-    for i, s in enumerate(sample):
-        start_time = time.time()
-        logger.info(f"Processing article {i+1}/{total_articles}: {s.get('title')}")
-        text = f"{s.get('title', '')}\n\n{s.get('summary', '')}"
-        
-        try:
-            # Signal 1: Source Hierarchy
-            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 1 (Source Hierarchy)")
-            r1 = ask_llm(PROMPT_S1, text)
-            if r1 and r1.get('non_government_in_prominent_position'): s1_prominent_count += 1
-                
-            # Signal 2: Churnalism
-            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 2 (Churnalism)")
-            r2 = ask_llm(PROMPT_S2, text)
-            if r2 and not r2.get('is_churnalism'): s2_original_count += 1
-                
-            # Signal 4: Lexical Deference
-            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 4 (Lexical Deference)")
-            r4 = ask_llm(PROMPT_S4, text)
-            if r4: s4_densities.append(r4.get('deference_density_per_1000_words', 0.0))
-                
-            # Signal 6: Editorial Independence
-            logger.info(f"  [{i+1}/{total_articles}] Calling Signal 6 (Editorial Independence)")
-            r6 = ask_llm(PROMPT_S6, text)
-            if r6 and r6.get('is_correction_or_retraction'): s6_corrections += 1
-                
-            # Brown Envelope Layer 2: Sentiment Triplet
-            logger.info(f"  [{i+1}/{total_articles}] Calling Brown Envelope Layer 2 (Sentiment)")
-            rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
-            if rb and rb.get('brown_envelope_suspected'): be_layer2_flags += 1
-                
-            # Brown Envelope Layer 1: Cosine Similarity
-            logger.info(f"  [{i+1}/{total_articles}] Calling Brown Envelope Layer 1 (Cosine Similarity)")
-            story_embedding = get_story_embedding(s['id'])
-            if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
-                be_layer1_flags += 1
-                
-        except Exception as e:
-            logger.error(f"  [{i+1}/{total_articles}] Exception processing article: {str(e)}", exc_info=True)
-            
-        elapsed = time.time() - start_time
-        logger.info(f"Finished article {i+1}/{total_articles} in {elapsed:.2f} seconds.")
+    logger.info(f"Starting ThreadPoolExecutor (max_workers=5) for {total_articles} articles...")
+    
+    completed = 0
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {executor.submit(analyze_article, s): s for s in sample}
+        for future in as_completed(futures):
+            s = futures[future]
+            completed += 1
+            try:
+                res = future.result()
+                logger.info(f"Finished article {completed}/{total_articles}: {s.get('title')} in {res['elapsed']:.2f}s")
+                if res['s1_prominent']: s1_prominent_count += 1
+                if res['s2_original']: s2_original_count += 1
+                if res['s4_density'] is not None: s4_densities.append(res['s4_density'])
+                if res['s6_correction']: s6_corrections += 1
+                if res['be_layer2_flag']: be_layer2_flags += 1
+                if res['be_layer1_flag']: be_layer1_flags += 1
+            except Exception as e:
+                logger.error(f"Exception retrieving result for {s.get('title')}: {str(e)}", exc_info=True)
 
     # Signal Scores
     s1_score = (s1_prominent_count / len(sample)) * 100 if sample else 0
