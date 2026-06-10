@@ -3,6 +3,8 @@ import json
 import time
 import random
 import logging
+import html
+from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from openai import OpenAI
@@ -263,6 +265,16 @@ Headline: {headline}"""
 # HELPER FUNCTIONS
 # ---------------------------------------------------------
 
+def clean_text(raw):
+    # Parse and strip HTML tags
+    soup = BeautifulSoup(raw, "html.parser")
+    text = soup.get_text(separator=" ")
+    # Decode HTML entities
+    text = html.unescape(text)
+    # Collapse whitespace
+    text = " ".join(text.split())
+    return text[:500]
+
 def with_retry(func, max_retries=5, delay=5):
     for attempt in range(max_retries):
         try:
@@ -355,7 +367,7 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
 
 def analyze_article(s):
     start_time = time.time()
-    text = f"{s.get('title', '')}\n\n{s.get('summary', '')}"
+    text = clean_text(f"{s.get('title', '')}\n\n{s.get('summary', '')}")
     results = {
         's1_prominent': False,
         's2_original': False,
