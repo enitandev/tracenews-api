@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from dateutil import parser as dateparser
 from datetime import timezone
 from app.db import supabase
@@ -9,6 +10,16 @@ logger = logging.getLogger(__name__)
 
 SIMILARITY_THRESHOLD = 0.65
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def generate_slug(title: str) -> str:
+    if not title:
+        return 'story'
+    slug = title.lower()
+    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
+    slug = re.sub(r'\s+', '-', slug)
+    slug = re.sub(r'-+', '-', slug)
+    slug = slug[:80].strip('-')
+    return slug
 
 def get_recent_unclustered(hours: int = 48, all_time: bool = False) -> list[dict]:
     """Get stories that haven't been clustered yet and have embeddings."""
@@ -164,8 +175,19 @@ def run_clustering(all_time: bool = False) -> dict:
                 logger.warning(f"Could not generate embedding for new cluster: {story['title']}")
                 continue
                 
+            base_slug = generate_slug(story["title"])
+            slug = base_slug
+            counter = 1
+            while True:
+                exists = supabase.table("clusters").select("id").eq("slug", slug).execute()
+                if not exists.data:
+                    break
+                slug = f"{base_slug[:75]}-{counter}"
+                counter += 1
+
             new_cluster = supabase.table("clusters").insert({
                 "representative_title": story["title"],
+                "slug": slug,
                 "first_seen_at": story["published_at"],
                 "outlet_count": 0,
                 "embedding": cluster_emb

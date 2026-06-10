@@ -117,7 +117,7 @@ def get_cluster_stories(cluster_id: str):
 def get_landing_clusters(limit: int = 40):
     """Get optimized clusters for the landing page scrolling feed."""
     result = supabase.table("clusters").select(
-        "id, representative_title, outlet_count, category, coverage_stats, monitoring_flags, stories(image_url)"
+        "id, slug, representative_title, outlet_count, category, coverage_stats, monitoring_flags, stories(image_url)"
     ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(limit).execute()
     
     # Format for frontend
@@ -132,6 +132,7 @@ def get_landing_clusters(limit: int = 40):
                 
         formatted.append({
             "id": c["id"],
+            "slug": c.get("slug"),
             "representative_title": c["representative_title"],
             "outlet_count": c["outlet_count"],
             "category": c.get("category", "General"),
@@ -149,6 +150,59 @@ def get_feed_clusters(limit: int = 30, offset: int = 0):
         "*, cluster_scores(*)"
     ).gte("outlet_count", 2).order("first_seen_at", desc=True).range(offset, offset + limit - 1).execute()
     return {"clusters": result.data, "count": len(result.data)}
+
+@app.get("/clusters/by-slug/{slug}")
+def get_cluster_by_slug(slug: str):
+    """Get full detailed analytics for a cluster and its stories by slug."""
+    cluster_res = supabase.table("clusters").select("*, cluster_scores(*)").eq("slug", slug).single().execute()
+    cluster = cluster_res.data
+    
+    if not cluster:
+        return {"error": "Cluster not found"}
+        
+    stories_res = supabase.table("stories").select(
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier)"
+    ).eq("cluster_id", cluster["id"]).order("published_at", desc=False).execute()
+    
+    stories = stories_res.data or []
+    
+    # Fetch behavioral scores
+    slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
+    behavioral_map = {}
+    if slugs:
+        behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
+        behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+    
+    # Flatten the outlet metadata directly onto the story object
+    for s in stories:
+        if s.get("outlets"):
+            out = s["outlets"]
+            s["outlet_alignment"] = out.get("government_alignment")
+            s["outlet_independence"] = out.get("independence_score")
+            s["outlet_tier"] = out.get("credibility_tier")
+            
+            behav = behavioral_map.get(out.get("slug"))
+            if behav and behav.get("independence_score") is not None:
+                if behav.get("brown_envelope_suspected"):
+                    s["outlet_coverage_tier"] = "captured"
+                else:
+                    score = behav.get("independence_score")
+                    if score >= 70: s["outlet_coverage_tier"] = "independent"
+                    elif score >= 35: s["outlet_coverage_tier"] = "deferential"
+                    else: s["outlet_coverage_tier"] = "captured"
+            else:
+                g_align = out.get("government_alignment")
+                if g_align == "pro_government":
+                    s["outlet_coverage_tier"] = "captured"
+                elif g_align == "opposition":
+                    s["outlet_coverage_tier"] = "independent"
+                elif g_align == "neutral":
+                    s["outlet_coverage_tier"] = "deferential"
+                else:
+                    s["outlet_coverage_tier"] = "unscored"
+
+    return {"cluster": cluster, "stories": stories}
+
 
 
 @app.get("/clusters/{id}/deep-dive")

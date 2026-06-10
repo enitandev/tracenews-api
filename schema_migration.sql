@@ -34,3 +34,7 @@ ADD COLUMN IF NOT EXISTS source_type text DEFAULT 'news';
 UPDATE stories 
 SET source_type = 'fact_check'
 WHERE outlet_slug IN ('dubawa', 'africa-check-nigeria', 'factcheckhub');
+
+-- Add slug to clusters table for SEO-friendly URLs
+ALTER TABLE clusters ADD COLUMN IF NOT EXISTS slug text;
+ALTER TABLE clusters ADD CONSTRAINT clusters_slug_key UNIQUE (slug);
