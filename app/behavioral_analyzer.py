@@ -277,8 +277,19 @@ Headline: {headline}"""
 # HELPER FUNCTIONS
 # ---------------------------------------------------------
 
+def with_retry(func, max_retries=5, delay=5):
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            if attempt == max_retries - 1:
+                logger.error(f"Failed after {max_retries} attempts: {e}")
+                raise e
+            logger.warning(f"Network error: {e}. Retrying {attempt+1}/{max_retries} in {delay}s...")
+            time.sleep(delay)
+
 def ask_llm(prompt_template, content):
-    try:
+    def _call():
         res = openai_client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt_template.replace("{article_text}", content).replace("{headlines_list}", content).replace("{headline}", content)}],
@@ -286,29 +297,31 @@ def ask_llm(prompt_template, content):
             temperature=0.0
         )
         return json.loads(res.choices[0].message.content)
+    try:
+        return with_retry(_call, max_retries=3, delay=5)
     except Exception as e:
         logger.error(f"LLM Error: {e}")
         return None
 
 def get_story_embedding(story_id):
-    res = supabase.table("stories")\
-        .select("embedding")\
-        .eq("id", story_id)\
-        .execute()
-    if res.data:
-        return res.data[0].get("embedding")
+    try:
+        res = with_retry(lambda: supabase.table("stories").select("embedding").eq("id", story_id).execute())
+        if res.data:
+            return res.data[0].get("embedding")
+    except Exception as e:
+        logger.error(f"Error fetching embedding: {e}")
     return None
 
 def fetch_sample(outlet_id):
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    res = supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).neq("source_type", "fact_check").execute()
+    res = with_retry(lambda: supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).neq("source_type", "fact_check").execute())
     all_stories = res.data or []
     
     total = len(all_stories)
     if total < 50:
         return all_stories, "Insufficient Data"
     
-    res_30 = supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).gte("published_at", cutoff_date).neq("source_type", "fact_check").execute()
+    res_30 = with_retry(lambda: supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).gte("published_at", cutoff_date).neq("source_type", "fact_check").execute())
     stories_30 = res_30.data or []
     total_30 = len(stories_30)
     
@@ -325,12 +338,12 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
         return False
         
     try:
-        res = supabase.rpc('match_stories_brown_envelope', {
+        res = with_retry(lambda: supabase.rpc('match_stories_brown_envelope', {
             'query_embedding': story_embedding,
             'match_threshold': 0.95,
             'pub_time': published_at,
             'time_window_hours': 24
-        }).execute()
+        }).execute())
         
         matches = res.data or []
         unique_outlets = set([m['outlet_id'] for m in matches])
@@ -339,7 +352,7 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
         if len(unique_outlets) >= 3:
             matched_ids = [m['id'] for m in matches]
             # Fetch text of matched articles
-            stories_res = supabase.table("stories").select("title, summary").in_("id", matched_ids).execute()
+            stories_res = with_retry(lambda: supabase.table("stories").select("title, summary").in_("id", matched_ids).execute())
             
             # Check if any matched article is flagged as brown envelope
             for matched_story in (stories_res.data or []):
@@ -396,7 +409,12 @@ def analyze_article(s):
 def analyze_outlet(outlet_id: int):
     logger.info(f"Analyzing outlet {outlet_id}")
     
-    outlet_res = supabase.table("outlets").select("*").eq("id", outlet_id).execute()
+    try:
+        outlet_res = with_retry(lambda: supabase.table("outlets").select("*").eq("id", outlet_id).execute())
+    except Exception as e:
+        logger.error(f"Error fetching outlet {outlet_id}: {e}")
+        return
+        
     if not outlet_res.data:
         return
     outlet = outlet_res.data[0]
@@ -465,15 +483,25 @@ def analyze_outlet(outlet_id: int):
 
     # 9. Signal 3 (Omission Penalty)
     # Calculate Total Active Outlets
-    active_res = supabase.table("outlets").select("id", count="exact").eq("active", True).execute()
-    total_active_outlets = active_res.count if active_res.count else 144
+    try:
+        active_res = with_retry(lambda: supabase.table("outlets").select("id", count="exact").eq("active", True).execute())
+        total_active_outlets = active_res.count if active_res.count else 144
+    except Exception as e:
+        logger.error(f"Error fetching total active outlets: {e}")
+        total_active_outlets = 144
+        
     ecosystem_threshold = int(total_active_outlets * 0.60)
     
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    clusters_res = supabase.table("clusters").select("id, representative_title, outlet_count").gte("created_at", cutoff_date).gte("outlet_count", ecosystem_threshold).execute()
-    
+    try:
+        clusters_res = with_retry(lambda: supabase.table("clusters").select("id, representative_title, outlet_count").gte("created_at", cutoff_date).gte("outlet_count", ecosystem_threshold).execute())
+        cluster_list = clusters_res.data or []
+    except Exception as e:
+        logger.error(f"Error fetching major clusters: {e}")
+        cluster_list = []
+        
     major_clusters = []
-    for c in clusters_res.data or []:
+    for c in cluster_list:
         r = ask_llm(PROMPT_CLUSTER_CLASS, c['representative_title'])
         if r and r.get('classification') == 'accountability':
             major_clusters.append(c['id'])
@@ -526,15 +554,25 @@ def analyze_outlet(outlet_id: int):
     
     logger.info(f"Scored {outlet['name']}: {int(round(final_tii))}")
     
-    # Upsert to behavioral scores (primary key is outlet_slug)
-    supabase.table("outlet_behavioral_scores").upsert(payload).execute()
-    
-    # Update main outlets table
-    supabase.table("outlets").update({"independence_score": int(round(final_tii))}).eq("id", outlet_id).execute()
+    try:
+        # Upsert to behavioral scores (primary key is outlet_slug)
+        with_retry(lambda: supabase.table("outlet_behavioral_scores").upsert(payload).execute())
+        
+        # Update main outlets table
+        with_retry(lambda: supabase.table("outlets").update({"independence_score": int(round(final_tii))}).eq("id", outlet_id).execute())
+    except Exception as e:
+        logger.error(f"Failed to upsert scores for {outlet['name']}: {e}")
 
 def main():
-    outlets = supabase.table("outlets").select("id, name").eq("active", True).execute()
-    for o in outlets.data:
+    try:
+        outlets_res = with_retry(lambda: supabase.table("outlets").select("id, name").eq("active", True).execute())
+        outlets = outlets_res.data or []
+    except Exception as e:
+        logger.error(f"Failed to fetch active outlets in main: {e}")
+        return
+        
+    logger.info(f"Starting behavioral analysis for {len(outlets)} outlets...")
+    for o in outlets:
         analyze_outlet(o['id'])
         time.sleep(3)
 
