@@ -363,7 +363,6 @@ def analyze_article(s):
         's4_density': None,
         's6_correction': False,
         'be_layer2_flag': False,
-        'be_layer1_flag': False,
         'elapsed': 0.0
     }
     
@@ -387,11 +386,6 @@ def analyze_article(s):
         # Brown Envelope Layer 2: Sentiment Triplet
         rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
         if rb and rb.get('brown_envelope_suspected'): results['be_layer2_flag'] = True
-            
-        # Brown Envelope Layer 1: Cosine Similarity
-        story_embedding = get_story_embedding(s['id'])
-        if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
-            results['be_layer1_flag'] = True
             
     except Exception as e:
         logger.error(f"Exception processing article {s.get('title')}: {str(e)}", exc_info=True)
@@ -438,9 +432,18 @@ def analyze_outlet(outlet_id: int):
                 if res['s4_density'] is not None: s4_densities.append(res['s4_density'])
                 if res['s6_correction']: s6_corrections += 1
                 if res['be_layer2_flag']: be_layer2_flags += 1
-                if res['be_layer1_flag']: be_layer1_flags += 1
             except Exception as e:
                 logger.error(f"Exception retrieving result for {s.get('title')}: {str(e)}", exc_info=True)
+
+    # Brown Envelope Layer 1: Run sequentially to avoid concurrent connection overload
+    logger.info(f"Running Brown Envelope Layer 1 sequentially for {total_articles} articles...")
+    for i, s in enumerate(sample):
+        try:
+            story_embedding = get_story_embedding(s['id'])
+            if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
+                be_layer1_flags += 1
+        except Exception as e:
+            logger.error(f"Exception in Layer 1 sequential check for {s.get('title')}: {e}")
 
     # Signal Scores
     s1_score = (s1_prominent_count / len(sample)) * 100 if sample else 0
