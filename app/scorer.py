@@ -1,6 +1,8 @@
 import logging
 import json
 import os
+import time
+import httpx
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from app.db import supabase
@@ -29,157 +31,168 @@ def run_scoring(all_time: bool = False):
         processed += 1
         if processed % 100 == 0:
             print(f"Backfill progress: {processed}/{total} clusters")
-        # Fetch all stories for this cluster
-        stories_res = supabase.table("stories").select("*").eq("cluster_id", cluster["id"]).execute()
-        stories = stories_res.data or []
-        
-        if len(stories) == 0:
-            continue
-            
-        total_stories = len(stories)
-        
-        # 1. Categorize if needed
-        category = cluster.get("category")
-        if not category:
-            combined_summary = " ".join([s.get("summary", "") for s in stories])
-            category = classify_cluster_hybrid(cluster.get("representative_title", ""), combined_summary)
-            # Update the cluster with the new category
-            supabase.table("clusters").update({"category": category}).eq("id", cluster["id"]).execute()
+        for attempt in range(3):
+            try:
 
-        # 2. Fetch Master Outlet data dynamically for these stories
-        outlet_ids = list(set(s["outlet_id"] for s in stories if s.get("outlet_id")))
-        outlets_res = supabase.table("outlets").select("*").in_("id", outlet_ids).execute()
-        outlets_map = {o["id"]: o for o in (outlets_res.data or [])}
+                # Fetch all stories for this cluster
+                stories_res = supabase.table("stories").select("*").eq("cluster_id", cluster["id"]).execute()
+                stories = stories_res.data or []
 
-        # Fetch behavioral scores using slugs
-        outlet_slugs = list(set(o.get("slug") for o in outlets_map.values() if o.get("slug")))
-        behavioral_map = {}
-        if outlet_slugs:
-            behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", outlet_slugs).execute()
-            behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+                if len(stories) == 0:
+                    break  # Break retry loop, effectively continuing to next cluster
 
-        # 3. Calculate Coverage Math Variables
-        regions = defaultdict(int)
-        credibility = defaultdict(int)
-        ownership = defaultdict(int)
-        gov_alignment = defaultdict(int)
-        coverage_tier = defaultdict(int)
-        total_independence = 0
-        valid_independence_count = 0
+                total_stories = len(stories)
 
-        for s in stories:
-            oid = s.get("outlet_id")
-            if not oid or oid not in outlets_map:
-                continue
-                
-            outlet = outlets_map[oid]
-            slug = outlet.get("slug")
-            
-            # Map region, ownership, credibility, gov_alignment
-            regions[outlet.get("geopolitical_lean") or "National"] += 1
-            ownership[outlet.get("ownership_type", "Independent")] += 1
-            credibility[outlet.get("credibility_tier", "Institutional")] += 1
-            gov_alignment[outlet.get("government_alignment", "neutral")] += 1
-            
-            # Calculate Coverage Tier
-            behav = behavioral_map.get(slug) if slug else None
-            tier = "unscored"
-            
-            if behav and behav.get("independence_score") is not None:
-                if behav.get("brown_envelope_suspected"):
-                    tier = "captured"
+                # 1. Categorize if needed
+                category = cluster.get("category")
+                if not category:
+                    combined_summary = " ".join([s.get("summary", "") for s in stories])
+                    category = classify_cluster_hybrid(cluster.get("representative_title", ""), combined_summary)
+                    # Update the cluster with the new category
+                    supabase.table("clusters").update({"category": category}).eq("id", cluster["id"]).execute()
+
+                # 2. Fetch Master Outlet data dynamically for these stories
+                outlet_ids = list(set(s["outlet_id"] for s in stories if s.get("outlet_id")))
+                outlets_res = supabase.table("outlets").select("*").in_("id", outlet_ids).execute()
+                outlets_map = {o["id"]: o for o in (outlets_res.data or [])}
+
+                # Fetch behavioral scores using slugs
+                outlet_slugs = list(set(o.get("slug") for o in outlets_map.values() if o.get("slug")))
+                behavioral_map = {}
+                if outlet_slugs:
+                    behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", outlet_slugs).execute()
+                    behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+
+                # 3. Calculate Coverage Math Variables
+                regions = defaultdict(int)
+                credibility = defaultdict(int)
+                ownership = defaultdict(int)
+                gov_alignment = defaultdict(int)
+                coverage_tier = defaultdict(int)
+                total_independence = 0
+                valid_independence_count = 0
+
+                for s in stories:
+                    oid = s.get("outlet_id")
+                    if not oid or oid not in outlets_map:
+                        continue
+
+                    outlet = outlets_map[oid]
+                    slug = outlet.get("slug")
+
+                    # Map region, ownership, credibility, gov_alignment
+                    regions[outlet.get("geopolitical_lean") or "National"] += 1
+                    ownership[outlet.get("ownership_type", "Independent")] += 1
+                    credibility[outlet.get("credibility_tier", "Institutional")] += 1
+                    gov_alignment[outlet.get("government_alignment", "neutral")] += 1
+
+                    # Calculate Coverage Tier
+                    behav = behavioral_map.get(slug) if slug else None
+                    tier = "unscored"
+
+                    if behav and behav.get("independence_score") is not None:
+                        if behav.get("brown_envelope_suspected"):
+                            tier = "captured"
+                        else:
+                            score = behav.get("independence_score")
+                            if score >= 70: tier = "independent"
+                            elif score >= 35: tier = "deferential"
+                            else: tier = "captured"
+                    else:
+                        g_align = outlet.get("government_alignment")
+                        if g_align == "pro_government":
+                            tier = "captured"
+                        elif g_align == "opposition":
+                            tier = "independent"
+                        elif g_align == "neutral":
+                            tier = "deferential"
+
+                    if tier != "unscored":
+                        coverage_tier[tier] += 1
+
+                    # Aggregate independence score (legacy)
+                    ind_score = outlet.get("independence_score")
+                    if ind_score is not None:
+                        total_independence += ind_score
+                        valid_independence_count += 1
+
+                avg_independence = round(total_independence / valid_independence_count) if valid_independence_count > 0 else 50
+
+                # Construct Coverage Stats JSON
+                coverage_stats = {
+                    "geopolitical_distribution": dict(regions),
+                    "ownership_distribution": dict(ownership),
+                    "credibility_distribution": dict(credibility),
+                    "government_alignment_distribution": dict(gov_alignment),
+                    "coverage_tier_distribution": dict(coverage_tier),
+                    "average_independence_score": avg_independence,
+                    "total_coverage": total_stories
+                }
+
+                # 4. Monitoring Spirit Rules Engine
+                monitoring_flags = []
+
+                # Rule 1: The Coverage Gap (Dead Angle)
+                if total_stories >= 5:
+                    major_regions = ["North", "Southwest", "Southeast", "South-South"]
+                    covered_regions = [r for r in major_regions if regions.get(r, 0) > 0]
+                    missing_regions = [r for r in major_regions if regions.get(r, 0) == 0]
+
+                    if covered_regions and missing_regions:
+                        monitoring_flags.append({
+                            "type": "COVERAGE_GAP",
+                            "severity": "high",
+                            "message": "This story is only being covered by national outlets. No regional publications from the North, Southwest, Southeast or South-South have picked it up.",
+                            "icon": "eye-off"
+                        })
+
+                # Rule 2: Unverified Viral (Gistlover Effect)
+                # If multiple stories exist but ALL are from 'Sensational/Gist' tier
+                if total_stories >= 3 and credibility.get("Institutional", 0) == 0:
+                    monitoring_flags.append({
+                        "type": "UNVERIFIED_VIRAL",
+                        "severity": "critical",
+                        "message": "Trending exclusively on unregulated/sensational blogs. No institutional verification.",
+                        "icon": "alert-triangle"
+                    })
+
+                # Rule 3: Fast Brown Envelope Detection (Identical Text Overlap)
+                # We do a rapid text similarity check across summaries
+                has_identical_pr = False
+                if total_stories >= 3:
+                    summaries = [s.get("summary", "").strip() for s in stories if len(s.get("summary", "")) > 50]
+                    if len(summaries) >= 2:
+                        # Compare first 100 chars of summaries
+                        prefixes = [s[:100].lower() for s in summaries]
+                        # If any prefix appears 3 or more times exactly, it's a copy-paste PR
+                        counts = {p: prefixes.count(p) for p in set(prefixes)}
+                        if any(c >= 3 for c in counts.values()):
+                            has_identical_pr = True
+
+                if has_identical_pr:
+                    monitoring_flags.append({
+                        "type": "BROWN_ENVELOPE",
+                        "severity": "medium",
+                        "message": "High textual overlap detected. Coverage likely driven by synchronized Press Releases.",
+                        "icon": "copy"
+                    })
+
+                # 5. Update the Clusters table
+                supabase.table("clusters").update({
+                    "coverage_stats": coverage_stats,
+                    "monitoring_flags": monitoring_flags
+                }).eq("id", cluster["id"]).execute()
+
+                scored_count += 1
+                break
+
+
+            except (httpx.ReadTimeout, httpx.ConnectTimeout) as e:
+                if attempt < 2:
+                    logger.warning(f"Timeout on cluster {cluster['id']}, retrying in 5s...")
+                    time.sleep(5)
                 else:
-                    score = behav.get("independence_score")
-                    if score >= 70: tier = "independent"
-                    elif score >= 35: tier = "deferential"
-                    else: tier = "captured"
-            else:
-                g_align = outlet.get("government_alignment")
-                if g_align == "pro_government":
-                    tier = "captured"
-                elif g_align == "opposition":
-                    tier = "independent"
-                elif g_align == "neutral":
-                    tier = "deferential"
-                    
-            if tier != "unscored":
-                coverage_tier[tier] += 1
-            
-            # Aggregate independence score (legacy)
-            ind_score = outlet.get("independence_score")
-            if ind_score is not None:
-                total_independence += ind_score
-                valid_independence_count += 1
-
-        avg_independence = round(total_independence / valid_independence_count) if valid_independence_count > 0 else 50
-
-        # Construct Coverage Stats JSON
-        coverage_stats = {
-            "geopolitical_distribution": dict(regions),
-            "ownership_distribution": dict(ownership),
-            "credibility_distribution": dict(credibility),
-            "government_alignment_distribution": dict(gov_alignment),
-            "coverage_tier_distribution": dict(coverage_tier),
-            "average_independence_score": avg_independence,
-            "total_coverage": total_stories
-        }
-
-        # 4. Monitoring Spirit Rules Engine
-        monitoring_flags = []
-
-        # Rule 1: The Coverage Gap (Dead Angle)
-        if total_stories >= 5:
-            major_regions = ["North", "Southwest", "Southeast", "South-South"]
-            covered_regions = [r for r in major_regions if regions.get(r, 0) > 0]
-            missing_regions = [r for r in major_regions if regions.get(r, 0) == 0]
-            
-            if covered_regions and missing_regions:
-                monitoring_flags.append({
-                    "type": "COVERAGE_GAP",
-                    "severity": "high",
-                    "message": "This story is only being covered by national outlets. No regional publications from the North, Southwest, Southeast or South-South have picked it up.",
-                    "icon": "eye-off"
-                })
-
-        # Rule 2: Unverified Viral (Gistlover Effect)
-        # If multiple stories exist but ALL are from 'Sensational/Gist' tier
-        if total_stories >= 3 and credibility.get("Institutional", 0) == 0:
-            monitoring_flags.append({
-                "type": "UNVERIFIED_VIRAL",
-                "severity": "critical",
-                "message": "Trending exclusively on unregulated/sensational blogs. No institutional verification.",
-                "icon": "alert-triangle"
-            })
-
-        # Rule 3: Fast Brown Envelope Detection (Identical Text Overlap)
-        # We do a rapid text similarity check across summaries
-        has_identical_pr = False
-        if total_stories >= 3:
-            summaries = [s.get("summary", "").strip() for s in stories if len(s.get("summary", "")) > 50]
-            if len(summaries) >= 2:
-                # Compare first 100 chars of summaries
-                prefixes = [s[:100].lower() for s in summaries]
-                # If any prefix appears 3 or more times exactly, it's a copy-paste PR
-                counts = {p: prefixes.count(p) for p in set(prefixes)}
-                if any(c >= 3 for c in counts.values()):
-                    has_identical_pr = True
-                    
-        if has_identical_pr:
-            monitoring_flags.append({
-                "type": "BROWN_ENVELOPE",
-                "severity": "medium",
-                "message": "High textual overlap detected. Coverage likely driven by synchronized Press Releases.",
-                "icon": "copy"
-            })
-            
-        # 5. Update the Clusters table
-        supabase.table("clusters").update({
-            "coverage_stats": coverage_stats,
-            "monitoring_flags": monitoring_flags
-        }).eq("id", cluster["id"]).execute()
-        
-        scored_count += 1
-
+                    logger.error(f"Skipping cluster {cluster['id']} after 3 timeouts.")
     print(f"Backfill complete: {total} clusters updated")
     logger.info(f"Coverage Math complete. {scored_count} clusters calculated.")
     return {"clusters_scored": scored_count}
