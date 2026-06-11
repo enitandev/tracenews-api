@@ -71,6 +71,19 @@ Indicators of original reporting even in short text:
 - Citizen-sourced or social media evidence
 - Critical or questioning tone toward official claims
 
+IMPORTANT DISTINCTIONS:
+
+A news article that QUOTES an official is NOT automatically churnalism. Churnalism requires the entire article to read as a reproduced press release or statement.
+
+Standard signs of legitimate news reporting even without investigative language:
+- A lead sentence reporting what happened (police arrested, court ruled, minister said)
+- A direct quote from an official as evidence in a news report
+- Brief factual summaries of events
+
+Only classify as press_release or wire_copy if the text reads ENTIRELY as an official statement with no journalistic framing — for example if it starts with 'The office of the Governor wishes to inform' or 'In a press statement issued by' and contains nothing but the official's words.
+
+When in doubt between mixed and press_release, default to mixed.
+
 Return ONLY a raw JSON object with no markdown, no extra text:
 
 {
