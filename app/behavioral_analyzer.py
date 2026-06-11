@@ -596,9 +596,18 @@ def analyze_outlet(outlet_id: int):
     except Exception as e:
         logger.error(f"Failed to upsert scores for {outlet['name']}: {e}")
 
+def already_scored_today(outlet_slug):
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    res = with_retry(lambda: supabase.table("outlet_behavioral_scores")\
+        .select("analyzed_at")\
+        .eq("outlet_slug", outlet_slug)\
+        .gte("analyzed_at", cutoff)\
+        .execute())
+    return len(res.data) > 0
+
 def main():
     try:
-        outlets_res = with_retry(lambda: supabase.table("outlets").select("id, name").eq("active", True).execute())
+        outlets_res = with_retry(lambda: supabase.table("outlets").select("id, name, slug").eq("active", True).execute())
         outlets = outlets_res.data or []
     except Exception as e:
         logger.error(f"Failed to fetch active outlets in main: {e}")
@@ -606,6 +615,9 @@ def main():
         
     logger.info(f"Starting behavioral analysis for {len(outlets)} outlets...")
     for o in outlets:
+        if already_scored_today(o['slug']):
+            logger.info(f"Skipping {o['name']} - already scored today")
+            continue
         analyze_outlet(o['id'])
         time.sleep(3)
 
