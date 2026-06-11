@@ -11,11 +11,12 @@ logger = logging.getLogger(__name__)
 def run_scoring(all_time: bool = False):
     logger.info("Starting Monitoring Spirit Scoring Engine...")
     
-    # Get all clusters that need scoring
     query = supabase.table("clusters").select("id, outlet_count, category, representative_title")
     if not all_time:
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
         query = query.gte("first_seen_at", cutoff)
+    else:
+        query = query.or_("coverage_stats.is.null,coverage_stats.eq.{}")
         
     clusters_res = query.execute()
     clusters = clusters_res.data or []
