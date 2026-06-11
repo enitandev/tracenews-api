@@ -312,15 +312,47 @@ def get_story_embedding(story_id):
 
 def fetch_sample(outlet_id):
     cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    res = with_retry(lambda: supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).neq("source_type", "fact_check").execute())
-    all_stories = res.data or []
     
+    # Paginated fetch for all stories
+    all_stories = []
+    page_size = 100
+    offset = 0
+    while True:
+        res = with_retry(lambda: supabase.table("stories")\
+            .select("id, title, summary, cluster_id, published_at")\
+            .eq("outlet_id", outlet_id)\
+            .neq("source_type", "fact_check")\
+            .range(offset, offset + page_size - 1)\
+            .execute())
+        
+        batch = res.data or []
+        all_stories.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+        
     total = len(all_stories)
     if total < 50:
         return all_stories, "Insufficient Data"
     
-    res_30 = with_retry(lambda: supabase.table("stories").select("id, title, summary, cluster_id, published_at").eq("outlet_id", outlet_id).gte("published_at", cutoff_date).neq("source_type", "fact_check").execute())
-    stories_30 = res_30.data or []
+    # Paginated fetch for 30-day stories
+    stories_30 = []
+    offset = 0
+    while True:
+        res_30 = with_retry(lambda: supabase.table("stories")\
+            .select("id, title, summary, cluster_id, published_at")\
+            .eq("outlet_id", outlet_id)\
+            .gte("published_at", cutoff_date)\
+            .neq("source_type", "fact_check")\
+            .range(offset, offset + page_size - 1)\
+            .execute())
+            
+        batch = res_30.data or []
+        stories_30.extend(batch)
+        if len(batch) < page_size:
+            break
+        offset += page_size
+        
     total_30 = len(stories_30)
     
     if total < 150:
