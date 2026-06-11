@@ -33,7 +33,7 @@ def fetch_and_cluster():
 
 
 def start_scheduler():
-    interval = int(os.environ.get("FETCH_INTERVAL_MINUTES", 15))
+    interval = int(os.environ.get("FETCH_INTERVAL_MINUTES", 10))
     scheduler.add_job(
         fetch_and_cluster,
         "interval",
