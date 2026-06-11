@@ -442,24 +442,21 @@ def analyze_article(s):
     results['elapsed'] = time.time() - start_time
     return results
 
-def analyze_outlet(outlet_id: int):
-    logger.info(f"Analyzing outlet {outlet_id}")
-    
-    try:
-        outlet_res = with_retry(lambda: supabase.table("outlets").select("*").eq("id", outlet_id).execute())
-    except Exception as e:
-        logger.error(f"Error fetching outlet {outlet_id}: {e}")
-        return
-        
-    if not outlet_res.data:
-        return
-    outlet = outlet_res.data[0]
+def analyze_outlet(outlet, current, total):
+    start_time = time.time()
+    outlet_id = outlet['id']
     outlet_slug = outlet['slug']
+    outlet_name = outlet['name']
     
     sample, confidence_badge = fetch_sample(outlet_id)
     if not sample:
-        logger.warning(f"No stories for {outlet['name']}")
-        return
+        logger.warning(f"No stories for {outlet_name}")
+        return False
+        
+    sample_size = len(sample)
+    print(f"\n[{current}/{total}] Analyzing: {outlet_name}")
+    print(f"  Stories in sample: {sample_size}")
+    print(f"  Confidence level: {confidence_badge}")
         
     s1_prominent_count = 0
     s2_original_count = 0
@@ -481,7 +478,8 @@ def analyze_outlet(outlet_id: int):
             try:
                 res = future.result()
                 llm_results.append(res)
-                logger.info(f"Finished article {completed}/{total_articles}: {res['title']} in {res['elapsed']:.2f}s")
+                if completed % 10 == 0 or completed == total_articles:
+                    print(f"  Progress: {completed}/{total_articles} articles", end="\r")
                 if res['s1_prominent']: s1_prominent_count += 1
                 if res['s2_original']: s2_original_count += 1
                 if res['s4_density'] is not None: s4_densities.append(res['s4_density'])
@@ -598,8 +596,14 @@ def analyze_outlet(outlet_id: int):
         "analyzed_at": datetime.now(timezone.utc).isoformat()
     }
     
-    logger.info(f"Scored {outlet['name']}: {int(round(final_tii))}")
-    
+    print(f"\n  S1 Source Hierarchy:     {s1_score:.0f}")
+    print(f"  S2 Churnalism:           {s2_score:.0f}")
+    print(f"  S3 Omission Penalty:     {s3_score:.0f}")
+    print(f"  S4 Lexical Deference:    {s4_score:.0f}")
+    print(f"  S5 Story Selection:      {s5_score:.0f}")
+    print(f"  S6 Editorial Indicators: {s6_score:.0f}")
+    print(f"  Brown Envelope:          {brown_envelope_suspected}")
+
     try:
         # Upsert to behavioral scores (primary key is outlet_slug)
         with_retry(lambda: supabase.table("outlet_behavioral_scores").upsert(payload).execute())
@@ -607,55 +611,94 @@ def analyze_outlet(outlet_id: int):
         # Update main outlets table
         with_retry(lambda: supabase.table("outlets").update({"independence_score": int(round(final_tii))}).eq("id", outlet_id).execute())
     except Exception as e:
-        logger.error(f"Failed to upsert scores for {outlet['name']}: {e}")
+        logger.error(f"Failed to upsert scores for {outlet_name}: {e}")
+        return False
+
+    elapsed = time.time() - start_time
+    print(f"  FINAL TII SCORE: {final_tii:.0f}")
+    tier = 'Pro-Establishment' if final_tii < 35 else 'Institutional' if final_tii < 60 else 'Adversarial'
+    print(f"  Tier: {tier}")
+    print(f"  Saved. Time taken: {elapsed:.0f}s")
+    
+    return True
 
 def already_scored_today(outlet_slug):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     res = with_retry(lambda: supabase.table("outlet_behavioral_scores")\
-        .select("analyzed_at, s1_score")\
+        .select("analyzed_at, s1_score, independence_score")\
         .eq("outlet_slug", outlet_slug)\
         .gte("analyzed_at", cutoff)\
         .not_.is_("s1_score", "null")\
         .execute())
-    return len(res.data) > 0
+    return res.data[0].get('independence_score', 'N/A') if res.data else None
 
 def main(slugs=None):
+    batch_start = time.time()
+    scored_count = 0
+    skipped_count = 0
+    error_count = 0
+
     try:
         if slugs:
             outlets = []
             for slug in slugs:
                 res = with_retry(lambda: supabase.table("outlets")\
-                    .select("id, name, slug")\
+                    .select("id, name, slug, ownership_type")\
                     .eq("slug", slug)\
                     .eq("active", True)\
                     .execute())
                 if res.data:
                     outlets.extend(res.data)
         else:
-            outlets_res = with_retry(lambda: supabase.table("outlets").select("id, name, slug").eq("active", True).execute())
+            outlets_res = with_retry(lambda: supabase.table("outlets").select("id, name, slug, ownership_type").eq("active", True).execute())
             outlets = outlets_res.data or []
     except Exception as e:
         logger.error(f"Failed to fetch active outlets in main: {e}")
         return
         
-    logger.info(f"Starting behavioral analysis for {len(outlets)} outlets...")
-    for o in outlets:
-        if already_scored_today(o['slug']):
-            logger.info(f"Skipping {o['name']} - already scored today")
+    print(f"=== TraceNews TII Analyzer ===")
+    print(f"Starting batch run at {datetime.now()}")
+    print(f"Outlets to process: {len(outlets)}")
+    print(f"==============================")
+    
+    total = len(outlets)
+    for i, o in enumerate(outlets):
+        current = i + 1
+        existing_score = already_scored_today(o['slug'])
+        if existing_score is not None:
+            print(f"[{current}/{total}] SKIP: {o['name']} - already scored today (TII: {existing_score})")
+            skipped_count += 1
             continue
             
-        story_res = with_retry(lambda: supabase.table("stories")\
-            .select("id", count="exact")\
-            .eq("outlet_id", o['id'])\
-            .neq("source_type", "fact_check")\
-            .execute())
+        try:
+            story_res = with_retry(lambda: supabase.table("stories")\
+                .select("id", count="exact")\
+                .eq("outlet_id", o['id'])\
+                .neq("source_type", "fact_check")\
+                .execute())
+                
+            if story_res.count < 50:
+                print(f"[{current}/{total}] SKIP: {o['name']} - insufficient stories ({story_res.count})")
+                skipped_count += 1
+                continue
+                
+            success = analyze_outlet(o, current, total)
+            if success:
+                scored_count += 1
+            else:
+                error_count += 1
+            time.sleep(3)
+        except Exception as e:
+            logger.error(f"Error processing {o['name']}: {e}")
+            error_count += 1
             
-        if story_res.count < 50:
-            logger.info(f"Skipping {o['name']} - insufficient stories ({story_res.count})")
-            continue
-            
-        analyze_outlet(o['id'])
-        time.sleep(3)
+    total_elapsed = time.time() - batch_start
+    print(f"\n=== Batch Complete ===")
+    print(f"Outlets scored: {scored_count}")
+    print(f"Outlets skipped: {skipped_count}")
+    print(f"Errors: {error_count}")
+    print(f"Total time: {total_elapsed:.0f}s")
+    print(f"=====================")
 
 if __name__ == "__main__":
     import sys
