@@ -607,10 +607,21 @@ def already_scored_today(outlet_slug):
         .execute())
     return len(res.data) > 0
 
-def main():
+def main(slugs=None):
     try:
-        outlets_res = with_retry(lambda: supabase.table("outlets").select("id, name, slug").eq("active", True).execute())
-        outlets = outlets_res.data or []
+        if slugs:
+            outlets = []
+            for slug in slugs:
+                res = with_retry(lambda: supabase.table("outlets")\
+                    .select("id, name, slug")\
+                    .eq("slug", slug)\
+                    .eq("active", True)\
+                    .execute())
+                if res.data:
+                    outlets.extend(res.data)
+        else:
+            outlets_res = with_retry(lambda: supabase.table("outlets").select("id, name, slug").eq("active", True).execute())
+            outlets = outlets_res.data or []
     except Exception as e:
         logger.error(f"Failed to fetch active outlets in main: {e}")
         return
@@ -635,4 +646,6 @@ def main():
         time.sleep(3)
 
 if __name__ == "__main__":
-    main()
+    import sys
+    slugs = sys.argv[1:] if len(sys.argv) > 1 else None
+    main(slugs)
