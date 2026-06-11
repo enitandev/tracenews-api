@@ -467,10 +467,10 @@ def analyze_outlet(outlet_id: int):
     be_layer2_flags = 0
     
     total_articles = len(sample)
-    logger.info(f"Starting ThreadPoolExecutor (max_workers=5) for {total_articles} articles...")
+    logger.info(f"Starting ThreadPoolExecutor (max_workers=3) for {total_articles} articles...")
     
     completed = 0
-    with ThreadPoolExecutor(max_workers=5) as executor:
+    with ThreadPoolExecutor(max_workers=3) as executor:
         futures = {executor.submit(analyze_article, s): s for s in sample}
         for future in as_completed(futures):
             s = futures[future]
@@ -618,6 +618,17 @@ def main():
         if already_scored_today(o['slug']):
             logger.info(f"Skipping {o['name']} - already scored today")
             continue
+            
+        story_res = with_retry(lambda: supabase.table("stories")\
+            .select("id", count="exact")\
+            .eq("outlet_id", o['id'])\
+            .neq("source_type", "fact_check")\
+            .execute())
+            
+        if story_res.count < 50:
+            logger.info(f"Skipping {o['name']} - insufficient stories ({story_res.count})")
+            continue
+            
         analyze_outlet(o['id'])
         time.sleep(3)
 
