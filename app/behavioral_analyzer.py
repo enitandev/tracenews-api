@@ -401,6 +401,8 @@ def analyze_article(s):
     start_time = time.time()
     text = clean_text(f"{s.get('title', '')}\n\n{s.get('summary', '')}")
     results = {
+        'story_id': s.get('id'),
+        'title': s.get('title', ''),
         's1_prominent': False,
         's2_original': False,
         's4_density': None,
@@ -471,28 +473,28 @@ def analyze_outlet(outlet_id: int):
     
     completed = 0
     with ThreadPoolExecutor(max_workers=3) as executor:
-        futures = {executor.submit(analyze_article, s): s for s in sample}
+        futures = [executor.submit(analyze_article, s) for s in sample]
         for future in as_completed(futures):
-            s = futures[future]
             completed += 1
             try:
                 res = future.result()
-                logger.info(f"Finished article {completed}/{total_articles}: {s.get('title')} in {res['elapsed']:.2f}s")
+                logger.info(f"Finished article {completed}/{total_articles}: {res['title']} in {res['elapsed']:.2f}s")
                 if res['s1_prominent']: s1_prominent_count += 1
                 if res['s2_original']: s2_original_count += 1
                 if res['s4_density'] is not None: s4_densities.append(res['s4_density'])
                 if res['s6_correction']: s6_corrections += 1
                 if res['be_layer2_flag']: be_layer2_flags += 1
             except Exception as e:
-                logger.error(f"Exception retrieving result for {s.get('title')}: {str(e)}", exc_info=True)
+                logger.error(f"Exception retrieving LLM result: {str(e)}", exc_info=True)
 
     # Brown Envelope Layer 1: Run sequentially to avoid concurrent connection overload
     logger.info(f"Running Brown Envelope Layer 1 sequentially for {total_articles} articles...")
-    for i, s in enumerate(sample):
+    for s in sample:
         try:
             story_embedding = get_story_embedding(s['id'])
-            if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
-                be_layer1_flags += 1
+            if story_embedding:
+                if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
+                    be_layer1_flags += 1
         except Exception as e:
             logger.error(f"Exception in Layer 1 sequential check for {s.get('title')}: {e}")
 
