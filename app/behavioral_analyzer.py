@@ -612,9 +612,10 @@ def analyze_outlet(outlet_id: int):
 def already_scored_today(outlet_slug):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     res = with_retry(lambda: supabase.table("outlet_behavioral_scores")\
-        .select("analyzed_at")\
+        .select("analyzed_at, s1_score")\
         .eq("outlet_slug", outlet_slug)\
         .gte("analyzed_at", cutoff)\
+        .not_.is_("s1_score", "null")\
         .execute())
     return len(res.data) > 0
 
