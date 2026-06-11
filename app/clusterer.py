@@ -109,6 +109,13 @@ def run_clustering(all_time: bool = False) -> dict:
     if not stories:
         logger.info("No unclustered stories with embeddings found.")
         cleanup_old_clusters()
+        
+        print(f"\n=== Cluster Run Complete ===")
+        print(f"Stories processed: 0")
+        print(f"New clusters created: 0")
+        print(f"Stories added to existing clusters: 0")
+        print(f"===========================\n")
+        
         return {"stories_clustered": 0, "new_clusters": 0, "total_clusters": 0}
 
     logger.info(f"{len(stories)} unclustered stories to process")
@@ -214,6 +221,16 @@ def run_clustering(all_time: bool = False) -> dict:
     total_clusters = total_res.count or 0
 
     logger.info(f"Clustering complete. {assigned} stories assigned, {created} new clusters.")
+    
+    story_count = len(stories)
+    new_clusters = created
+    merged = assigned - created
+
+    print(f"\n=== Cluster Run Complete ===")
+    print(f"Stories processed: {story_count}")
+    print(f"New clusters created: {new_clusters}")
+    print(f"Stories added to existing clusters: {merged}")
+    print(f"===========================\n")
     return {
         "stories_clustered": assigned,
         "new_clusters": created,

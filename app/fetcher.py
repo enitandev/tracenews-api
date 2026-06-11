@@ -185,11 +185,13 @@ def save_stories(stories: list[dict]) -> int:
             logger.warning(f"Error checking existing URLs: {e}")
 
     new_stories = [s for url, s in unique_stories.items() if url not in existing_urls]
+    duplicate_count = len(stories) - len(new_stories)
     if not new_stories:
-        return 0
+        return 0, duplicate_count, 0
 
     logger.info(f"Processing and saving {len(new_stories)} new stories...")
     saved = 0
+    error_count = 0
     for story in new_stories:
         try:
             text_to_embed = f"{story.get('title', '')} {story.get('summary', '')}".strip()
@@ -206,9 +208,10 @@ def save_stories(stories: list[dict]) -> int:
             saved += 1
         except Exception as e:
             logger.warning(f"Failed to process and save story {story.get('url')}: {e}")
+            error_count += 1
             continue
             
-    return saved
+    return saved, duplicate_count, error_count
 
 def run_fetch() -> dict:
     """Main fetch job — runs on schedule."""
@@ -222,8 +225,26 @@ def run_fetch() -> dict:
         all_stories.extend(stories)
         logger.info(f"{outlet['name']}: {len(stories)} stories")
 
-    saved = save_stories(all_stories)
+    try:
+        saved, duplicate_count, error_count = save_stories(all_stories)
+    except TypeError:
+        # Fallback if save_stories was already returning an int
+        saved = save_stories(all_stories)
+        duplicate_count = len(all_stories) - saved
+        error_count = 0
+
     logger.info(f"Fetch complete. {saved}/{len(all_stories)} stories saved.")
+    
+    outlet_count = len(outlets)
+    new_stories_count = saved
+    
+    print(f"\n=== Fetch Complete ===")
+    print(f"Outlets processed: {outlet_count}")
+    print(f"New stories saved: {new_stories_count}")
+    print(f"Duplicates skipped: {duplicate_count}")
+    print(f"Errors: {error_count}")
+    print(f"======================\n")
+    
     return {
         "outlets_fetched": len(outlets),
         "stories_found":   len(all_stories),

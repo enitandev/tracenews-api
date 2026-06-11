@@ -20,9 +20,14 @@ def run_scoring(all_time: bool = False):
     clusters_res = query.execute()
     clusters = clusters_res.data or []
     
+    total = len(clusters)
     scored_count = 0
+    processed = 0
     
     for cluster in clusters:
+        processed += 1
+        if processed % 100 == 0:
+            print(f"Backfill progress: {processed}/{total} clusters")
         # Fetch all stories for this cluster
         stories_res = supabase.table("stories").select("*").eq("cluster_id", cluster["id"]).execute()
         stories = stories_res.data or []
@@ -174,5 +179,6 @@ def run_scoring(all_time: bool = False):
         
         scored_count += 1
 
+    print(f"Backfill complete: {total} clusters updated")
     logger.info(f"Coverage Math complete. {scored_count} clusters calculated.")
     return {"clusters_scored": scored_count}
