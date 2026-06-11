@@ -403,6 +403,7 @@ def analyze_article(s):
     results = {
         'story_id': s.get('id'),
         'title': s.get('title', ''),
+        'published_at': s.get('published_at', ''),
         's1_prominent': False,
         's2_original': False,
         's4_density': None,
@@ -472,12 +473,14 @@ def analyze_outlet(outlet_id: int):
     logger.info(f"Starting ThreadPoolExecutor (max_workers=3) for {total_articles} articles...")
     
     completed = 0
+    llm_results = []
     with ThreadPoolExecutor(max_workers=3) as executor:
         futures = [executor.submit(analyze_article, s) for s in sample]
         for future in as_completed(futures):
             completed += 1
             try:
                 res = future.result()
+                llm_results.append(res)
                 logger.info(f"Finished article {completed}/{total_articles}: {res['title']} in {res['elapsed']:.2f}s")
                 if res['s1_prominent']: s1_prominent_count += 1
                 if res['s2_original']: s2_original_count += 1
@@ -489,14 +492,22 @@ def analyze_outlet(outlet_id: int):
 
     # Brown Envelope Layer 1: Run sequentially to avoid concurrent connection overload
     logger.info(f"Running Brown Envelope Layer 1 sequentially for {total_articles} articles...")
-    for s in sample:
+    for result in llm_results:
         try:
-            story_embedding = get_story_embedding(s['id'])
-            if story_embedding:
-                if run_brown_envelope_layer_1(story_embedding, s.get('published_at')):
-                    be_layer1_flags += 1
+            # Only run pgvector RPC if Layer 2 flagged it
+            if result.get('be_layer2_flag'):
+                embedding = get_story_embedding(result['story_id'])
+                if embedding:
+                    layer1_flag = run_brown_envelope_layer_1(embedding, result['published_at'])
+                    result['brown_envelope_layer1'] = layer1_flag
+                    if layer1_flag:
+                        be_layer1_flags += 1
+                else:
+                    result['brown_envelope_layer1'] = False
+            else:
+                result['brown_envelope_layer1'] = False
         except Exception as e:
-            logger.error(f"Exception in Layer 1 sequential check for {s.get('title')}: {e}")
+            logger.error(f"Exception in Layer 1 sequential check for {result.get('title')}: {e}")
 
     # Signal Scores
     s1_score = (s1_prominent_count / len(sample)) * 100 if sample else 0
