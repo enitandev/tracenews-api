@@ -20,130 +20,86 @@ STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports']
 # AI PROMPTS
 # ---------------------------------------------------------
 
-PROMPT_S1 = """You are analyzing a Nigerian news article for the TraceNews Independence Index.
+PROMPT_COMBINED = """You are analyzing a Nigerian 
+news article for the TraceNews Independence Index.
 
-You ONLY have access to the headline and the first ~500 characters of the article (a short summary). You must work with this limited text only.
+Analyze the headline and summary for ALL of 
+the following signals in one pass and return 
+a single JSON object.
 
-Task: Determine how government officials or their actions are framed in the available text.
+SIGNAL 1 - Government Framing:
+How is government framed in this text?
+- "deferential": praises or presents official 
+  claims uncritically
+- "accountability": critical, exposes wrongdoing, 
+  challenges official claims
+- "neutral": factual, no clear framing
+- "none": no government mentioned
 
-Government framing categories:
-- "deferential": The text praises, supports, or presents government/official claims uncritically (e.g. "visionary governor", "landmark achievement", "committed leadership", "Renewed Hope Agenda" used positively).
-- "accountability": The text is critical, exposes wrongdoing, challenges official claims, or presents government actions negatively (e.g. "minister denies corruption", "EFCC arraigns governor", "leaked documents show...", "residents protest government failure").
-- "neutral": Factual reporting with no clear positive or negative framing of government.
-- "none": No government official or action is mentioned.
+SIGNAL 2 - Churnalism:
+Does this read like original journalism or 
+a reproduced press release/wire copy?
+Strong churnalism indicators: "in a statement", 
+"NAN reports", bureaucratic language, reads 
+entirely as official announcement.
+Original indicators: investigative language, 
+fieldwork, critical tone.
+Default to "mixed" when in doubt.
 
-Also check for non-government voices in the available text: opposition, civil society, expert, citizen, activist, etc.
+SIGNAL 4 - Lexical Deference:
+Count deferential terms in EDITORIAL COPY ONLY 
+(not in quotes): "His Excellency", "visionary", 
+"Renewed Hope Agenda", "landmark achievement", 
+"performing governor", "hardworking minister" etc.
+Estimate word count.
 
-Note: has_non_government_voice = true only counts toward "independent" if the non-government voice presents a perspective DIFFERENT from the official narrative — not if they are also praising the same government action.
+SIGNAL 6 - Editorial Independence:
+Does this article contain corrections, 
+retractions, or clarifications of previous 
+reporting? Look for: "Correction:", "Retraction:", 
+"We earlier reported...", "Editor's Note:"
 
-Return ONLY a raw JSON object with no markdown, no extra text:
+BROWN ENVELOPE:
+Is this likely paid-for content? Only flag if 
+ALL THREE apply:
+1. Overwhelmingly positive toward a specific 
+   official (in editorial voice, NOT in quotes)
+2. No clear news hook
+3. Single source dependency
+
+Return ONLY a raw JSON object:
 
 {
-  "government_framing": "deferential|accountability|neutral|none",
-  "has_non_government_voice": true/false,
-  "framing_explanation": "one short sentence explaining the classification",
-  "s1_classification": "independent|captured|neutral"
+  "s1": {
+    "government_framing": "deferential|accountability|neutral|none",
+    "has_non_government_voice": true/false,
+    "s1_classification": "independent|captured|neutral",
+    "framing_explanation": "one sentence"
+  },
+  "s2": {
+    "reporting_type": "original|press_release|wire_copy|mixed",
+    "is_churnalism": true/false,
+    "churnalism_evidence": "one sentence or empty string"
+  },
+  "s4": {
+    "deferential_count": integer,
+    "approximate_word_count": integer,
+    "deference_density_per_1000_words": float
+  },
+  "s6": {
+    "is_correction_or_retraction": true/false,
+    "correction_type": "correction|retraction|clarification|follow_up|none"
+  },
+  "brown_envelope": {
+    "overwhelmingly_positive_toward_official": true/false,
+    "has_clear_news_hook": true/false,
+    "single_source_dependent": true/false,
+    "brown_envelope_suspected": true/false,
+    "evidence": "one sentence or null"
+  }
 }
-
-Classification rules for s1_classification:
-- "independent" if government_framing = "accountability" OR has_non_government_voice = true
-- "captured" if government_framing = "deferential" AND has_non_government_voice = false
-- "neutral" for everything else
 
 Article headline + summary:
-{article_text}"""
-
-
-PROMPT_S2 = """You are analyzing a Nigerian news article for the TraceNews Independence Index.
-
-You ONLY have access to the headline and the first ~500 characters of the article (a short summary). Work only with this limited text.
-
-Task: Determine whether this looks like original journalism or churnalism (reproduction of government press release, NAN wire copy, or paid statement).
-
-Strong indicators of churnalism even in short summaries:
-- Phrases like "in a statement", "according to a statement", "the statement read", "issued by", "signed by", "his office said", "government spokesman said"
-- NAN attribution: "NAN reports", "NAN correspondent", "from NAN"
-- Bureaucratic or promotional language with no critical context
-- Text reads like direct transcription of an official announcement
-
-Indicators of original reporting even in short text:
-- Investigative language: "leaked documents show", "our investigation revealed", "citizens allege", "whistleblower claims"
-- Citizen-sourced or social media evidence
-- Critical or questioning tone toward official claims
-
-IMPORTANT DISTINCTIONS:
-
-A news article that QUOTES an official is NOT automatically churnalism. Churnalism requires the entire article to read as a reproduced press release or statement.
-
-Standard signs of legitimate news reporting even without investigative language:
-- A lead sentence reporting what happened (police arrested, court ruled, minister said)
-- A direct quote from an official as evidence in a news report
-- Brief factual summaries of events
-
-Only classify as press_release or wire_copy if the text reads ENTIRELY as an official statement with no journalistic framing — for example if it starts with 'The office of the Governor wishes to inform' or 'In a press statement issued by' and contains nothing but the official's words.
-
-When in doubt between mixed and press_release, default to mixed.
-
-Return ONLY a raw JSON object with no markdown, no extra text:
-
-{
-  "has_statement_language": true/false,
-  "has_nan_attribution": true/false,
-  "has_investigative_language": true/false,
-  "reporting_type": "original|press_release|wire_copy|mixed",
-  "is_churnalism": true/false,
-  "churnalism_evidence": "one short sentence describing what triggered this classification"
-}
-
-"is_churnalism" = true only if reporting_type is "press_release" or "wire_copy".
-"is_churnalism" = false if reporting_type is "original" or "mixed".
-
-Article headline + summary:
-{article_text}"""
-
-
-PROMPT_S4 = """You are analyzing a Nigerian news article for a media intelligence platform.
-
-Your task is to count the use of deferential language applied to government officials, politicians, or government policies in EDITORIAL COPY ONLY.
-
-IMPORTANT: Do NOT count anything inside direct quotation marks. You are only counting language the journalist or editor chose to use themselves — not language attributed to a speaker.
-
-You are looking for:
-
-1. Repeated unnecessary honorifics in editorial text:
-   Standard journalism: "Governor Sanwo-Olu said..." (acceptable once)
-   Deferential: "His Excellency, the Executive Governor, His Excellency Sanwo-Olu..." (excessive, counts as deferential)
-   
-   Deferential honorifics to count (when used repeatedly beyond first formal mention):
-   "His Excellency", "Her Excellency", "His Royal Highness", "The Executive Governor", "The Distinguished Senator", "The Honourable Minister", "The Rt. Honourable Speaker", "The Visionary Governor", "The Performing Governor"
-
-2. Sanitizing adjectives applied to officials or their actions in editorial voice (NOT in quotes):
-   "visionary", "performing", "hardworking", "amiable", "magnanimous", "sagacious", "indefatigable", "diligent", "proactive", "passionate", "tireless", "selfless", "dedicated", "purposeful", "astute", "illustrious", "eminent", "distinguished", "esteemed"
-
-3. Government PR phrases reproduced uncritically as editorial voice:
-   "Renewed Hope Agenda", "moving the nation forward", "building a better Nigeria", "transformational leadership", "landmark achievement", "historic initiative", "game-changing policy", "people-oriented governance"
-
-Do NOT count:
-- Any of the above when inside direct quotation marks
-- Standard formal titles used once at first mention
-- Neutral descriptive language
-
-Count the total words in the article (approximate).
-
-Return ONLY a raw JSON object with no markdown formatting:
-
-{
-  "deferential_terms_found": ["exact terms found in editorial copy"],
-  "deferential_count": integer,
-  "approximate_word_count": integer,
-  "deference_density_per_1000_words": float,
-  "is_high_deference": true/false
-}
-
-"deference_density_per_1000_words" = (deferential_count / word_count) * 1000
-"is_high_deference" = true if deference_density_per_1000_words > 3.0
-
-Article:
 {article_text}"""
 
 
@@ -188,69 +144,6 @@ If both accountability and government_announcement are 0, return 0.5.
 
 Headlines:
 {headlines_list}"""
-
-
-PROMPT_S6 = """You are analyzing a Nigerian news article for a media intelligence platform.
-
-Your task is to determine whether this article is a correction, retraction, clarification, or follow-up that challenges the outlet's own previous reporting.
-
-Look for these indicators:
-- Explicit correction language: "Correction:", "Retraction:", "Clarification:", "Editor's Note:", "We earlier reported..."
-- Follow-up stories that contradict or update a previous report: "Contrary to our earlier report...", "We have since established...", "New information shows..."
-- Acknowledgment of error or inaccuracy in previous coverage
-
-This does NOT include:
-- Updates to breaking news (new developments, not corrections)
-- Opinion pieces or letters to the editor
-- Corrections to quotes attributed to other outlets
-
-Return ONLY a raw JSON object with no markdown formatting:
-
-{
-  "is_correction_or_retraction": true/false,
-  "correction_type": "correction|retraction|clarification|follow_up|none",
-  "evidence": "exact phrase that triggered this classification or null"
-}
-
-Article:
-{article_text}"""
-
-
-PROMPT_BROWN_ENVELOPE = """You are analyzing a Nigerian news article for a media intelligence platform.
-
-Detect whether this article is likely "brown envelope journalism" — paid-for or politically sponsored content published as if it were independent journalism.
-
-Brown envelope journalism in Nigeria has a specific textual fingerprint. Check for ALL THREE of these conditions simultaneously:
-
-Condition 1 — OVERWHELMINGLY POSITIVE SENTIMENT toward a specific politician, government official, or government agency:
-The article contains extensive praise, positive framing, or celebratory language directed at a specific named individual or agency. The overall tone is promotional, not informational.
-
-Condition 2 — NO CLEAR NEWS HOOK:
-There is no recent event (election, policy announcement, crisis, court ruling, inauguration) in the last 48–72 hours that justifies this story being published today. The story is not pegged to anything newsworthy — it just praises the subject.
-
-Condition 3 — SINGLE SOURCE DEPENDENCY:
-The article quotes only the subject of the praise or their close allies or spokespersons. No independent, opposing, or unaffiliated voices are present.
-
-IMPORTANT: Do NOT consider language inside direct quotation marks when evaluating Condition 1. Only evaluate editorial framing — the journalist's own words and choices.
-
-Return ONLY a raw JSON object with no markdown formatting:
-
-{
-  "overwhelmingly_positive_toward_official": true/false,
-  "has_clear_news_hook": true/false,
-  "single_source_dependent": true/false,
-  "brown_envelope_suspected": true/false,
-  "subject_of_praise": "name of politician/official/agency or null",
-  "evidence": "one sentence describing what triggered this flag or null"
-}
-
-"brown_envelope_suspected" = true ONLY if ALL THREE conditions are met:
-overwhelmingly_positive_toward_official = true
-AND has_clear_news_hook = false
-AND single_source_dependent = true
-
-Article:
-{article_text}"""
 
 
 PROMPT_CLUSTER_CLASS = """You are classifying a Nigerian news story for a media intelligence platform.
@@ -400,8 +293,8 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
             # Check if any matched article is flagged as brown envelope
             for matched_story in (stories_res.data or []):
                 text = f"{matched_story.get('title', '')}\n\n{matched_story.get('summary', '')}"
-                rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
-                if rb and rb.get('brown_envelope_suspected'):
+                rb = ask_llm(PROMPT_COMBINED, clean_text(text))
+                if rb and rb.get('brown_envelope', {}).get('brown_envelope_suspected'):
                     return True
             return False
             
@@ -426,29 +319,29 @@ def analyze_article(s):
     }
     
     try:
-        # Signal 1: Source Hierarchy
-        r1 = ask_llm(PROMPT_S1, text)
-        if r1:
-            if r1.get('s1_classification') == 'independent':
+        rc = ask_llm(PROMPT_COMBINED, text)
+        if rc:
+            s1 = rc.get('s1', {})
+            s2 = rc.get('s2', {})
+            s4 = rc.get('s4', {})
+            s6 = rc.get('s6', {})
+            be = rc.get('brown_envelope', {})
+            
+            if s1.get('s1_classification') == 'independent':
                 results['s1_prominent'] = True
-            results['government_framing'] = r1.get('government_framing')
+            results['government_framing'] = s1.get('government_framing')
             
-        # Signal 2: Churnalism
-        r2 = ask_llm(PROMPT_S2, text)
-        if r2 and not r2.get('is_churnalism'): results['s2_original'] = True
+            if not s2.get('is_churnalism', True):
+                results['s2_original'] = True
+                
+            results['s4_density'] = s4.get('deference_density_per_1000_words')
             
-        # Signal 4: Lexical Deference
-        r4 = ask_llm(PROMPT_S4, text)
-        if r4: results['s4_density'] = r4.get('deference_density_per_1000_words', 0.0)
-            
-        # Signal 6: Editorial Independence
-        r6 = ask_llm(PROMPT_S6, text)
-        if r6 and r6.get('is_correction_or_retraction'): results['s6_correction'] = True
-            
-        # Brown Envelope Layer 2: Sentiment Triplet
-        rb = ask_llm(PROMPT_BROWN_ENVELOPE, text)
-        if rb and rb.get('brown_envelope_suspected'): results['be_layer2_flag'] = True
-            
+            if s6.get('is_correction_or_retraction'):
+                results['s6_correction'] = True
+                
+            if be.get('brown_envelope_suspected'):
+                results['be_layer2_flag'] = True
+                
     except Exception as e:
         logger.error(f"Exception processing article {s.get('title')}: {str(e)}", exc_info=True)
         
