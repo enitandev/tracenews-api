@@ -72,6 +72,16 @@ def fetch_outlets() -> list[dict]:
     ).eq("active", True).execute()
     return [o for o in response.data if o.get("rss_feeds") or o.get("website")]
 
+def add_count_param(url):
+    if 'news.google.com' in url:
+        return url
+    if '?' in url:
+        if 'posts_per_page' not in url and 'count' not in url:
+            return url + '&posts_per_page=50'
+    else:
+        return url + '?posts_per_page=50'
+    return url
+
 def parse_feed(outlet: dict) -> list[dict]:
     """Parse all RSS feeds for a given outlet and return story dicts."""
     stories = []
@@ -79,8 +89,9 @@ def parse_feed(outlet: dict) -> list[dict]:
 
     for feed_url in outlet["rss_feeds"]:
         try:
+            feed_url_with_count = add_count_param(feed_url)
             feed = feedparser.parse(
-                feed_url, 
+                feed_url_with_count, 
                 agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
             )
             
