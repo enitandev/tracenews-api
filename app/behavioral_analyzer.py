@@ -486,6 +486,9 @@ def analyze_outlet(outlet, current, total):
     layer2_rate = be_layer2_flags / len(sample) if sample else 0
     brown_envelope_suspected = layer1_rate >= 0.10 or layer2_rate >= 0.10
     
+    if brown_envelope_suspected:
+        final_tii = min(final_tii, 34)
+    
     # 13. Upsert
     payload = {
         "outlet_slug": outlet_slug,
