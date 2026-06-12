@@ -150,9 +150,13 @@ def run_clustering(all_time: bool = False) -> dict:
                 debug_count += 1
 
             if matches:
-                # Top match is the first one
-                best_match = matches[0]
-                if best_match["similarity"] >= SIMILARITY_THRESHOLD:
+                best_match = None
+                for m in matches:
+                    if m["similarity"] >= SIMILARITY_THRESHOLD:
+                        best_match = m
+                        break
+                
+                if best_match:
                     cluster_id = best_match["id"]
                     
                     # We need to fetch the existing cluster to check first_seen_at for tiebreakers
