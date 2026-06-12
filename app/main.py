@@ -219,21 +219,21 @@ def get_cluster_by_slug(slug: str):
             
             behav = behavioral_map.get(out.get("slug"))
             if behav and behav.get("independence_score") is not None:
-                if behav.get("brown_envelope_suspected"):
-                    s["outlet_coverage_tier"] = "captured"
+                score = behav.get("independence_score")
+                if behav.get("brown_envelope_suspected") or score < 35:
+                    s["outlet_coverage_tier"] = "pro_establishment"
+                elif score < 60:
+                    s["outlet_coverage_tier"] = "institutional"
                 else:
-                    score = behav.get("independence_score")
-                    if score >= 70: s["outlet_coverage_tier"] = "independent"
-                    elif score >= 35: s["outlet_coverage_tier"] = "deferential"
-                    else: s["outlet_coverage_tier"] = "captured"
+                    s["outlet_coverage_tier"] = "adversarial"
             else:
                 g_align = out.get("government_alignment")
                 if g_align == "pro_government":
-                    s["outlet_coverage_tier"] = "captured"
+                    s["outlet_coverage_tier"] = "pro_establishment"
                 elif g_align == "opposition":
-                    s["outlet_coverage_tier"] = "independent"
+                    s["outlet_coverage_tier"] = "adversarial"
                 elif g_align == "neutral":
-                    s["outlet_coverage_tier"] = "deferential"
+                    s["outlet_coverage_tier"] = "institutional"
                 else:
                     s["outlet_coverage_tier"] = "unscored"
 
@@ -272,18 +272,18 @@ def get_cluster_deep_dive(id: str):
             behav = behavioral_map.get(slug) if slug else None
             tier = "unscored"
             if behav and behav.get("independence_score") is not None:
-                if behav.get("brown_envelope_suspected"):
-                    tier = "captured"
+                score = behav.get("independence_score")
+                if behav.get("brown_envelope_suspected") or score < 35:
+                    tier = "pro_establishment"
+                elif score < 60:
+                    tier = "institutional"
                 else:
-                    score = behav.get("independence_score")
-                    if score >= 70: tier = "independent"
-                    elif score >= 35: tier = "deferential"
-                    else: tier = "captured"
+                    tier = "adversarial"
             else:
                 g_align = out.get("government_alignment")
-                if g_align == "pro_government": tier = "captured"
-                elif g_align == "opposition": tier = "independent"
-                elif g_align == "neutral": tier = "deferential"
+                if g_align == "pro_government": tier = "pro_establishment"
+                elif g_align == "opposition": tier = "adversarial"
+                elif g_align == "neutral": tier = "institutional"
                 
             s["outlet_coverage_tier"] = tier
             del s["outlets"]
@@ -332,18 +332,18 @@ def get_cluster_framing(id: str, alignment: str):
             behav = behavioral_map.get(slug) if slug else None
             tier = "unscored"
             if behav and behav.get("independence_score") is not None:
-                if behav.get("brown_envelope_suspected"):
-                    tier = "captured"
+                score = behav.get("independence_score")
+                if behav.get("brown_envelope_suspected") or score < 35:
+                    tier = "pro_establishment"
+                elif score < 60:
+                    tier = "institutional"
                 else:
-                    score = behav.get("independence_score")
-                    if score >= 70: tier = "independent"
-                    elif score >= 35: tier = "deferential"
-                    else: tier = "captured"
+                    tier = "adversarial"
             else:
                 g_align = out.get("government_alignment")
-                if g_align == "pro_government": tier = "captured"
-                elif g_align == "opposition": tier = "independent"
-                elif g_align == "neutral": tier = "deferential"
+                if g_align == "pro_government": tier = "pro_establishment"
+                elif g_align == "opposition": tier = "adversarial"
+                elif g_align == "neutral": tier = "institutional"
             
             if tier == target_tier:
                 filtered_stories.append(s)
