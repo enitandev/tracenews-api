@@ -11,38 +11,50 @@ logger = logging.getLogger(__name__)
 scheduler = BackgroundScheduler()
 
 
-def fetch_and_cluster():
+def run_fetch_job():
     try:
-        # 1. Fetch
         fetch_result = run_fetch()
         logger.info(f"Fetch result: {fetch_result}")
-        
-        # 2. Cluster
+    except Exception as e:
+        logger.error(f"Fetch job failed: {e}")
+
+
+def run_process_job():
+    try:
         cluster_result = run_clustering()
         logger.info(f"Cluster result: {cluster_result}")
         
-        # 3. Score
         score_result = run_scoring()
         logger.info(f"Score result: {score_result}")
         
-        # 4. Hydrate Images (run as a separate non-blocking job so it doesn't hold up this thread)
         scheduler.add_job(run_image_hydration, id="hydrate_images_job", replace_existing=True)
-        
     except Exception as e:
-        logger.error(f"Scheduled job failed: {e}")
+        logger.error(f"Process job failed: {e}")
 
 
 def start_scheduler():
     interval = int(os.environ.get("FETCH_INTERVAL_MINUTES", 10))
+    
+    # 1. Fetch Job - High priority, runs strictly on schedule
     scheduler.add_job(
-        fetch_and_cluster,
+        run_fetch_job,
         "interval",
         minutes=interval,
-        id="fetch_and_cluster",
+        id="run_fetch_job",
         replace_existing=True,
     )
+    
+    # 2. Process Job - Can take longer, runs independently
+    scheduler.add_job(
+        run_process_job,
+        "interval",
+        minutes=interval,
+        id="run_process_job",
+        replace_existing=True,
+    )
+    
     scheduler.start()
-    logger.info(f"Scheduler started. Fetching every {interval} minutes.")
+    logger.info(f"Scheduler started. Fetch and Process jobs running independently every {interval} minutes.")
 
 
 def stop_scheduler():
