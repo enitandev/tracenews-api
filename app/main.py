@@ -301,9 +301,9 @@ def get_cluster_framing(id: str, alignment: str):
     """Generate an on-demand AI framing summary for a specific alignment."""
     # Map external requested alignment to internal tiers
     tier_map = {
-        "government": "captured",
-        "balanced": "deferential",
-        "opposition": "independent"
+        "government": "pro_establishment",
+        "balanced": "institutional",
+        "opposition": "adversarial"
     }
     target_tier = tier_map.get(alignment)
     if not target_tier:
