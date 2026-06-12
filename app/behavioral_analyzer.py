@@ -473,7 +473,7 @@ def analyze_outlet(outlet, current, total):
     
     # Apply structural caps based on specific slugs
     final_tii = tii_raw
-    if outlet.get('ownership_type') == 'government':
+    if outlet.get('ownership_type', '').lower() == 'government':
         if outlet_slug in FEDERAL_GOVT_OUTLETS:
             final_tii = min(30.0, tii_raw)
         elif outlet_slug in STATE_GOVT_OUTLETS:
