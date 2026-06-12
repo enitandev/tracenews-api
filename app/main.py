@@ -130,9 +130,7 @@ def get_landing_clusters(limit: int = 40):
         first_seen = datetime.fromisoformat(first_seen_str.replace('Z', '+00:00'))
         age_hours = (now - first_seen).total_seconds() / 3600
         outlet_count = cluster.get('outlet_count', 1)
-        if age_hours <= 6: return outlet_count * 3
-        elif age_hours <= 24: return outlet_count * 2
-        else: return outlet_count * 1
+        return outlet_count / (age_hours + 2)
         
     clusters.sort(key=relevance_score, reverse=True)
     clusters = clusters[:limit]
@@ -177,9 +175,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0):
         first_seen = datetime.fromisoformat(first_seen_str.replace('Z', '+00:00'))
         age_hours = (now - first_seen).total_seconds() / 3600
         outlet_count = cluster.get('outlet_count', 1)
-        if age_hours <= 6: return outlet_count * 3
-        elif age_hours <= 24: return outlet_count * 2
-        else: return outlet_count * 1
+        return outlet_count / (age_hours + 2)
         
     clusters.sort(key=relevance_score, reverse=True)
     paginated = clusters[offset:offset + limit]
