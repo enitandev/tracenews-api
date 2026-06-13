@@ -294,7 +294,7 @@ def get_cluster_by_slug(slug: str):
     cluster = cluster_res.data[0]
         
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier, logo_url)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url)"
     ).eq("cluster_id", cluster["id"]).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
@@ -313,6 +313,9 @@ def get_cluster_by_slug(slug: str):
             s["outlet_alignment"] = out.get("government_alignment")
             s["outlet_independence"] = out.get("independence_score")
             s["outlet_tier"] = out.get("credibility_tier")
+            s["outlet_logo_url"] = out.get("logo_url")
+            if out.get("name"):
+                s["outlet_name"] = out.get("name")
             
             behav = behavioral_map.get(out.get("slug"))
             if behav and behav.get("independence_score") is not None:
@@ -345,7 +348,7 @@ def get_cluster_deep_dive(id: str):
     cluster = cluster_res.data
     
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier, logo_url)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url)"
     ).eq("cluster_id", id).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
@@ -365,6 +368,9 @@ def get_cluster_deep_dive(id: str):
             s["outlet_alignment"] = out.get("government_alignment")
             s["outlet_independence"] = out.get("independence_score")
             s["outlet_tier"] = out.get("credibility_tier")
+            s["outlet_logo_url"] = out.get("logo_url")
+            if out.get("name"):
+                s["outlet_name"] = out.get("name")
             
             behav = behavioral_map.get(slug) if slug else None
             tier = "unscored"
@@ -404,7 +410,10 @@ def get_cluster_framing(id: str, alignment: str):
     cluster_data = cluster_res.data[0] if cluster_res.data else {}
     framing_cache = cluster_data.get("framing_cache") or {}
 
-    return {"bullets": framing_cache.get(target_tier, [])}
+    if target_tier in framing_cache:
+        return {"bullets": framing_cache[target_tier], "cached": True}
+        
+    return {"bullets": [], "cached": False}
 
 
 class FeedbackRequest(BaseModel):

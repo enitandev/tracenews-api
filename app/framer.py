@@ -38,9 +38,21 @@ def generate_tier_summary(stories: list, tier_label: str) -> dict:
         return {"bullets": ["Error generating framing analysis."]}
 
 def generate_comparison_summary(pro_summary: list, inst_summary: list, adv_summary: list) -> dict:
+    def clean_summary(summary, tier_name):
+        if not summary or (len(summary) == 1 and "insufficient" in summary[0].lower()):
+            return f"No {tier_name} outlets covered this story."
+        return chr(10).join(summary)
+
+    pro_text = clean_summary(pro_summary, "Pro-Establishment")
+    inst_text = clean_summary(inst_summary, "Institutional")
+    adv_text = clean_summary(adv_summary, "Adversarial")
+    
+    if "No Pro-Establishment" in pro_text and "No Institutional" in inst_text and "No Adversarial" in adv_text:
+        return {"bullets": ["Insufficient data across all tiers to generate a comparison."]}
+
     system_message = f"You are a Nigerian media analyst specializing in editorial independence. You will be given AI-generated summaries of how three editorial tiers covered the same news story: Pro-Establishment outlets (tend toward official narratives), Institutional outlets (mainstream, balanced), and Adversarial outlets (independent, scrutiny-focused).\n\nYour job is to write a GENUINE COMPARISON of how these tiers covered the story differently. Specifically:\n- What facts or angles appear in Adversarial coverage that are ABSENT from Pro-Establishment coverage?\n- What facts or angles appear in Pro-Establishment coverage that Adversarial outlets ignored or downplayed?\n- What language or framing choices differ meaningfully between tiers?\n- Where do all tiers agree on the facts?\n\nIf a tier has insufficient coverage (flagged as such in its summary), explicitly note: \"No [Tier] outlets covered this story\" or \"Only N [Tier] outlet(s) covered this story - comparison limited.\"\n\nBe specific. Name actual facts and angles, not general observations about \"framing tendencies.\" Write 3-5 bullet points.\n\nOutput your response as a JSON object with a single key 'bullets' containing a list of strings."
 
-    user_message = f"Here are the tier summaries for the same story:\n\nPRO-ESTABLISHMENT OUTLETS:\n{chr(10).join(pro_summary) if pro_summary else 'No Pro-Establishment outlets covered this story.'}\n\nINSTITUTIONAL OUTLETS:\n{chr(10).join(inst_summary) if inst_summary else 'No Institutional outlets covered this story.'}\n\nADVERSARIAL OUTLETS:\n{chr(10).join(adv_summary) if adv_summary else 'No Adversarial outlets covered this story.'}\n\nWrite a specific comparison of how these tiers covered the story differently."
+    user_message = f"Here are the tier summaries for the same story:\n\nPRO-ESTABLISHMENT OUTLETS:\n{pro_text}\n\nINSTITUTIONAL OUTLETS:\n{inst_text}\n\nADVERSARIAL OUTLETS:\n{adv_text}\n\nWrite a specific comparison of how these tiers covered the story differently."
 
     try:
         response = openai_client.chat.completions.create(
