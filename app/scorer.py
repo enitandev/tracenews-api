@@ -149,7 +149,7 @@ def run_scoring(all_time: bool = False):
                 covered_regions = [r for r in major_regions if regions.get(r, 0) > 0]
                 missing_regions = [r for r in major_regions if regions.get(r, 0) == 0]
 
-                if missing_regions:
+                if covered_regions and missing_regions:
                     monitoring_flags.append({
                         "type": "COVERAGE_GAP",
                         "severity": "high",
