@@ -7,8 +7,6 @@ from app.scheduler import start_scheduler, stop_scheduler
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 from app.db import supabase
-from app.framer import generate_framing_summary
-
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
