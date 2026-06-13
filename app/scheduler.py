@@ -5,6 +5,7 @@ from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 from app.scorer import run_scoring
 from app.image_hydrator import run_image_hydration
+from app.framer import run_framing_job
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +54,17 @@ def start_scheduler():
         replace_existing=True,
     )
     
+    # 3. Framing Job - Runs every 30 minutes independently
+    scheduler.add_job(
+        run_framing_job,
+        "interval",
+        minutes=30,
+        id="run_framing_job",
+        replace_existing=True,
+    )
+    
     scheduler.start()
-    logger.info(f"Scheduler started. Fetch and Process jobs running independently every {interval} minutes.")
+    logger.info(f"Scheduler started. Fetch and Process jobs running every {interval} minutes. Framing job running every 30 minutes.")
 
 
 def stop_scheduler():

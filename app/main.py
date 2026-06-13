@@ -395,72 +395,16 @@ def get_cluster_deep_dive(id: str):
 
 @app.get("/clusters/{id}/framing")
 def get_cluster_framing(id: str, alignment: str):
-    """Generate an on-demand AI framing summary for a specific alignment."""
+    """Fetch cached AI framing summary for a specific alignment."""
     target_tier = alignment
-    if target_tier not in ["pro_establishment", "institutional", "adversarial", "all"]:
+    if target_tier not in ["pro_establishment", "institutional", "adversarial", "all", "comparison"]:
         return {"bullets": []}
 
     cluster_res = supabase.table("clusters").select("framing_cache").eq("id", id).execute()
     cluster_data = cluster_res.data[0] if cluster_res.data else {}
     framing_cache = cluster_data.get("framing_cache") or {}
 
-    if target_tier in framing_cache:
-        return {"bullets": framing_cache[target_tier]}
-
-    stories_res = supabase.table("stories").select(
-        "title, summary, outlets(slug, government_alignment, independence_score, credibility_tier, logo_url)"
-    ).eq("cluster_id", id).execute()
-    
-    stories = stories_res.data or []
-    if not stories:
-        return {"bullets": []}
-
-    filtered_stories = []
-    
-    if target_tier == "all":
-        filtered_stories = stories
-    else:
-        # Fetch behavioral scores
-        slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
-        behavioral_map = {}
-        if slugs:
-            behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
-            behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
-
-        for s in stories:
-            if s.get("outlets"):
-                out = s["outlets"]
-                slug = out.get("slug")
-                behav = behavioral_map.get(slug) if slug else None
-                tier = "unscored"
-                if behav and behav.get("independence_score") is not None:
-                    score = behav.get("independence_score")
-                    if behav.get("brown_envelope_suspected") or score < 35:
-                        tier = "pro_establishment"
-                    elif score < 60:
-                        tier = "institutional"
-                    else:
-                        tier = "adversarial"
-                else:
-                    g_align = out.get("government_alignment")
-                    if g_align == "pro_government": tier = "pro_establishment"
-                    elif g_align == "opposition": tier = "adversarial"
-                    elif g_align == "neutral": tier = "institutional"
-                
-                if tier == target_tier:
-                    filtered_stories.append(s)
-
-    if not filtered_stories:
-        return {"bullets": []}
-
-    summary_json = generate_framing_summary(filtered_stories, alignment)
-    
-    # Store result in framing_cache
-    new_bullets = summary_json.get("bullets", [])
-    framing_cache[target_tier] = new_bullets
-    supabase.table("clusters").update({"framing_cache": framing_cache}).eq("id", id).execute()
-    
-    return summary_json
+    return {"bullets": framing_cache.get(target_tier, [])}
 
 
 class FeedbackRequest(BaseModel):
