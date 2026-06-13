@@ -196,6 +196,7 @@ def enrich_clusters_with_live_tiers(clusters):
         if not c.get("coverage_stats"):
             c["coverage_stats"] = {}
         c["coverage_stats"]["coverage_tier_distribution"] = live_dist
+        c["coverage_stats"]["total_coverage"] = sum(live_dist.values())
         
     return clusters
 
