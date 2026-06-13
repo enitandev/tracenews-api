@@ -21,10 +21,15 @@ def generate_framing_summary(stories: list, alignment: str) -> dict:
         summary = s.get("summary", s.get("description", ""))
         articles_text += f"- Title: {title}\n  Summary: {summary}\n\n"
 
+    if alignment == 'all':
+        alignment_str = "across all"
+    else:
+        alignment_str = f"a {alignment}-aligned"
+
     if len(stories) == 1:
         prompt = f"""You are a Nigerian media intelligence analyst.
 
-Based on this single article from a {alignment}-aligned Nigerian outlet, analyze how they are framing this story:
+Based on this single article from {alignment_str} Nigerian outlet, analyze how they are framing this story:
 - What facts do they emphasize?
 - Whose voices do they quote?
 - What context do they include or leave out?
@@ -36,9 +41,14 @@ Article:
 {articles_text}
 """
     else:
+        if alignment == 'all':
+            group_str = "across all Nigerian news outlets"
+        else:
+            group_str = f"{alignment}-aligned Nigerian news outlets"
+
         prompt = f"""You are a Nigerian media intelligence analyst.
 
-The following headlines and summaries are from {alignment}-aligned Nigerian news outlets covering the same story.
+The following headlines and summaries are from {group_str} covering the same story.
 
 Analyze how this group is framing the story:
 - What facts do they emphasize?

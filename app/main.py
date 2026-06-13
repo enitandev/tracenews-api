@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from app.scheduler import start_scheduler, stop_scheduler
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
@@ -396,7 +397,7 @@ def get_cluster_deep_dive(id: str):
 def get_cluster_framing(id: str, alignment: str):
     """Generate an on-demand AI framing summary for a specific alignment."""
     target_tier = alignment
-    if target_tier not in ["pro_establishment", "institutional", "adversarial"]:
+    if target_tier not in ["pro_establishment", "institutional", "adversarial", "all"]:
         return {"bullets": []}
 
     cluster_res = supabase.table("clusters").select("framing_cache").eq("id", id).execute()
@@ -414,36 +415,40 @@ def get_cluster_framing(id: str, alignment: str):
     if not stories:
         return {"bullets": []}
 
-    # Fetch behavioral scores
-    slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
-    behavioral_map = {}
-    if slugs:
-        behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
-        behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
-
     filtered_stories = []
-    for s in stories:
-        if s.get("outlets"):
-            out = s["outlets"]
-            slug = out.get("slug")
-            behav = behavioral_map.get(slug) if slug else None
-            tier = "unscored"
-            if behav and behav.get("independence_score") is not None:
-                score = behav.get("independence_score")
-                if behav.get("brown_envelope_suspected") or score < 35:
-                    tier = "pro_establishment"
-                elif score < 60:
-                    tier = "institutional"
+    
+    if target_tier == "all":
+        filtered_stories = stories
+    else:
+        # Fetch behavioral scores
+        slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
+        behavioral_map = {}
+        if slugs:
+            behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
+            behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+
+        for s in stories:
+            if s.get("outlets"):
+                out = s["outlets"]
+                slug = out.get("slug")
+                behav = behavioral_map.get(slug) if slug else None
+                tier = "unscored"
+                if behav and behav.get("independence_score") is not None:
+                    score = behav.get("independence_score")
+                    if behav.get("brown_envelope_suspected") or score < 35:
+                        tier = "pro_establishment"
+                    elif score < 60:
+                        tier = "institutional"
+                    else:
+                        tier = "adversarial"
                 else:
-                    tier = "adversarial"
-            else:
-                g_align = out.get("government_alignment")
-                if g_align == "pro_government": tier = "pro_establishment"
-                elif g_align == "opposition": tier = "adversarial"
-                elif g_align == "neutral": tier = "institutional"
-            
-            if tier == target_tier:
-                filtered_stories.append(s)
+                    g_align = out.get("government_alignment")
+                    if g_align == "pro_government": tier = "pro_establishment"
+                    elif g_align == "opposition": tier = "adversarial"
+                    elif g_align == "neutral": tier = "institutional"
+                
+                if tier == target_tier:
+                    filtered_stories.append(s)
 
     if not filtered_stories:
         return {"bullets": []}
@@ -456,6 +461,22 @@ def get_cluster_framing(id: str, alignment: str):
     supabase.table("clusters").update({"framing_cache": framing_cache}).eq("id", id).execute()
     
     return summary_json
+
+
+class FeedbackRequest(BaseModel):
+    cluster_id: str
+    tier: str
+    comment: str
+
+@app.post("/framing/feedback")
+def submit_framing_feedback(req: FeedbackRequest):
+    """Submit user feedback for AI framing."""
+    supabase.table("framing_feedback").insert({
+        "cluster_id": req.cluster_id,
+        "tier": req.tier,
+        "comment": req.comment
+    }).execute()
+    return {"status": "success"}
 
 
 @app.get("/search")
