@@ -395,15 +395,16 @@ def get_cluster_deep_dive(id: str):
 @app.get("/clusters/{id}/framing")
 def get_cluster_framing(id: str, alignment: str):
     """Generate an on-demand AI framing summary for a specific alignment."""
-    # Map external requested alignment to internal tiers
-    tier_map = {
-        "government": "pro_establishment",
-        "balanced": "institutional",
-        "opposition": "adversarial"
-    }
-    target_tier = tier_map.get(alignment)
-    if not target_tier:
+    target_tier = alignment
+    if target_tier not in ["pro_establishment", "institutional", "adversarial"]:
         return {"bullets": []}
+
+    cluster_res = supabase.table("clusters").select("framing_cache").eq("id", id).execute()
+    cluster_data = cluster_res.data[0] if cluster_res.data else {}
+    framing_cache = cluster_data.get("framing_cache") or {}
+
+    if target_tier in framing_cache:
+        return {"bullets": framing_cache[target_tier]}
 
     stories_res = supabase.table("stories").select(
         "title, summary, outlets(slug, government_alignment, independence_score, credibility_tier, logo_url)"
@@ -448,6 +449,12 @@ def get_cluster_framing(id: str, alignment: str):
         return {"bullets": []}
 
     summary_json = generate_framing_summary(filtered_stories, alignment)
+    
+    # Store result in framing_cache
+    new_bullets = summary_json.get("bullets", [])
+    framing_cache[target_tier] = new_bullets
+    supabase.table("clusters").update({"framing_cache": framing_cache}).eq("id", id).execute()
+    
     return summary_json
 
 

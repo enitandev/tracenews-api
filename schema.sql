@@ -187,3 +187,8 @@ AS $$
   LIMIT match_count;
 $$;
 
+-- Add category classification column
+ALTER TABLE clusters ADD COLUMN IF NOT EXISTS category text;
+
+-- Add AI confidence column for bias scoring
+ALTER TABLE cluster_scores ADD COLUMN IF NOT EXISTS bias_confidence float;
