@@ -244,7 +244,7 @@ def get_landing_clusters(limit: int = 40):
 def get_feed_clusters(limit: int = 30, offset: int = 0):
     """Get full clusters with scores for the main feed."""
     result = supabase.table("clusters").select(
-        "*, cluster_scores(*)"
+        "*, cluster_scores(*), stories(image_url)"
     ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(200).execute()
     
     clusters = result.data or []
@@ -262,7 +262,19 @@ def get_feed_clusters(limit: int = 30, offset: int = 0):
     clusters.sort(key=relevance_score, reverse=True)
     paginated = clusters[offset:offset + limit]
     
-    return {"clusters": enrich_clusters_with_live_tiers(paginated), "count": len(clusters)}
+    formatted = []
+    for c in paginated:
+        image_url = None
+        for s in (c.get("stories") or []):
+            if s.get("image_url"):
+                image_url = s["image_url"]
+                break
+        
+        c_dict = dict(c)
+        c_dict["image_url"] = image_url
+        formatted.append(c_dict)
+    
+    return {"clusters": enrich_clusters_with_live_tiers(formatted), "count": len(clusters)}
 
 @app.get("/clusters/by-slug/{slug}")
 def get_cluster_by_slug(slug: str):
