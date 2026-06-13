@@ -112,6 +112,88 @@ def get_cluster_stories(cluster_id: str):
         "outlet_count": len(stories.data),
     }
 
+import time
+
+_OUTLETS_CACHE = {}
+_BEHAVIORAL_CACHE = {}
+_LAST_CACHE_UPDATE = 0
+CACHE_TTL = 3600  # 1 hour
+
+def get_outlets_cache():
+    global _OUTLETS_CACHE, _BEHAVIORAL_CACHE, _LAST_CACHE_UPDATE
+    now = time.time()
+    if now - _LAST_CACHE_UPDATE > CACHE_TTL or not _OUTLETS_CACHE:
+        out_res = supabase.table("outlets").select("id, slug, government_alignment").execute()
+        _OUTLETS_CACHE = {o["id"]: o for o in (out_res.data or [])}
+        
+        behav_res = supabase.table("outlet_behavioral_scores").select("*").execute()
+        _BEHAVIORAL_CACHE = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+        
+        _LAST_CACHE_UPDATE = now
+    return _OUTLETS_CACHE, _BEHAVIORAL_CACHE
+
+def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, behavioral_map):
+    tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0, "unscored": 0}
+    
+    for s in stories:
+        oid = s.get("outlet_id")
+        if not oid or oid not in outlets_map:
+            continue
+            
+        out = outlets_map[oid]
+        slug = out.get("slug")
+        behav = behavioral_map.get(slug) if slug else None
+        
+        tier = "unscored"
+        if behav and behav.get("independence_score") is not None:
+            score = behav.get("independence_score")
+            if behav.get("brown_envelope_suspected") or score < 35:
+                tier = "pro_establishment"
+            elif score < 60:
+                tier = "institutional"
+            else:
+                tier = "adversarial"
+        else:
+            g_align = out.get("government_alignment")
+            if g_align == "pro_government":
+                tier = "pro_establishment"
+            elif g_align == "opposition":
+                tier = "adversarial"
+            elif g_align == "neutral":
+                tier = "institutional"
+                
+        if tier != "unscored":
+            tier_dist[tier] += 1
+            
+    return tier_dist
+
+def enrich_clusters_with_live_tiers(clusters):
+    if not clusters: return clusters
+    
+    outlets_map, behavioral_map = get_outlets_cache()
+    cluster_ids = [c["id"] for c in clusters]
+    
+    stories_res = supabase.table("stories").select("id, cluster_id, outlet_id").in_("cluster_id", cluster_ids).execute()
+    stories = stories_res.data or []
+    
+    stories_by_cluster = {}
+    for s in stories:
+        cid = s.get("cluster_id")
+        if cid not in stories_by_cluster:
+            stories_by_cluster[cid] = []
+        stories_by_cluster[cid].append(s)
+        
+    for c in clusters:
+        cid = c["id"]
+        c_stories = stories_by_cluster.get(cid, [])
+        live_dist = compute_live_coverage_tier_distribution(cid, c_stories, outlets_map, behavioral_map)
+        
+        if not c.get("coverage_stats"):
+            c["coverage_stats"] = {}
+        c["coverage_stats"]["coverage_tier_distribution"] = live_dist
+        
+    return clusters
+
 
 @app.get("/clusters/landing")
 def get_landing_clusters(limit: int = 40):
@@ -155,7 +237,7 @@ def get_landing_clusters(limit: int = 40):
             "monitoring_flags": c.get("monitoring_flags") or [],
             "image_url": image_url
         })
-    return {"clusters": formatted, "count": len(formatted)}
+    return {"clusters": enrich_clusters_with_live_tiers(formatted), "count": len(formatted)}
 
 
 @app.get("/clusters/feed")
@@ -180,7 +262,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0):
     clusters.sort(key=relevance_score, reverse=True)
     paginated = clusters[offset:offset + limit]
     
-    return {"clusters": paginated, "count": len(clusters)}
+    return {"clusters": enrich_clusters_with_live_tiers(paginated), "count": len(clusters)}
 
 @app.get("/clusters/by-slug/{slug}")
 def get_cluster_by_slug(slug: str):
