@@ -135,9 +135,14 @@ def get_outlets_cache():
 def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, behavioral_map):
     tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0, "unscored": 0}
     
+    unique_outlet_ids = set()
     for s in stories:
         oid = s.get("outlet_id")
-        if not oid or oid not in outlets_map:
+        if oid:
+            unique_outlet_ids.add(oid)
+            
+    for oid in unique_outlet_ids:
+        if oid not in outlets_map:
             continue
             
         out = outlets_map[oid]
