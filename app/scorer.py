@@ -102,21 +102,21 @@ def run_scoring(all_time: bool = False):
                 tier = "unscored"
 
                 if behav and behav.get("independence_score") is not None:
-                    if behav.get("brown_envelope_suspected"):
-                        tier = "captured"
+                    score = behav.get("independence_score")
+                    if behav.get("brown_envelope_suspected") or score < 35:
+                        tier = "pro_establishment"
+                    elif score < 60:
+                        tier = "institutional"
                     else:
-                        score = behav.get("independence_score")
-                        if score >= 70: tier = "independent"
-                        elif score >= 35: tier = "deferential"
-                        else: tier = "captured"
+                        tier = "adversarial"
                 else:
                     g_align = outlet.get("government_alignment")
                     if g_align == "pro_government":
-                        tier = "captured"
+                        tier = "pro_establishment"
                     elif g_align == "opposition":
-                        tier = "independent"
+                        tier = "adversarial"
                     elif g_align == "neutral":
-                        tier = "deferential"
+                        tier = "institutional"
 
                 if tier != "unscored":
                     coverage_tier[tier] += 1
@@ -149,7 +149,7 @@ def run_scoring(all_time: bool = False):
                 covered_regions = [r for r in major_regions if regions.get(r, 0) > 0]
                 missing_regions = [r for r in major_regions if regions.get(r, 0) == 0]
 
-                if covered_regions and missing_regions:
+                if missing_regions:
                     monitoring_flags.append({
                         "type": "COVERAGE_GAP",
                         "severity": "high",
@@ -171,7 +171,7 @@ def run_scoring(all_time: bool = False):
             # We do a rapid text similarity check across summaries
             has_identical_pr = False
             if total_stories >= 3:
-                summaries = [s.get("summary", "").strip() for s in stories if len(s.get("summary", "")) > 50]
+                summaries = [(s.get("summary") or "").strip() for s in stories if len(s.get("summary") or "") > 50]
                 if len(summaries) >= 2:
                     # Compare first 100 chars of summaries
                     prefixes = [s[:100].lower() for s in summaries]
