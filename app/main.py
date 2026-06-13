@@ -293,7 +293,7 @@ def get_cluster_by_slug(slug: str):
     cluster = cluster_res.data[0]
         
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier, logo_url)"
     ).eq("cluster_id", cluster["id"]).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
@@ -344,7 +344,7 @@ def get_cluster_deep_dive(id: str):
     cluster = cluster_res.data
     
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, government_alignment, independence_score, credibility_tier, logo_url)"
     ).eq("cluster_id", id).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
@@ -406,7 +406,7 @@ def get_cluster_framing(id: str, alignment: str):
         return {"bullets": []}
 
     stories_res = supabase.table("stories").select(
-        "title, summary, outlets(slug, government_alignment, independence_score, credibility_tier)"
+        "title, summary, outlets(slug, government_alignment, independence_score, credibility_tier, logo_url)"
     ).eq("cluster_id", id).execute()
     
     stories = stories_res.data or []
