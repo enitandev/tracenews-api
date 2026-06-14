@@ -420,8 +420,32 @@ def get_cluster_framing(id: str, alignment: str):
     cluster_data = cluster_res.data[0] if cluster_res.data else {}
     framing_cache = cluster_data.get("framing_cache") or {}
 
+    from app.framer import generate_single_cluster_framing
+    
+    needs_regen = False
+    if target_tier not in framing_cache:
+        needs_regen = True
+    else:
+        bullets = framing_cache[target_tier]
+        if not bullets or len(bullets) == 0:
+            needs_regen = True
+        elif any("insufficient" in str(b).lower() for b in bullets):
+            needs_regen = True
+            
+    if needs_regen:
+        try:
+            new_framing = generate_single_cluster_framing(id)
+            if new_framing:
+                framing_cache = new_framing
+        except Exception as e:
+            import traceback
+            logger.error(f"[framing] REGEN FAILED for {id}: {type(e).__name__}: {e}")
+            logger.error(traceback.format_exc())
+
     if target_tier in framing_cache:
-        return {"bullets": framing_cache[target_tier], "cached": True}
+        bullets = framing_cache[target_tier]
+        if bullets and len(bullets) > 0 and not any("insufficient" in str(b).lower() for b in bullets):
+            return {"bullets": bullets, "cached": True}
         
     return {"bullets": [], "cached": False}
 
