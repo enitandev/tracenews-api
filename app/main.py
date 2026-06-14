@@ -302,12 +302,20 @@ def get_cluster_by_slug(slug: str):
     
     stories = stories_res.data or []
     
-    # Fetch behavioral scores
-    slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
-    behavioral_map = {}
-    if slugs:
-        behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
-        behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+    outlets_map, behavioral_map = get_outlets_cache()
+    
+    cluster["coverage_stats"] = cluster.get("coverage_stats") or {}
+    live_dist = compute_live_coverage_tier_distribution(
+        cluster["id"], 
+        stories, 
+        outlets_map, 
+        behavioral_map
+    )
+    blog_count = live_dist.pop("blog", 0)
+    
+    cluster["coverage_stats"]["coverage_tier_distribution"] = live_dist
+    cluster["coverage_stats"]["total_coverage"] = sum(live_dist.values())
+    cluster["coverage_stats"]["blog_count"] = blog_count
     
     # Flatten the outlet metadata directly onto the story object
     for s in stories:
@@ -358,12 +366,20 @@ def get_cluster_deep_dive(id: str):
     
     stories = stories_res.data or []
     
-    # Fetch behavioral scores
-    slugs = list(set(s["outlets"]["slug"] for s in stories if s.get("outlets") and s["outlets"].get("slug")))
-    behavioral_map = {}
-    if slugs:
-        behav_res = supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", slugs).execute()
-        behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
+    outlets_map, behavioral_map = get_outlets_cache()
+    
+    cluster["coverage_stats"] = cluster.get("coverage_stats") or {}
+    live_dist = compute_live_coverage_tier_distribution(
+        cluster["id"], 
+        stories, 
+        outlets_map, 
+        behavioral_map
+    )
+    blog_count = live_dist.pop("blog", 0)
+    
+    cluster["coverage_stats"]["coverage_tier_distribution"] = live_dist
+    cluster["coverage_stats"]["total_coverage"] = sum(live_dist.values())
+    cluster["coverage_stats"]["blog_count"] = blog_count
     
     # Flatten the outlet metadata directly onto the story object
     for s in stories:
