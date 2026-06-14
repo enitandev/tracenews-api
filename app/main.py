@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import traceback
 from app.scheduler import start_scheduler, stop_scheduler
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
@@ -54,10 +55,9 @@ def trigger_fetch():
         result = run_fetch()
         return {"status": "ok", **result}
     except Exception as e:
-        import traceback
-        trace = traceback.format_exc()
-        logger.error(f"Fetch failed with unhandled exception:\n{trace}")
-        return {"status": "error", "message": str(e), "traceback": trace}
+        logger.error(f"[trigger_fetch] manual fetch failed: {type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        return {"status": "error", "message": str(e), "traceback": traceback.format_exc()}
 
 
 @app.post("/admin/cluster")
@@ -438,8 +438,7 @@ def get_cluster_framing(id: str, alignment: str):
             if new_framing:
                 framing_cache = new_framing
         except Exception as e:
-            import traceback
-            logger.error(f"[framing] REGEN FAILED for {id}: {type(e).__name__}: {e}")
+            logger.error(f"[get_cluster_framing] regen failed for {id}: {type(e).__name__}: {e}")
             logger.error(traceback.format_exc())
 
     if target_tier in framing_cache:

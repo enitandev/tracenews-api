@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import traceback
 from openai import OpenAI
 from app.db import supabase
 
@@ -34,8 +35,9 @@ def generate_tier_summary(stories: list, tier_label: str) -> dict:
         content = response.choices[0].message.content
         return json.loads(content)
     except Exception as e:
-        logger.error(f"Error generating tier summary: {e}")
-        return {"bullets": ["Error generating framing analysis."]}
+        logger.error(f"[generate_tier_summary] generation failed for {tier_label}: {type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        return {"bullets": [], "error": str(e), "cached": False}
 
 def generate_comparison_summary(pro_summary: list, inst_summary: list, adv_summary: list) -> dict:
     def clean_summary(summary, tier_name):
@@ -67,8 +69,9 @@ def generate_comparison_summary(pro_summary: list, inst_summary: list, adv_summa
         content = response.choices[0].message.content
         return json.loads(content)
     except Exception as e:
-        logger.error(f"Error generating comparison summary: {e}")
-        return {"bullets": ["Error generating framing comparison."]}
+        logger.error(f"[generate_comparison_summary] comparison generation failed: {type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
+        return {"bullets": [], "error": str(e), "cached": False}
 
 def run_framing_job():
     """Scheduled job to preemptively generate AI framings for recent clusters."""
@@ -102,10 +105,16 @@ def run_framing_job():
         behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
 
         for c in to_process:
-            generate_single_cluster_framing(c["id"], c["representative_title"], behavioral_map)
+            try:
+                generate_single_cluster_framing(c["id"], c["representative_title"], behavioral_map)
+            except Exception as e:
+                logger.error(f"[run_framing_job] framing regen failed for cluster {c['id']}: {type(e).__name__}: {e}")
+                logger.error(traceback.format_exc())
+                continue
             
     except Exception as e:
-        logger.error(f"[framing] Job failed: {e}")
+        logger.error(f"[run_framing_job] scheduled job initialization failed: {type(e).__name__}: {e}")
+        logger.error(traceback.format_exc())
 
 def generate_single_cluster_framing(cluster_id: str, title: str = None, behavioral_map: dict = None) -> dict:
     if not behavioral_map:
