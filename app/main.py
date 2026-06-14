@@ -297,7 +297,7 @@ def get_cluster_by_slug(slug: str):
     cluster = cluster_res.data[0]
         
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, brown_envelope_count, headquarters_city)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, brown_envelope_count, headquarters_city, geopolitical_lean)"
     ).eq("cluster_id", cluster["id"]).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
@@ -361,7 +361,7 @@ def get_cluster_deep_dive(id: str):
     cluster = cluster_res.data
     
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, brown_envelope_count, headquarters_city)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, brown_envelope_count, headquarters_city, geopolitical_lean)"
     ).eq("cluster_id", id).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
