@@ -425,6 +425,72 @@ def get_cluster_deep_dive(id: str):
         "stories": stories
     }
 
+@app.get("/story-og/{slug}")
+async def story_og(slug: str):
+    from fastapi.responses import HTMLResponse
+    import re
+    
+    cluster_res = supabase.table("clusters")\
+      .select("id, representative_title")\
+      .eq("slug", slug).execute()
+    
+    if not cluster_res.data:
+      return HTMLResponse(
+        content="<html><head>"\
+        "<meta http-equiv='refresh' "\
+        "content='0;url=https://"\
+        "tracenews.ng'/></head></html>"
+      )
+    
+    cluster = cluster_res.data[0]
+    cluster_id = cluster["id"]
+    title = cluster["representative_title"]
+    canonical = f"https://tracenews.ng/story/{slug}"
+    
+    story_res = supabase.table("stories")\
+      .select("image_url, summary")\
+      .eq("cluster_id", cluster_id)\
+      .not_.is_("image_url", "null")\
+      .limit(1).execute()
+    
+    image_url = "https://tracenews.ng/og-default.png"
+    description = "See every side of every Nigerian news story on TraceNews."
+    
+    if story_res.data:
+      image_url = story_res.data[0].get("image_url") or image_url
+      raw = story_res.data[0].get("summary") or ""
+      clean = re.sub(r'<[^>]+>', '', raw).strip()[:160]
+      if clean:
+        description = clean
+    
+    # Escape quotes in title/description for HTML safety
+    safe_title = title.replace('"', '&quot;')
+    safe_desc = description.replace('"', '&quot;')
+    
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>{safe_title}</title>
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{safe_title}">
+  <meta property="og:description" content="{safe_desc}">
+  <meta property="og:image" content="{image_url}">
+  <meta property="og:url" content="{canonical}">
+  <meta property="og:site_name" content="TraceNews">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{safe_title}">
+  <meta name="twitter:description" content="{safe_desc}">
+  <meta name="twitter:image" content="{image_url}">
+  <meta http-equiv="refresh" content="0;url={canonical}">
+</head>
+<body>
+  <a href="{canonical}">{safe_title}</a>
+</body>
+</html>"""
+    
+    return HTMLResponse(content=html)
+
 @app.get("/clusters/{id}/framing")
 def get_cluster_framing(id: str, alignment: str):
     """Fetch cached AI framing summary for a specific alignment."""
