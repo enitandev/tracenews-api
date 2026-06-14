@@ -101,7 +101,9 @@ def run_scoring(all_time: bool = False):
                 behav = behavioral_map.get(slug) if slug else None
                 tier = "unscored"
 
-                if behav and behav.get("independence_score") is not None:
+                if outlet.get("credibility_tier") == "blog":
+                    tier = "blog"
+                elif behav and behav.get("independence_score") is not None:
                     score = behav.get("independence_score")
                     if behav.get("brown_envelope_suspected") or score < 35:
                         tier = "pro_establishment"
@@ -130,14 +132,18 @@ def run_scoring(all_time: bool = False):
             avg_independence = round(total_independence / valid_independence_count) if valid_independence_count > 0 else 50
 
             # Construct Coverage Stats JSON
+            tier_dist = dict(coverage_tier)
+            blog_count = tier_dist.pop("blog", 0)
             coverage_stats = {
                 "geopolitical_distribution": dict(regions),
                 "ownership_distribution": dict(ownership),
                 "credibility_distribution": dict(credibility),
                 "government_alignment_distribution": dict(gov_alignment),
-                "coverage_tier_distribution": dict(coverage_tier),
+                "coverage_tier_distribution": tier_dist,
+                "total_coverage": sum(tier_dist.values()),
+                "blog_count": blog_count,
                 "average_independence_score": avg_independence,
-                "total_coverage": total_stories
+                "primary_region": max(regions.items(), key=lambda x: x[1])[0] if regions else None
             }
 
             # 4. Monitoring Spirit Rules Engine

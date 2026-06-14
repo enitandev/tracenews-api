@@ -118,7 +118,9 @@ def run_framing_job():
                     slug = out.get("slug")
                     behav = behavioral_map.get(slug) if slug else None
                     tier = "unscored"
-                    if behav and behav.get("independence_score") is not None:
+                    if out.get("credibility_tier") == "blog":
+                        tier = "blog"
+                    elif behav and behav.get("independence_score") is not None:
                         score = behav.get("independence_score")
                         if behav.get("brown_envelope_suspected") or score < 35:
                             tier = "pro_establishment"

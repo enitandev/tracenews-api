@@ -149,7 +149,9 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
         behav = behavioral_map.get(slug) if slug else None
         
         tier = "unscored"
-        if behav and behav.get("independence_score") is not None:
+        if out.get("credibility_tier") == "blog":
+            tier = "blog"
+        elif behav and behav.get("independence_score") is not None:
             score = behav.get("independence_score")
             if behav.get("brown_envelope_suspected") or score < 35:
                 tier = "pro_establishment"
@@ -192,10 +194,13 @@ def enrich_clusters_with_live_tiers(clusters):
         c_stories = stories_by_cluster.get(cid, [])
         live_dist = compute_live_coverage_tier_distribution(cid, c_stories, outlets_map, behavioral_map)
         
+        blog_count = live_dist.pop("blog", 0)
+        
         if not c.get("coverage_stats"):
             c["coverage_stats"] = {}
         c["coverage_stats"]["coverage_tier_distribution"] = live_dist
         c["coverage_stats"]["total_coverage"] = sum(live_dist.values())
+        c["coverage_stats"]["blog_count"] = blog_count
         
     return clusters
 
@@ -316,7 +321,9 @@ def get_cluster_by_slug(slug: str):
                 s["outlet_name"] = out.get("name")
             
             behav = behavioral_map.get(out.get("slug"))
-            if behav and behav.get("independence_score") is not None:
+            if out.get("credibility_tier") == "blog":
+                s["outlet_coverage_tier"] = "blog"
+            elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
                 if behav.get("brown_envelope_suspected") or score < 35:
                     s["outlet_coverage_tier"] = "pro_establishment"
@@ -372,7 +379,9 @@ def get_cluster_deep_dive(id: str):
             
             behav = behavioral_map.get(slug) if slug else None
             tier = "unscored"
-            if behav and behav.get("independence_score") is not None:
+            if out.get("credibility_tier") == "blog":
+                tier = "blog"
+            elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
                 if behav.get("brown_envelope_suspected") or score < 35:
                     tier = "pro_establishment"
