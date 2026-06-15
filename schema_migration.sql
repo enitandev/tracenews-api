@@ -38,3 +38,26 @@ WHERE outlet_slug IN ('dubawa', 'africa-check-nigeria', 'factcheckhub');
 -- Add slug to clusters table for SEO-friendly URLs
 ALTER TABLE clusters ADD COLUMN IF NOT EXISTS slug text;
 ALTER TABLE clusters ADD CONSTRAINT clusters_slug_key UNIQUE (slug);
+
+-- Migration: Add RPC for category top outlets
+CREATE OR REPLACE FUNCTION get_category_top_outlets(
+  p_category TEXT,
+  p_days INT DEFAULT 30
+)
+RETURNS TABLE(
+  outlet_slug TEXT,
+  story_count BIGINT
+) AS $$
+BEGIN
+  RETURN QUERY
+  SELECT s.outlet_slug, COUNT(*) as cnt
+  FROM stories s
+  JOIN clusters c ON c.id = s.cluster_id
+  WHERE c.category = p_category
+  AND c.first_seen_at >= NOW() - MAKE_INTERVAL(days => p_days)
+  AND s.outlet_slug IS NOT NULL
+  GROUP BY s.outlet_slug
+  ORDER BY cnt DESC
+  LIMIT 5;
+END;
+$$ LANGUAGE plpgsql;

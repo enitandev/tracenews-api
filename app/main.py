@@ -547,6 +547,125 @@ def submit_framing_feedback(req: FeedbackRequest):
     return {"status": "success"}
 
 
+@app.get("/categories/{category}/feed")
+def get_category_feed(category: str, limit: int = 30, offset: int = 0):
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    thirty_days_str = (now - timedelta(days=30)).isoformat()
+    
+    # Total count
+    count_res = supabase.table("clusters").select("id", count="exact").eq("category", category).execute()
+    total_cluster_count = count_res.count or 0
+    
+    # PHASE 1 - Lightweight metadata query
+    clusters_res = supabase.table("clusters").select(
+        "id, slug, representative_title, outlet_count, category, coverage_stats, first_seen_at"
+    ).eq("category", category).gte("first_seen_at", thirty_days_str).order("first_seen_at", desc=True).limit(1000).execute()
+    
+    clusters = clusters_res.data or []
+    
+    # Compute bias breakdown
+    bias_breakdown = { "pro_establishment": 0, "institutional": 0, "adversarial": 0, "total": 0 }
+    for c in clusters:
+        stats = c.get("coverage_stats") or {}
+        dist = stats.get("coverage_tier_distribution", {})
+        bias_breakdown["pro_establishment"] += dist.get("pro_establishment", 0)
+        bias_breakdown["institutional"] += dist.get("institutional", 0)
+        bias_breakdown["adversarial"] += dist.get("adversarial", 0)
+        bias_breakdown["total"] += sum(dist.values())
+        
+    # Relevance sort
+    def relevance_score(cluster):
+        first_seen_str = cluster.get('first_seen_at')
+        if not first_seen_str: return 0
+        first_seen = datetime.fromisoformat(first_seen_str.replace('Z', '+00:00'))
+        age_hours = (now - first_seen).total_seconds() / 3600
+        return cluster.get('outlet_count', 1) / (age_hours + 2)
+    clusters.sort(key=relevance_score, reverse=True)
+    
+    # Monitoring spirit candidates
+    monitoring_spirit = []
+    for c in clusters:
+        if c.get("outlet_count", 0) >= 3:
+            stats = c.get("coverage_stats") or {}
+            dist = stats.get("coverage_tier_distribution", {})
+            total = sum(dist.values())
+            if total > 0:
+                for k, v in dist.items():
+                    if v / total >= 0.8:
+                        monitoring_spirit.append(c)
+                        break
+    monitoring_spirit.sort(key=lambda x: x.get("outlet_count", 0), reverse=True)
+    ms_candidates = monitoring_spirit[:2]
+    ms_ids = {c["id"] for c in ms_candidates}
+    
+    # Top stories candidates (fetch a few extra since we'll filter for images)
+    candidates_by_outlet = sorted([c for c in clusters if c["id"] not in ms_ids], key=lambda x: x.get("outlet_count", 0), reverse=True)
+    top_candidates = candidates_by_outlet[:6]
+    top_ids = {c["id"] for c in top_candidates}
+    
+    # Paginated remaining
+    remaining = [c for c in clusters if c["id"] not in ms_ids and c["id"] not in top_ids]
+    paginated_remaining = remaining[offset:offset+limit]
+    paginated_ids = {c["id"] for c in paginated_remaining}
+    
+    # PHASE 2 - Stories fetch for the ~35 target clusters
+    target_ids = list(ms_ids | top_ids | paginated_ids)
+    if target_ids:
+        stories_res = supabase.table("stories").select(
+            "cluster_id, image_url, outlets(slug, name, logo_url, government_alignment, independence_score, credibility_tier)"
+        ).in_("cluster_id", target_ids).execute()
+        stories_data = stories_res.data or []
+        
+        images_by_cluster = {}
+        for s in stories_data:
+            cid = s.get("cluster_id")
+            if cid not in images_by_cluster and s.get("image_url"):
+                images_by_cluster[cid] = s["image_url"]
+                
+        # Attach images
+        for c in ms_candidates + top_candidates + paginated_remaining:
+            c["image_url"] = images_by_cluster.get(c["id"])
+            
+    final_top_stories = [c for c in top_candidates if c.get("image_url")][:3]
+    
+    # Compute covered_most_by via RPC
+    outlets_map, behavioral_map = get_outlets_cache()
+    covered_most_by = []
+    
+    try:
+        rpc_res = supabase.rpc("get_category_top_outlets", {"p_category": category, "p_days": 30}).execute()
+        top_outlets_data = rpc_res.data or []
+        for row in top_outlets_data:
+            slug = row["outlet_slug"]
+            out = outlets_map.get(slug)
+            if not out: continue
+            behav = behavioral_map.get(slug)
+            
+            tier = "unscored"
+            if out.get("credibility_tier") == "blog": tier = "blog"
+            elif behav and behav.get("independence_score") is not None:
+                score = behav.get("independence_score")
+                tier = "pro_establishment" if (behav.get("brown_envelope_suspected") or score < 35) else "institutional" if score < 60 else "adversarial"
+            else:
+                g_align = out.get("government_alignment")
+                tier = "pro_establishment" if g_align == "pro_government" else "adversarial" if g_align == "opposition" else "institutional" if g_align == "neutral" else "unscored"
+                
+            covered_most_by.append({"name": out.get("name"), "logo_url": out.get("logo_url"), "tier": tier})
+    except Exception as e:
+        import logging
+        logging.error(f"Error calling get_category_top_outlets RPC: {e}")
+
+    return {
+        "category": category,
+        "total_cluster_count": total_cluster_count,
+        "top_stories": final_top_stories,
+        "monitoring_spirit": ms_candidates,
+        "stories": paginated_remaining,
+        "covered_most_by": covered_most_by,
+        "bias_breakdown": bias_breakdown
+    }
+
 @app.get("/search")
 def search_clusters(q: str, limit: int = 20):
     """Search clusters by keyword in representative_title."""
