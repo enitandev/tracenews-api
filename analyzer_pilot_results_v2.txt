@@ -1,0 +1,22 @@
+Running Pilot Behavioral Analysis...
+
+--- Analyzing Sahara Reporters (sahara-reporters) ---
+{
+  "critical_distance_notes": "Sahara Reporters demonstrates a strong critical distance from power structures, often seeking out affected citizens and independent sources. The articles frequently include voices from those impacted by events, such as families of victims or experts, rather than solely relying on official statements.",
+  "accountability_notes": "The outlet actively pursues accountability journalism, as seen in articles exposing police misconduct and corruption, such as the withdrawal of murder charges against a businessman due to alleged police torture. This indicates a commitment to investigative reporting and holding power accountable.",
+  "brown_envelope_suspected": false,
+  "brown_envelope_evidence": "There is no evident tone of sycophancy or uncritical replication of official narratives in the articles reviewed. The language used is straightforward and factual, without subjective praise or promotional rhetoric.",
+  "independence_score": 85
+}
+
+--- Analyzing NTA (nta) ---
+null
+
+--- Analyzing Vanguard (vanguard) ---
+{
+  "critical_distance_notes": "The articles primarily report on incidents and statements from official sources without seeking independent verification or alternative perspectives. For instance, the coverage of the train derailment and the gunmen attacks relies heavily on police and government statements, lacking voices from affected citizens or independent experts.",
+  "accountability_notes": "While there are some mentions of legal actions, such as the Labour Party suing INEC, the overall selection of stories tends to avoid deeper investigative journalism or critical examination of power structures. The focus appears to be on reporting events rather than holding power accountable.",
+  "brown_envelope_suspected": true,
+  "brown_envelope_evidence": "Several articles, particularly those featuring government officials or political figures, exhibit a tone that aligns closely with official narratives, such as the Minister's assurances about improvements in the power sector, which lack critical scrutiny or counter-narratives.",
+  "independence_score": 45
+}

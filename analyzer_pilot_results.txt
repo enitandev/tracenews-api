@@ -1,0 +1,22 @@
+Running Pilot Behavioral Analysis...
+
+--- Analyzing Sahara Reporters (sahara-reporters) ---
+{
+  "voice_allocation_notes": "The articles predominantly feature official narratives and statements, particularly from government and police sources. There is a noticeable lack of diverse voices, especially from citizens or opposition figures, which suggests a limited representation of public opinion.",
+  "story_selection_notes": "The outlet covers a range of accountability issues, including police misconduct and government actions. However, there is a tendency to amplify government achievements and responses while potentially downplaying or omitting more critical perspectives on sensitive issues.",
+  "brown_envelope_suspected": true,
+  "brown_envelope_evidence": "Several articles use passive voice and positive language when describing government actions, such as police rescues and government initiatives, which aligns closely with official press statements. The lack of critical analysis in these reports raises concerns about potential influence from government press releases.",
+  "independence_score": 65
+}
+
+--- Analyzing NTA (nta) ---
+null
+
+--- Analyzing Vanguard (vanguard) ---
+{
+  "voice_allocation_notes": "The articles predominantly feature official statements and reports from government sources, with limited representation from citizens or opposition voices. For instance, the coverage of the train derailment and the gunmen attacks primarily reflects the perspectives of law enforcement and government officials, lacking critical viewpoints from affected communities or independent analysts.",
+  "story_selection_notes": "The outlet covers a range of issues, including crime, politics, and economic reports. However, there is a noticeable emphasis on government achievements and positive narratives, such as the trade surplus and ministerial assurances, while sensitive issues like security challenges are reported but often framed in a way that does not critically engage with the underlying problems.",
+  "brown_envelope_suspected": true,
+  "brown_envelope_evidence": "Several articles, particularly those quoting ministers or government officials, use passive voice and positive language that mirrors official press releases. For example, the article on the Minister of Power's assurances about improvements in the electricity sector lacks critical analysis and appears to echo government rhetoric without challenge.",
+  "independence_score": 45
+}

@@ -1,0 +1,400 @@
+2026-06-10 07:39:16,143 - batch_analyzer - INFO - Starting batch behavioral analysis for top 25 outlets
+2026-06-10 07:39:16,143 - batch_analyzer - INFO - 
+==================================================
+Processing: quartz-africa
+==================================================
+2026-06-10 07:39:17,852 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.quartz-africa "HTTP/2 200 OK"
+2026-06-10 07:39:19,183 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.55&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:39:19,184 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 55
+2026-06-10 07:39:19,652 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.55 "HTTP/2 200 OK"
+2026-06-10 07:39:19,652 - app.behavioral_analyzer - INFO - Analyzing Quartz Africa...
+2026-06-10 07:39:20,564 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.55&published_at=gte.2026-05-11T06%3A39%3A19.653002%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:39:30,134 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:39:30,177 - app.behavioral_analyzer - INFO - Analysis complete for Quartz Africa. Score: 60
+2026-06-10 07:39:30,784 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.55 "HTTP/2 200 OK"
+2026-06-10 07:39:31,302 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:39:31,313 - batch_analyzer - INFO - Successfully processed quartz-africa. Score: 60
+2026-06-10 07:39:34,314 - batch_analyzer - INFO - 
+==================================================
+Processing: ait
+==================================================
+2026-06-10 07:39:34,834 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.ait "HTTP/2 200 OK"
+2026-06-10 07:39:35,353 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.23&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:39:35,354 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 23
+2026-06-10 07:39:35,883 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.23 "HTTP/2 200 OK"
+2026-06-10 07:39:35,884 - app.behavioral_analyzer - INFO - Analyzing AIT...
+2026-06-10 07:39:36,834 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.23&published_at=gte.2026-05-11T06%3A39%3A35.884419%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:39:44,274 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:39:44,276 - app.behavioral_analyzer - INFO - Analysis complete for AIT. Score: 45
+2026-06-10 07:39:44,941 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=brown_envelope_count&id=eq.23 "HTTP/2 200 OK"
+2026-06-10 07:39:45,422 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.23 "HTTP/2 200 OK"
+2026-06-10 07:39:45,982 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:39:45,992 - batch_analyzer - INFO - Successfully processed ait. Score: 45
+2026-06-10 07:39:48,993 - batch_analyzer - INFO - 
+==================================================
+Processing: the-tide
+==================================================
+2026-06-10 07:39:49,508 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.the-tide "HTTP/2 200 OK"
+2026-06-10 07:39:50,035 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.81&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:39:50,036 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 81
+2026-06-10 07:39:50,564 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.81 "HTTP/2 200 OK"
+2026-06-10 07:39:50,566 - app.behavioral_analyzer - INFO - Analyzing The Tide...
+2026-06-10 07:39:51,989 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.81&published_at=gte.2026-05-11T06%3A39%3A50.566393%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:40:05,241 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:40:05,244 - app.behavioral_analyzer - INFO - Analysis complete for The Tide. Score: 35
+2026-06-10 07:40:06,114 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=brown_envelope_count&id=eq.81 "HTTP/2 200 OK"
+2026-06-10 07:40:06,585 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.81 "HTTP/2 200 OK"
+2026-06-10 07:40:07,152 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:40:07,153 - batch_analyzer - INFO - Successfully processed the-tide. Score: 35
+2026-06-10 07:40:10,156 - batch_analyzer - INFO - 
+==================================================
+Processing: reuters-africa
+==================================================
+2026-06-10 07:40:10,613 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.reuters-africa "HTTP/2 200 OK"
+2026-06-10 07:40:11,104 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.57&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:40:11,106 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 57
+2026-06-10 07:40:11,567 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.57 "HTTP/2 200 OK"
+2026-06-10 07:40:11,568 - app.behavioral_analyzer - INFO - Analyzing Reuters Africa...
+2026-06-10 07:40:12,739 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.57&published_at=gte.2026-05-11T06%3A40%3A11.568369%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:40:28,422 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:40:28,442 - app.behavioral_analyzer - INFO - Analysis complete for Reuters Africa. Score: 70
+2026-06-10 07:40:29,052 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.57 "HTTP/2 200 OK"
+2026-06-10 07:40:29,552 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:40:29,553 - batch_analyzer - INFO - Successfully processed reuters-africa. Score: 70
+2026-06-10 07:40:32,558 - batch_analyzer - INFO - 
+==================================================
+Processing: daily-independent
+==================================================
+2026-06-10 07:40:33,163 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.daily-independent "HTTP/2 200 OK"
+2026-06-10 07:40:33,774 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.21&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:40:33,776 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 21
+2026-06-10 07:40:34,283 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.21 "HTTP/2 200 OK"
+2026-06-10 07:40:34,284 - app.behavioral_analyzer - INFO - Analyzing Daily Independent...
+2026-06-10 07:40:34,784 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.21&published_at=gte.2026-05-11T06%3A40%3A34.284260%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:40:43,285 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:40:43,287 - app.behavioral_analyzer - INFO - Analysis complete for Daily Independent. Score: 40
+2026-06-10 07:40:44,733 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.21 "HTTP/2 200 OK"
+2026-06-10 07:40:45,232 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:40:45,233 - batch_analyzer - INFO - Successfully processed daily-independent. Score: 40
+2026-06-10 07:40:48,238 - batch_analyzer - INFO - 
+==================================================
+Processing: goal-nigeria
+==================================================
+2026-06-10 07:40:48,753 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.goal-nigeria "HTTP/2 200 OK"
+2026-06-10 07:40:49,284 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.126&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:40:49,285 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 126
+2026-06-10 07:40:49,803 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.126 "HTTP/2 200 OK"
+2026-06-10 07:40:49,804 - app.behavioral_analyzer - INFO - Analyzing Goal Nigeria...
+2026-06-10 07:40:50,761 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.126&published_at=gte.2026-05-11T06%3A40%3A49.804787%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:41:00,626 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:41:00,628 - app.behavioral_analyzer - INFO - Analysis complete for Goal Nigeria. Score: 60
+2026-06-10 07:41:01,335 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.126 "HTTP/2 200 OK"
+2026-06-10 07:41:01,944 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:41:01,945 - batch_analyzer - INFO - Successfully processed goal-nigeria. Score: 60
+2026-06-10 07:41:04,948 - batch_analyzer - INFO - 
+==================================================
+Processing: punch-metro
+==================================================
+2026-06-10 07:41:05,534 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.punch-metro "HTTP/2 200 OK"
+2026-06-10 07:41:06,064 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.50&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:41:06,082 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 50
+2026-06-10 07:41:06,844 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.50 "HTTP/2 200 OK"
+2026-06-10 07:41:06,844 - app.behavioral_analyzer - INFO - Analyzing The Punch (Metro)...
+2026-06-10 07:41:07,766 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.50&published_at=gte.2026-05-11T06%3A41%3A06.845049%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:41:16,541 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:41:16,544 - app.behavioral_analyzer - INFO - Analysis complete for The Punch (Metro). Score: 40
+2026-06-10 07:41:17,145 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=brown_envelope_count&id=eq.50 "HTTP/2 200 OK"
+2026-06-10 07:41:17,622 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.50 "HTTP/2 200 OK"
+2026-06-10 07:41:18,115 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:41:18,115 - batch_analyzer - INFO - Successfully processed punch-metro. Score: 40
+2026-06-10 07:41:21,118 - batch_analyzer - INFO - 
+==================================================
+Processing: dataphyte
+==================================================
+2026-06-10 07:41:21,613 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.dataphyte "HTTP/2 200 OK"
+2026-06-10 07:41:22,114 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.37&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:41:22,121 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 37
+2026-06-10 07:41:22,613 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.37 "HTTP/2 200 OK"
+2026-06-10 07:41:22,614 - app.behavioral_analyzer - INFO - Analyzing Dataphyte...
+2026-06-10 07:41:23,126 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.37&published_at=gte.2026-05-11T06%3A41%3A22.614590%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:41:28,664 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:41:28,665 - app.behavioral_analyzer - INFO - Analysis complete for Dataphyte. Score: 85
+2026-06-10 07:41:29,293 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.37 "HTTP/2 200 OK"
+2026-06-10 07:41:30,354 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:41:30,355 - batch_analyzer - INFO - Successfully processed dataphyte. Score: 85
+2026-06-10 07:41:33,357 - batch_analyzer - INFO - 
+==================================================
+Processing: blueprint-newspaper
+==================================================
+2026-06-10 07:41:33,875 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.blueprint-newspaper "HTTP/2 200 OK"
+2026-06-10 07:41:34,543 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.18&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:41:34,548 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 18
+2026-06-10 07:41:35,073 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.18 "HTTP/2 200 OK"
+2026-06-10 07:41:35,074 - app.behavioral_analyzer - INFO - Analyzing Blueprint Newspaper...
+2026-06-10 07:41:36,038 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.18&published_at=gte.2026-05-11T06%3A41%3A35.074107%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:41:43,593 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:41:43,603 - app.behavioral_analyzer - INFO - Analysis complete for Blueprint Newspaper. Score: 40
+2026-06-10 07:41:44,865 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.18 "HTTP/2 200 OK"
+2026-06-10 07:41:45,379 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:41:45,381 - batch_analyzer - INFO - Successfully processed blueprint-newspaper. Score: 40
+2026-06-10 07:41:48,384 - batch_analyzer - INFO - 
+==================================================
+Processing: the-nation
+==================================================
+2026-06-10 07:41:48,882 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.the-nation "HTTP/2 200 OK"
+2026-06-10 07:41:49,446 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.8&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:41:49,447 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 8
+2026-06-10 07:41:49,963 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.8 "HTTP/2 200 OK"
+2026-06-10 07:41:49,964 - app.behavioral_analyzer - INFO - Analyzing The Nation...
+2026-06-10 07:41:50,972 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.8&published_at=gte.2026-05-11T06%3A41%3A49.964321%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:41:56,614 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:41:56,616 - app.behavioral_analyzer - INFO - Analysis complete for The Nation. Score: 35
+2026-06-10 07:41:57,213 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=brown_envelope_count&id=eq.8 "HTTP/2 200 OK"
+2026-06-10 07:41:57,745 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.8 "HTTP/2 200 OK"
+2026-06-10 07:41:58,253 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:41:58,254 - batch_analyzer - INFO - Successfully processed the-nation. Score: 35
+2026-06-10 07:42:01,256 - batch_analyzer - INFO - 
+==================================================
+Processing: vanguard-delta
+==================================================
+2026-06-10 07:42:01,802 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.vanguard-delta "HTTP/2 200 OK"
+2026-06-10 07:42:02,294 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.89&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:42:02,295 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 89
+2026-06-10 07:42:02,824 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.89 "HTTP/2 200 OK"
+2026-06-10 07:42:02,825 - app.behavioral_analyzer - INFO - Analyzing Vanguard Delta...
+2026-06-10 07:42:03,743 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.89&published_at=gte.2026-05-11T06%3A42%3A02.825563%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:42:15,643 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:42:15,663 - app.behavioral_analyzer - INFO - Analysis complete for Vanguard Delta. Score: 45
+2026-06-10 07:42:16,438 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=brown_envelope_count&id=eq.89 "HTTP/2 200 OK"
+2026-06-10 07:42:16,953 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.89 "HTTP/2 200 OK"
+2026-06-10 07:42:17,486 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:42:17,487 - batch_analyzer - INFO - Successfully processed vanguard-delta. Score: 45
+2026-06-10 07:42:20,492 - batch_analyzer - INFO - 
+==================================================
+Processing: sahara-reporters
+==================================================
+2026-06-10 07:42:21,033 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.sahara-reporters "HTTP/2 200 OK"
+2026-06-10 07:42:21,705 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.14&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:42:21,706 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 14
+2026-06-10 07:42:22,196 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.14 "HTTP/2 200 OK"
+2026-06-10 07:42:22,197 - app.behavioral_analyzer - INFO - Analyzing Sahara Reporters...
+2026-06-10 07:42:23,125 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.14&published_at=gte.2026-05-11T06%3A42%3A22.197227%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:42:34,665 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:42:34,668 - app.behavioral_analyzer - INFO - Analysis complete for Sahara Reporters. Score: 85
+2026-06-10 07:42:35,708 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.14 "HTTP/2 200 OK"
+2026-06-10 07:42:37,816 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:42:37,817 - batch_analyzer - INFO - Successfully processed sahara-reporters. Score: 85
+2026-06-10 07:42:40,822 - batch_analyzer - INFO - 
+==================================================
+Processing: pointblank-news
+==================================================
+2026-06-10 07:42:41,312 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.pointblank-news "HTTP/2 200 OK"
+2026-06-10 07:42:41,865 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.52&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:42:41,867 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 52
+2026-06-10 07:42:42,353 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.52 "HTTP/2 200 OK"
+2026-06-10 07:42:42,354 - app.behavioral_analyzer - INFO - Analyzing Pointblank News...
+2026-06-10 07:42:42,855 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.52&published_at=gte.2026-05-11T06%3A42%3A42.354655%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:42:52,063 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:42:52,075 - app.behavioral_analyzer - INFO - Analysis complete for Pointblank News. Score: 65
+2026-06-10 07:42:52,829 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.52 "HTTP/2 200 OK"
+2026-06-10 07:42:53,534 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:42:53,535 - batch_analyzer - INFO - Successfully processed pointblank-news. Score: 65
+2026-06-10 07:42:56,540 - batch_analyzer - INFO - 
+==================================================
+Processing: osun-defender
+==================================================
+2026-06-10 07:42:57,063 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.osun-defender "HTTP/2 200 OK"
+2026-06-10 07:42:57,735 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.34&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:42:57,738 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 34
+2026-06-10 07:42:58,255 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.34 "HTTP/2 200 OK"
+2026-06-10 07:42:58,256 - app.behavioral_analyzer - INFO - Analyzing Osun Defender...
+2026-06-10 07:42:59,179 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.34&published_at=gte.2026-05-11T06%3A42%3A58.256446%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:43:22,717 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:43:22,720 - app.behavioral_analyzer - INFO - Analysis complete for Osun Defender. Score: 65
+2026-06-10 07:43:23,423 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.34 "HTTP/2 200 OK"
+2026-06-10 07:43:23,965 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:43:23,966 - batch_analyzer - INFO - Successfully processed osun-defender. Score: 65
+2026-06-10 07:43:26,969 - batch_analyzer - INFO - 
+==================================================
+Processing: al-jazeera-africa
+==================================================
+2026-06-10 07:43:27,456 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.al-jazeera-africa "HTTP/2 200 OK"
+2026-06-10 07:43:27,955 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.97&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:43:27,956 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 97
+2026-06-10 07:43:28,463 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.97 "HTTP/2 200 OK"
+2026-06-10 07:43:28,464 - app.behavioral_analyzer - INFO - Analyzing Al Jazeera Africa...
+2026-06-10 07:43:29,539 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.97&published_at=gte.2026-05-11T06%3A43%3A28.464367%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:43:42,608 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:43:42,610 - app.behavioral_analyzer - INFO - Analysis complete for Al Jazeera Africa. Score: 75
+2026-06-10 07:43:43,345 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.97 "HTTP/2 200 OK"
+2026-06-10 07:43:43,874 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:43:43,875 - batch_analyzer - INFO - Successfully processed al-jazeera-africa. Score: 75
+2026-06-10 07:43:46,880 - batch_analyzer - INFO - 
+==================================================
+Processing: fij-nigeria
+==================================================
+2026-06-10 07:43:47,363 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.fij-nigeria "HTTP/2 200 OK"
+2026-06-10 07:43:47,856 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.38&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:43:47,857 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 38
+2026-06-10 07:43:48,353 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.38 "HTTP/2 200 OK"
+2026-06-10 07:43:48,356 - app.behavioral_analyzer - INFO - Analyzing FIJ Nigeria...
+2026-06-10 07:43:48,835 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.38&published_at=gte.2026-05-11T06%3A43%3A48.356195%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:44:10,086 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:44:10,089 - app.behavioral_analyzer - INFO - Analysis complete for FIJ Nigeria. Score: 85
+2026-06-10 07:44:11,306 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.38 "HTTP/2 200 OK"
+2026-06-10 07:44:11,783 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:44:11,784 - batch_analyzer - INFO - Successfully processed fij-nigeria. Score: 85
+2026-06-10 07:44:14,787 - batch_analyzer - INFO - 
+==================================================
+Processing: voa-hausa
+==================================================
+2026-06-10 07:44:15,322 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.voa-hausa "HTTP/2 200 OK"
+2026-06-10 07:44:15,894 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.48&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:44:15,904 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 48
+2026-06-10 07:44:16,395 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.48 "HTTP/2 200 OK"
+2026-06-10 07:44:16,396 - app.behavioral_analyzer - INFO - Analyzing VOA Hausa...
+2026-06-10 07:44:16,895 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.48&published_at=gte.2026-05-11T06%3A44%3A16.396435%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:44:17,795 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.48&order=published_at.desc&limit=150 "HTTP/2 200 OK"
+2026-06-10 07:44:48,055 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:44:48,064 - app.behavioral_analyzer - INFO - Analysis complete for VOA Hausa. Score: 65
+2026-06-10 07:44:48,945 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.48 "HTTP/2 200 OK"
+2026-06-10 07:44:49,424 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:44:49,425 - batch_analyzer - INFO - Successfully processed voa-hausa. Score: 65
+2026-06-10 07:44:52,426 - batch_analyzer - INFO - 
+==================================================
+Processing: pulse-nigeria
+==================================================
+2026-06-10 07:44:52,945 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.pulse-nigeria "HTTP/2 200 OK"
+2026-06-10 07:44:53,424 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.54&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:44:53,433 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 54
+2026-06-10 07:44:53,924 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.54 "HTTP/2 200 OK"
+2026-06-10 07:44:53,924 - app.behavioral_analyzer - INFO - Analyzing Pulse Nigeria...
+2026-06-10 07:44:54,803 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.54&published_at=gte.2026-05-11T06%3A44%3A53.924746%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:45:03,296 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:45:03,300 - app.behavioral_analyzer - INFO - Analysis complete for Pulse Nigeria. Score: 55
+2026-06-10 07:45:03,904 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.54 "HTTP/2 200 OK"
+2026-06-10 07:45:04,414 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:45:04,416 - batch_analyzer - INFO - Successfully processed pulse-nigeria. Score: 55
+2026-06-10 07:45:07,422 - batch_analyzer - INFO - 
+==================================================
+Processing: sporting-life-nigeria
+==================================================
+2026-06-10 07:45:07,937 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.sporting-life-nigeria "HTTP/2 200 OK"
+2026-06-10 07:45:08,458 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.61&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:45:08,459 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 61
+2026-06-10 07:45:09,026 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.61 "HTTP/2 200 OK"
+2026-06-10 07:45:09,027 - app.behavioral_analyzer - INFO - Analyzing Sporting Life Nigeria...
+2026-06-10 07:45:09,535 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.61&published_at=gte.2026-05-11T06%3A45%3A09.027389%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:45:15,793 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:45:15,798 - app.behavioral_analyzer - INFO - Analysis complete for Sporting Life Nigeria. Score: 60
+2026-06-10 07:45:16,494 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.61 "HTTP/2 200 OK"
+2026-06-10 07:45:17,196 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:45:17,197 - batch_analyzer - INFO - Successfully processed sporting-life-nigeria. Score: 60
+2026-06-10 07:45:20,202 - batch_analyzer - INFO - 
+==================================================
+Processing: the-point
+==================================================
+2026-06-10 07:45:21,604 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.the-point "HTTP/2 200 OK"
+2026-06-10 07:45:22,455 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.78&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:45:22,456 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 78
+2026-06-10 07:45:22,954 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.78 "HTTP/2 200 OK"
+2026-06-10 07:45:22,957 - app.behavioral_analyzer - INFO - Analyzing The Point...
+2026-06-10 07:45:23,866 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.78&published_at=gte.2026-05-11T06%3A45%3A22.957412%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:45:35,285 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:45:35,287 - app.behavioral_analyzer - INFO - Analysis complete for The Point. Score: 65
+2026-06-10 07:45:36,158 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.78 "HTTP/2 200 OK"
+2026-06-10 07:45:36,625 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:45:36,626 - batch_analyzer - INFO - Successfully processed the-point. Score: 65
+2026-06-10 07:45:39,631 - batch_analyzer - INFO - 
+==================================================
+Processing: african-arguments
+==================================================
+2026-06-10 07:45:40,435 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.african-arguments "HTTP/2 200 OK"
+2026-06-10 07:45:41,026 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.95&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:45:41,027 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 95
+2026-06-10 07:45:41,503 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.95 "HTTP/2 200 OK"
+2026-06-10 07:45:41,504 - app.behavioral_analyzer - INFO - Analyzing African Arguments...
+2026-06-10 07:45:42,177 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.95&published_at=gte.2026-05-11T06%3A45%3A41.505120%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:45:49,357 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:45:49,360 - app.behavioral_analyzer - INFO - Analysis complete for African Arguments. Score: 85
+2026-06-10 07:45:50,219 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.95 "HTTP/2 200 OK"
+2026-06-10 07:45:50,856 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:45:50,857 - batch_analyzer - INFO - Successfully processed african-arguments. Score: 85
+2026-06-10 07:45:53,864 - batch_analyzer - INFO - 
+==================================================
+Processing: pm-news
+==================================================
+2026-06-10 07:45:54,414 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.pm-news "HTTP/2 200 OK"
+2026-06-10 07:45:54,946 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.51&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:45:54,947 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 51
+2026-06-10 07:45:55,465 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.51 "HTTP/2 200 OK"
+2026-06-10 07:45:55,467 - app.behavioral_analyzer - INFO - Analyzing PM News...
+2026-06-10 07:45:56,023 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.51&published_at=gte.2026-05-11T06%3A45%3A55.467726%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:46:01,884 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:46:01,907 - app.behavioral_analyzer - INFO - Analysis complete for PM News. Score: 55
+2026-06-10 07:46:02,907 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.51 "HTTP/2 200 OK"
+2026-06-10 07:46:03,734 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:46:03,734 - batch_analyzer - INFO - Successfully processed pm-news. Score: 55
+2026-06-10 07:46:06,741 - batch_analyzer - INFO - 
+==================================================
+Processing: arise-news
+==================================================
+2026-06-10 07:46:07,325 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.arise-news "HTTP/2 200 OK"
+2026-06-10 07:46:07,826 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.12&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:46:07,827 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 12
+2026-06-10 07:46:08,316 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.12 "HTTP/2 200 OK"
+2026-06-10 07:46:08,318 - app.behavioral_analyzer - INFO - Analyzing Arise News...
+2026-06-10 07:46:08,816 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.12&published_at=gte.2026-05-11T06%3A46%3A08.318151%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:46:13,836 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:46:13,844 - app.behavioral_analyzer - INFO - Analysis complete for Arise News. Score: 65
+2026-06-10 07:46:16,300 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.12 "HTTP/2 200 OK"
+2026-06-10 07:46:16,846 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:46:16,847 - batch_analyzer - INFO - Successfully processed arise-news. Score: 65
+2026-06-10 07:46:19,857 - batch_analyzer - INFO - 
+==================================================
+Processing: bellanaija
+==================================================
+2026-06-10 07:46:21,152 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=id%2C%20name&slug=eq.bellanaija "HTTP/2 200 OK"
+2026-06-10 07:46:21,898 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=id&outlet_id=eq.106&limit=100 "HTTP/2 200 OK"
+2026-06-10 07:46:21,900 - app.behavioral_analyzer - INFO - Starting behavioral analysis for outlet ID 106
+2026-06-10 07:46:22,562 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=name%2C%20slug%2C%20ownership_type%2C%20geopolitical_lean&id=eq.106 "HTTP/2 200 OK"
+2026-06-10 07:46:22,563 - app.behavioral_analyzer - INFO - Analyzing BellaNaija...
+2026-06-10 07:46:24,073 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/stories?select=title%2C%20summary%2C%20published_at&outlet_id=eq.106&published_at=gte.2026-05-11T06%3A46%3A22.563414%2B00%3A00&order=published_at.desc&limit=1000 "HTTP/2 200 OK"
+2026-06-10 07:46:31,885 - httpx - INFO - HTTP Request: POST https://api.openai.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-06-10 07:46:31,886 - app.behavioral_analyzer - INFO - Analysis complete for BellaNaija. Score: 35
+2026-06-10 07:46:32,484 - httpx - INFO - HTTP Request: GET https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?select=brown_envelope_count&id=eq.106 "HTTP/2 200 OK"
+2026-06-10 07:46:32,975 - httpx - INFO - HTTP Request: PATCH https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlets?id=eq.106 "HTTP/2 200 OK"
+2026-06-10 07:46:33,494 - httpx - INFO - HTTP Request: POST https://yqqysehsnwicppejgfky.supabase.co/rest/v1/outlet_behavioral_scores "HTTP/2 201 Created"
+2026-06-10 07:46:33,494 - batch_analyzer - INFO - Successfully processed bellanaija. Score: 35
+
+
+************************************************************
+FINAL BATCH RESULTS SUMMARY
+************************************************************
+OUTLET SLUG                    | SCORE | BROWN ENVELOPE
+------------------------------------------------------------
+quartz-africa                  | 60    | False
+ait                            | 45    | True
+the-tide                       | 35    | True
+reuters-africa                 | 70    | False
+daily-independent              | 40    | False
+goal-nigeria                   | 60    | False
+punch-metro                    | 40    | True
+dataphyte                      | 85    | False
+blueprint-newspaper            | 40    | False
+the-nation                     | 35    | True
+vanguard-delta                 | 45    | True
+sahara-reporters               | 85    | False
+pointblank-news                | 65    | False
+osun-defender                  | 65    | False
+al-jazeera-africa              | 75    | False
+fij-nigeria                    | 85    | False
+voa-hausa                      | 65    | False
+pulse-nigeria                  | 55    | False
+sporting-life-nigeria          | 60    | False
+the-point                      | 65    | False
+african-arguments              | 85    | False
+pm-news                        | 55    | False
+arise-news                     | 65    | False
+bellanaija                     | 35    | True
+************************************************************

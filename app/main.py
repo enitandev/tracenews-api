@@ -631,6 +631,12 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
     
     # Compute covered_most_by via RPC
     outlets_map, behavioral_map = get_outlets_cache()
+    outlets_by_slug = {
+        o.get('slug'): o 
+        for o in outlets_map.values() 
+        if o.get('slug')
+    }
+    
     covered_most_by = []
     
     try:
@@ -638,7 +644,7 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
         top_outlets_data = rpc_res.data or []
         for row in top_outlets_data:
             slug = row["outlet_slug"]
-            out = outlets_map.get(slug)
+            out = outlets_by_slug.get(slug)
             if not out: continue
             behav = behavioral_map.get(slug)
             

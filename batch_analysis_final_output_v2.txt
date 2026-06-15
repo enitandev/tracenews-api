@@ -1,0 +1,33 @@
+
+
+************************************************************
+FINAL BATCH RESULTS SUMMARY
+************************************************************
+OUTLET SLUG                    | SCORE | BROWN ENVELOPE
+------------------------------------------------------------
+punch-nigeria                  | 65    | False
+leadership-newspaper           | 55    | False
+daily-post-nigeria             | 45    | False
+the-sun-nigeria                | 60    | False
+vanguard                       | 65    | False
+legit-ng                       | 55    | False
+thisday                        | 60    | False
+guardian-nigeria               | 60    | False
+peoples-gazette                | 65    | False
+businessday                    | 55    | False
+daily-trust                    | 55    | False
+nigerian-tribune-online        | 65    | False
+premium-times                  | 75    | False
+arise-news-online              | 50    | False
+the-whistler                   | 40    | False
+tvc-news                       | 35    | True
+voice-of-nigeria               | 30    | True
+channels-tv                    | 60    | False
+nairametrics                   | 55    | False
+naija247news                   | 60    | False
+the-cable                      | 65    | False
+ripples-nigeria                | 68    | False
+kogi-reports                   | 45    | True
+new-telegraph                  | 40    | False
+the-conversation-africa        | 85    | False
+************************************************************
