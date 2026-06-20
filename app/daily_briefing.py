@@ -226,13 +226,13 @@ Generate a structured briefing in valid JSON. Return ONLY the JSON object, no ma
 
 {{
   "ground_summary": {{
-    "whats_happening": "2-3 sentence factual paragraph. What is happening, who is involved, what has been decided or occurred. Stick to confirmed facts only.",
-    "why_it_matters": "2-3 sentence paragraph explaining significance. Why does this matter to Nigerians? What are the broader implications?"
+    "whats_happening": "3-4 detailed sentences minimum. Be specific about who, what, when, where. Do not truncate.",
+    "why_it_matters": "3-4 sentences explaining broader significance, economic/political impact, and what Nigerians should watch for."
   }},
   "common_ground": [
     {{
       "label": "Short 2-4 word label",
-      "text": "One sentence of what ALL outlets across tiers agree on, regardless of their editorial stance."
+      "text": "2-3 sentences explaining the consensus point with specific evidence from the coverage."
     }},
     {{
       "label": "Short 2-4 word label", 
@@ -252,10 +252,11 @@ Generate a structured briefing in valid JSON. Return ONLY the JSON object, no ma
 
         response1 = client.chat.completions.create(
             model="gpt-4.1-mini",
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "user", "content": PROMPT_CALL_1}
             ],
-            max_tokens=1000,
+            max_tokens=1500,
             temperature=0.3
         )
         raw1 = response1.choices[0].message.content
@@ -343,7 +344,7 @@ Return ONLY valid JSON, no markdown:
   "followup_questions": [
     {{
       "question": "Specific question about this story",
-      "answer": "2-3 sentence factual answer based on the coverage"
+      "answer": "3-5 sentences. Be thorough. Include specific names, numbers, dates or context where available."
     }},
     {{
       "question": "Second question",
@@ -364,10 +365,11 @@ Base answers ONLY on what the coverage actually says. Do not invent facts."""
 
         response3 = client.chat.completions.create(
             model="gpt-4.1-mini",
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "user", "content": f"{PROMPT_CALL_3}\n\nCOVERAGE:\n{article_context[:2000]}"}
             ],
-            max_tokens=800,
+            max_tokens=1200,
             temperature=0.3
         )
         raw3 = response3.choices[0].message.content
