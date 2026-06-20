@@ -28,7 +28,12 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://tracenews.ng",
+        "https://www.tracenews.ng",
+        "http://localhost:5173",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -169,7 +174,7 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
                 tier = "institutional"
                 
         if tier != "unscored":
-            tier_dist[tier] += 1
+            tier_dist[tier if tier in tier_dist else "unscored"] += 1
             
     return tier_dist
 
