@@ -122,7 +122,7 @@ def get_outlets_cache():
     global _OUTLETS_CACHE, _BEHAVIORAL_CACHE, _LAST_CACHE_UPDATE
     now = time.time()
     if now - _LAST_CACHE_UPDATE > CACHE_TTL or not _OUTLETS_CACHE:
-        out_res = supabase.table("outlets").select("id, slug, government_alignment").execute()
+        out_res = supabase.table("outlets").select("id, slug, government_alignment, name, logo_url, credibility_tier, headquarters_city, geopolitical_lean").execute()
         _OUTLETS_CACHE = {o["id"]: o for o in (out_res.data or [])}
         
         behav_res = supabase.table("outlet_behavioral_scores").select("*").execute()
