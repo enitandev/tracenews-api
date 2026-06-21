@@ -137,7 +137,7 @@ def get_outlets_cache():
     return _OUTLETS_CACHE, _BEHAVIORAL_CACHE
 
 def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, behavioral_map):
-    tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0, "unscored": 0}
+    tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0}
     
     unique_outlet_ids = set()
     for s in stories:
@@ -174,7 +174,8 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
                 tier = "institutional"
                 
         if tier != "unscored":
-            tier_dist[tier if tier in tier_dist else "unscored"] += 1
+            if tier in tier_dist:
+                tier_dist[tier] += 1
             
     return tier_dist
 
