@@ -456,17 +456,29 @@ def analyze_outlet(outlet, current, total):
         if r and r.get('classification') == 'accountability':
             major_clusters.append(c['id'])
             
-    if not major_clusters:
+    LANGUAGE_SERVICE_OUTLETS = [
+        'bbc-hausa',
+        'bbc-yoruba', 
+        'bbc-pidgin',
+        'rfi-hausa',
+        'aminiya',
+        'voa-hausa'
+    ]
+    
+    if outlet_slug in LANGUAGE_SERVICE_OUTLETS:
         s3_score = 70.0
     else:
-        total_major = len(major_clusters)
-        outlet_covered = 0
-        for s in sample:
-            if s.get('cluster_id') in major_clusters:
-                outlet_covered += 1
-                major_clusters.remove(s.get('cluster_id')) 
-                
-        s3_score = (outlet_covered / total_major) * 100
+        if not major_clusters:
+            s3_score = 70.0
+        else:
+            total_major = len(major_clusters)
+            outlet_covered = 0
+            for s in sample:
+                if s.get('cluster_id') in major_clusters:
+                    outlet_covered += 1
+                    major_clusters.remove(s.get('cluster_id')) 
+                    
+            s3_score = (outlet_covered / total_major) * 100
 
     # 10. TII Calculation
     tii_raw = (s1_score * 0.30) + (s2_score * 0.25) + (s3_score * 0.20) + (s4_score * 0.10) + (s5_score * 0.10) + (s6_score * 0.05)
