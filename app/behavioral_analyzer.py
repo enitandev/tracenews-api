@@ -16,6 +16,15 @@ openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 FEDERAL_GOVT_OUTLETS = ['nta', 'nan', 'voice-of-nigeria', 'radio-nigeria']
 STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports', 'lagos-television-ltv']
 
+LANGUAGE_SERVICE_OUTLETS = [
+    'bbc-hausa',
+    'bbc-yoruba', 
+    'bbc-pidgin',
+    'rfi-hausa',
+    'aminiya',
+    'voa-hausa'
+]
+
 SPECIALIST_OUTLETS = [
   'techpoint-africa',
   'techcabal',
@@ -472,16 +481,8 @@ def analyze_outlet(outlet, current, total):
         if r and r.get('classification') == 'accountability':
             major_clusters.append(c['id'])
             
-    LANGUAGE_SERVICE_OUTLETS = [
-        'bbc-hausa',
-        'bbc-yoruba', 
-        'bbc-pidgin',
-        'rfi-hausa',
-        'aminiya',
-        'voa-hausa'
-    ]
-    
-    if outlet_slug in LANGUAGE_SERVICE_OUTLETS:
+    if outlet_slug in LANGUAGE_SERVICE_OUTLETS \
+        or outlet_slug in SPECIALIST_OUTLETS:
         s3_score = 70.0
     else:
         if not major_clusters:
