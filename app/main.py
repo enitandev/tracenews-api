@@ -738,7 +738,7 @@ def get_daily_briefing():
             "generation_status", "complete"
         ).order("date", desc=True)\
         .order("position")\
-        .limit(5)\
+        .limit(9)\
         .execute()
         
         rows = fallback_res.data or []

@@ -26,7 +26,7 @@ def select_daily_briefing_stories():
         .gte("first_seen_at", since)\
         .gte("outlet_count", 5)\
         .order("outlet_count", desc=True)\
-        .limit(10)\
+        .limit(15)\
         .execute()
 
     eligible = []
@@ -34,7 +34,7 @@ def select_daily_briefing_stories():
         has_image = any(s.get("image_url") for s in (c.get("stories") or []))
         if has_image:
             eligible.append(c)
-        if len(eligible) == 5:
+        if len(eligible) == 9:
             break
 
     if len(eligible) < 3:
