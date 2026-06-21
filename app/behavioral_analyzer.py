@@ -16,6 +16,22 @@ openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 FEDERAL_GOVT_OUTLETS = ['nta', 'nan', 'voice-of-nigeria', 'radio-nigeria']
 STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports', 'lagos-television-ltv']
 
+SPECIALIST_OUTLETS = [
+  'techpoint-africa',
+  'techcabal',
+  'technext',
+  'investors-king',
+  'naijatechguide',
+  'the-africa-report',
+  'dataphyte',
+  'african-arguments',
+  'quartz-africa',
+  'complete-sports',
+  'goal-nigeria',
+  'sporting-life-nigeria',
+  'brila-fm',
+  'bellanaija'
+]
 # ---------------------------------------------------------
 # AI PROMPTS
 # ---------------------------------------------------------
