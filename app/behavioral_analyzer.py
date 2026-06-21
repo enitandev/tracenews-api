@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 FEDERAL_GOVT_OUTLETS = ['nta', 'nan', 'voice-of-nigeria', 'radio-nigeria']
-STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports']
+STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports', 'lagos-television-ltv']
 
 # ---------------------------------------------------------
 # AI PROMPTS
