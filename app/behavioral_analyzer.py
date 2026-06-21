@@ -467,24 +467,28 @@ def analyze_outlet(outlet, current, total):
         
     ecosystem_threshold = int(total_active_outlets * 0.60)
     
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    try:
-        clusters_res = with_retry(lambda: supabase.table("clusters").select("id, representative_title, outlet_count").gte("created_at", cutoff_date).gte("outlet_count", ecosystem_threshold).execute())
-        cluster_list = clusters_res.data or []
-    except Exception as e:
-        logger.error(f"Error fetching major clusters: {e}")
-        cluster_list = []
-        
-    major_clusters = []
-    for c in cluster_list:
-        r = ask_llm(PROMPT_CLUSTER_CLASS, c['representative_title'])
-        if r and r.get('classification') == 'accountability':
-            major_clusters.append(c['id'])
-            
-    if outlet_slug in LANGUAGE_SERVICE_OUTLETS \
-        or outlet_slug in SPECIALIST_OUTLETS:
+    # S3 bypass for language services
+    # and specialist beat outlets -
+    # skip AI cluster classification
+    # entirely, no wasted calls
+    if outlet_slug in LANGUAGE_SERVICE_OUTLETS or \
+        outlet_slug in SPECIALIST_OUTLETS:
         s3_score = 70.0
     else:
+        cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+        try:
+            clusters_res = with_retry(lambda: supabase.table("clusters").select("id, representative_title, outlet_count").gte("created_at", cutoff_date).gte("outlet_count", ecosystem_threshold).execute())
+            cluster_list = clusters_res.data or []
+        except Exception as e:
+            logger.error(f"Error fetching major clusters: {e}")
+            cluster_list = []
+            
+        major_clusters = []
+        for c in cluster_list:
+            r = ask_llm(PROMPT_CLUSTER_CLASS, c['representative_title'])
+            if r and r.get('classification') == 'accountability':
+                major_clusters.append(c['id'])
+                
         if not major_clusters:
             s3_score = 70.0
         else:
