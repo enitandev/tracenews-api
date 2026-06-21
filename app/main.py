@@ -730,8 +730,7 @@ def get_daily_briefing():
     rows = rows_res.data or []
     
     if not rows:
-        # Fall back to most recent complete briefing
-        rows_res = supabase.table(
+        fallback_res = supabase.table(
             "daily_briefings"
         ).select(
             "id, date, cluster_id, cluster_slug, position, generation_status, perspectives_title, ground_summary"
@@ -741,7 +740,8 @@ def get_daily_briefing():
         .order("position")\
         .limit(5)\
         .execute()
-        rows = rows_res.data or []
+        
+        rows = fallback_res.data or []
         
         if not rows:
             return {
