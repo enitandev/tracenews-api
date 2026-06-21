@@ -730,11 +730,25 @@ def get_daily_briefing():
     rows = rows_res.data or []
     
     if not rows:
-        return {
-            "date": today,
-            "status": "no_briefing",
-            "stories": []
-        }
+        # Fall back to most recent complete briefing
+        rows_res = supabase.table(
+            "daily_briefings"
+        ).select(
+            "id, date, cluster_id, cluster_slug, position, generation_status, perspectives_title, ground_summary"
+        ).eq(
+            "generation_status", "complete"
+        ).order("date", desc=True)\
+        .order("position")\
+        .limit(5)\
+        .execute()
+        rows = rows_res.data or []
+        
+        if not rows:
+            return {
+                "date": today,
+                "status": "no_briefing",
+                "stories": []
+            }
     
     # Enrich each row with cluster data (image, outlet_count, category)
     cluster_ids = [r["cluster_id"] for r in rows]
