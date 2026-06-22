@@ -16,6 +16,19 @@ openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 FEDERAL_GOVT_OUTLETS = ['nta', 'nan', 'voice-of-nigeria', 'radio-nigeria']
 STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports', 'lagos-television-ltv']
 
+KNOWN_ALIGNED_OUTLETS = [
+  'the-nation',
+  'blueprint-newspaper',
+  'channels-tv'
+]
+# Cap at 45 - above Pro-Establishment
+# threshold of 35 but below Institutional
+# midpoint. These outlets have documented
+# ownership/editorial alignment that 
+# the 500-char RSS window cannot 
+# fully capture.
+KNOWN_ALIGNED_CAP = 45
+
 LANGUAGE_SERVICE_OUTLETS = [
     'bbc-hausa',
     'bbc-yoruba', 
@@ -513,6 +526,9 @@ def analyze_outlet(outlet, current, total):
             final_tii = min(40.0, tii_raw)
         else:
             final_tii = min(40.0, tii_raw) # Default fallback for unlisted government outlets
+            
+    if outlet_slug in KNOWN_ALIGNED_OUTLETS:
+        final_tii = min(final_tii, KNOWN_ALIGNED_CAP)
             
     # Brown Envelope Override
     layer1_rate = be_layer1_flags / len(sample) if sample else 0
