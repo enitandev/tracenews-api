@@ -10,6 +10,21 @@ from app.classifier import classify_cluster_hybrid
 
 logger = logging.getLogger(__name__)
 
+def compute_snapshot_threshold(
+    outlet_count: int) -> int:
+  """
+  Proportional change threshold for
+  triggering an extra snapshot.
+  Fire-points by cluster size:
+  cluster 3  -> max(2, round(0.45)) = 2
+  cluster 5  -> max(2, round(0.75)) = 2
+  cluster 15 -> max(2, round(2.25)) = 3
+  cluster 40 -> max(2, round(6.0))  = 6
+  cluster 80 -> max(2, round(12.0)) = 12
+  """
+  return max(2, round(outlet_count 
+    * 0.15))
+
 def safe_execute(query_builder, retries=3, delay=3):
     for attempt in range(retries):
         try:
@@ -105,7 +120,7 @@ def run_scoring(all_time: bool = False):
                     tier = "blog"
                 elif behav and behav.get("independence_score") is not None:
                     score = behav.get("independence_score")
-                    if behav.get("brown_envelope_suspected") or score < 35:
+                    if behav.get("promotional_alignment_flag") or score < 35:
                         tier = "pro_establishment"
                     elif score < 60:
                         tier = "institutional"
@@ -196,6 +211,125 @@ def run_scoring(all_time: bool = False):
 
             # 5. Update the Clusters table
             safe_execute(supabase.table("clusters").update({"coverage_stats": coverage_stats, "monitoring_flags": monitoring_flags}).eq("id", cluster["id"]))
+
+            # --- coverage snapshot ---
+            try:
+              now = datetime.now(timezone.utc)
+              
+              last_snap = supabase.table(
+                "coverage_snapshots"
+              ).select(
+                "snapshot_at, outlet_count, "
+                "coverage_tier_distribution"
+              ).eq(
+                "cluster_id", cluster["id"]
+              ).order(
+                "snapshot_at", desc=True
+              ).limit(1).execute()
+              
+              should_snapshot = False
+              trigger_reason = "hourly"
+              
+              if not last_snap.data:
+                should_snapshot = True
+              else:
+                prev = last_snap.data[0]
+                prev_time = datetime.fromisoformat(
+                  prev["snapshot_at"].replace(
+                    "Z", "+00:00")
+                )
+                hours_since = (
+                  now - prev_time
+                ).total_seconds() / 3600
+                
+                prev_count = prev.get(
+                  "outlet_count") or 0
+                curr_count = coverage_stats.get(
+                  "total_coverage") or 0
+                
+                if hours_since >= 1:
+                  should_snapshot = True
+                
+                count_delta = abs(
+                  curr_count - prev_count)
+                threshold = compute_snapshot_threshold(
+                  curr_count)
+                
+                prev_dist = prev.get(
+                  "coverage_tier_distribution"
+                ) or {}
+                curr_dist = coverage_stats.get(
+                  "coverage_tier_distribution"
+                ) or {}
+                
+                tier_delta = 0
+                for tier in [
+                  "pro_establishment",
+                  "institutional",
+                  "adversarial"
+                ]:
+                  prev_share = (
+                    prev_dist.get(tier, 0) /
+                    max(prev_count, 1)
+                  ) * 100
+                  curr_share = (
+                    curr_dist.get(tier, 0) /
+                    max(curr_count, 1)
+                  ) * 100
+                  tier_delta = max(
+                    tier_delta,
+                    abs(curr_share - prev_share)
+                  )
+                
+                if (count_delta >= threshold
+                    or tier_delta >= 8):
+                  should_snapshot = True
+                  trigger_reason = "change_threshold"
+              
+              if should_snapshot:
+                stories_res = supabase.table(
+                  "stories"
+                ).select(
+                  "outlet_slug"
+                ).eq(
+                  "cluster_id", cluster["id"]
+                ).execute()
+                
+                covering_slugs = list(set([
+                  s["outlet_slug"]
+                  for s in (
+                    stories_res.data or []
+                  )
+                  if s.get("outlet_slug")
+                ]))
+                
+                safe_execute(
+                  supabase.table(
+                    "coverage_snapshots"
+                  ).insert({
+                    "cluster_id": cluster["id"],
+                    "snapshot_at": 
+                      now.isoformat(),
+                    "trigger_reason": 
+                      trigger_reason,
+                    "coverage_tier_distribution":
+                      coverage_stats.get(
+                        "coverage_tier_distribution"
+                      ),
+                    "outlet_count": 
+                      coverage_stats.get(
+                        "total_coverage"),
+                    "covering_outlet_slugs":
+                      covering_slugs,
+                    "absent_expected_slugs": []
+                  })
+                )
+            except Exception as e:
+              logger.error(
+                f"Snapshot insert failed for "
+                f"{cluster['id']}: {e}"
+              )
+            # --- end coverage snapshot ---
 
             scored_count += 1
 

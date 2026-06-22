@@ -132,7 +132,7 @@ Return ONLY a raw JSON object:
     "overwhelmingly_positive_toward_official": true/false,
     "has_clear_news_hook": true/false,
     "single_source_dependent": true/false,
-    "brown_envelope_suspected": true/false,
+    "promotional_alignment_flag": true/false,
     "evidence": "one sentence or null"
   }
 }
@@ -332,7 +332,7 @@ def run_brown_envelope_layer_1(story_embedding, published_at):
             for matched_story in (stories_res.data or []):
                 text = f"{matched_story.get('title', '')}\n\n{matched_story.get('summary', '')}"
                 rb = ask_llm(PROMPT_COMBINED, clean_text(text))
-                if rb and rb.get('brown_envelope', {}).get('brown_envelope_suspected'):
+                if rb and rb.get('brown_envelope', {}).get('promotional_alignment_flag'):
                     return True
             return False
             
@@ -377,7 +377,7 @@ def analyze_article(s):
             if s6.get('is_correction_or_retraction'):
                 results['s6_correction'] = True
                 
-            if be.get('brown_envelope_suspected'):
+            if be.get('promotional_alignment_flag'):
                 results['be_layer2_flag'] = True
                 
     except Exception as e:
@@ -533,9 +533,9 @@ def analyze_outlet(outlet, current, total):
     # Brown Envelope Override
     layer1_rate = be_layer1_flags / len(sample) if sample else 0
     layer2_rate = be_layer2_flags / len(sample) if sample else 0
-    brown_envelope_suspected = layer1_rate >= 0.10 or layer2_rate >= 0.10
+    promotional_alignment_flag = layer1_rate >= 0.10 or layer2_rate >= 0.10
     
-    if brown_envelope_suspected:
+    if promotional_alignment_flag:
         final_tii = min(final_tii, 34)
     
     # 13. Upsert
@@ -548,7 +548,7 @@ def analyze_outlet(outlet, current, total):
         "s4_score": int(round(s4_score)),
         "s5_score": int(round(s5_score)),
         "s6_score": int(round(s6_score)),
-        "brown_envelope_suspected": brown_envelope_suspected,
+        "promotional_alignment_flag": promotional_alignment_flag,
         "confidence_level": confidence_badge,
         "story_sample_size": len(sample),
         "analyzed_at": datetime.now(timezone.utc).isoformat()
@@ -560,12 +560,38 @@ def analyze_outlet(outlet, current, total):
     print(f"  S4 Lexical Deference:    {s4_score:.0f}")
     print(f"  S5 Story Selection:      {s5_score:.0f}")
     print(f"  S6 Editorial Indicators: {s6_score:.0f}")
-    print(f"  Brown Envelope:          {brown_envelope_suspected}")
+    print(f"  Brown Envelope:          {promotional_alignment_flag}")
 
     try:
         # Upsert to behavioral scores (primary key is outlet_slug)
         with_retry(lambda: supabase.table("outlet_behavioral_scores").upsert(payload).execute())
         
+        # --- tii score history ---
+        try:
+          supabase.table(
+            "tii_score_history"
+          ).insert({
+            "outlet_slug": outlet_slug,
+            "scored_at": datetime.now(
+              timezone.utc).isoformat(),
+            "independence_score": int(
+              round(final_tii)),
+            "s1_score": s1_score,
+            "s2_score": s2_score,
+            "s3_score": s3_score,
+            "s4_score": s4_score,
+            "s5_score": s5_score,
+            "s6_score": s6_score,
+            "promotional_alignment_flag":
+              promotional_alignment_flag
+          }).execute()
+        except Exception as e:
+          logger.error(
+            f"TII history insert failed "
+            f"for {outlet_slug}: {e}"
+          )
+        # --- end tii score history ---
+
         # Update main outlets table
         with_retry(lambda: supabase.table("outlets").update({"independence_score": int(round(final_tii))}).eq("id", outlet_id).execute())
     except Exception as e:
