@@ -27,7 +27,7 @@ KNOWN_ALIGNED_OUTLETS = [
 # ownership/editorial alignment that 
 # the 500-char RSS window cannot 
 # fully capture.
-KNOWN_ALIGNED_CAP = 45
+KNOWN_ALIGNED_CAP = 34
 
 LANGUAGE_SERVICE_OUTLETS = [
     'bbc-hausa',
