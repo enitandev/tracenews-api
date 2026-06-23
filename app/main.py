@@ -158,7 +158,7 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
             tier = "blog"
         elif behav and behav.get("independence_score") is not None:
             score = behav.get("independence_score")
-            if behav.get("brown_envelope_suspected") or score < 35:
+            if behav.get("promotional_alignment_flag") or score < 35:
                 tier = "pro_establishment"
             elif score < 60:
                 tier = "institutional"
@@ -335,11 +335,12 @@ def get_cluster_by_slug(slug: str):
                 s["outlet_name"] = out.get("name")
             
             behav = behavioral_map.get(out.get("slug"))
+            s["outlet_s2_score"] = behav.get("s2_score") if behav else None
             if out.get("credibility_tier") == "blog":
                 s["outlet_coverage_tier"] = "blog"
             elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
-                if behav.get("brown_envelope_suspected") or score < 35:
+                if behav.get("promotional_alignment_flag") or score < 35:
                     s["outlet_coverage_tier"] = "pro_establishment"
                 elif score < 60:
                     s["outlet_coverage_tier"] = "institutional"
@@ -400,12 +401,13 @@ def get_cluster_deep_dive(id: str):
                 s["outlet_name"] = out.get("name")
             
             behav = behavioral_map.get(slug) if slug else None
+            s["outlet_s2_score"] = behav.get("s2_score") if behav else None
             tier = "unscored"
             if out.get("credibility_tier") == "blog":
                 tier = "blog"
             elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
-                if behav.get("brown_envelope_suspected") or score < 35:
+                if behav.get("promotional_alignment_flag") or score < 35:
                     tier = "pro_establishment"
                 elif score < 60:
                     tier = "institutional"
@@ -658,7 +660,7 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
             if out.get("credibility_tier") == "blog": tier = "blog"
             elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
-                tier = "pro_establishment" if (behav.get("brown_envelope_suspected") or score < 35) else "institutional" if score < 60 else "adversarial"
+                tier = "pro_establishment" if (behav.get("promotional_alignment_flag") or score < 35) else "institutional" if score < 60 else "adversarial"
             else:
                 g_align = out.get("government_alignment")
                 tier = "pro_establishment" if g_align == "pro_government" else "adversarial" if g_align == "opposition" else "institutional" if g_align == "neutral" else "unscored"
