@@ -7,7 +7,10 @@ from app.clusterer import run_clustering
 from app.scorer import run_scoring
 from app.image_hydrator import run_image_hydration
 from app.framer import run_framing_job
-
+from app.daily_briefing import (
+    select_daily_briefing_stories,
+    generate_briefing_for_story
+)
 logger = logging.getLogger(__name__)
 
 scheduler = BackgroundScheduler()
@@ -37,6 +40,63 @@ def run_process_job():
         scheduler.add_job(run_image_hydration, id="hydrate_images_job", replace_existing=True)
     except Exception as e:
         logger.error(f"Process job failed: {e}")
+
+
+def run_daily_briefing_selection():
+    try:
+        logger.info(
+            "[scheduler] Running daily "
+            "briefing story selection..."
+        )
+        result = select_daily_briefing_stories()
+        logger.info(
+            f"[scheduler] Briefing selection: "
+            f"{result}"
+        )
+    except Exception as e:
+        logger.error(
+            f"[scheduler] Briefing selection "
+            f"failed: {e}"
+        )
+
+
+def run_daily_briefing_generation():
+    try:
+        from datetime import datetime, timezone, timedelta
+        from app.db import supabase
+        
+        lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
+        today = lagos_now.date().isoformat()
+        
+        rows = supabase.table(
+            "daily_briefings"
+        ).select("*")\
+        .eq("date", today)\
+        .eq("generation_status", "pending")\
+        .order("position")\
+        .execute()
+        
+        pending = rows.data or []
+        logger.info(
+            f"[scheduler] Generating briefings "
+            f"for {len(pending)} stories..."
+        )
+        
+        for row in pending:
+            result = generate_briefing_for_story(
+                row
+            )
+            logger.info(
+                f"[scheduler] Position "
+                f"{row['position']}: "
+                f"{result['status']}"
+            )
+            
+    except Exception as e:
+        logger.error(
+            f"[scheduler] Briefing generation "
+            f"failed: {e}"
+        )
 
 
 def start_scheduler():
@@ -72,9 +132,41 @@ def start_scheduler():
         replace_existing=True,
     )
     
-    scheduler.start()
-    logger.info(f"Scheduler started. Fetch and Process jobs running every {interval} minutes. Framing job running every 30 minutes.")
+    # Daily Briefing Selection
+    # Runs at 6:00 AM WAT = 5:00 AM UTC
+    scheduler.add_job(
+        run_daily_briefing_selection,
+        "cron",
+        hour=5,
+        minute=0,
+        id="run_daily_briefing_selection",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300
+    )
 
+    # Daily Briefing Generation  
+    # Runs at 6:30 AM WAT = 5:30 AM UTC
+    scheduler.add_job(
+        run_daily_briefing_generation,
+        "cron",
+        hour=5,
+        minute=30,
+        id="run_daily_briefing_generation",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300
+    )
+
+    scheduler.start()
+    logger.info(
+        "Scheduler started. Fetch and Process "
+        "jobs running every 10 minutes. "
+        "Daily Briefing selection at 6AM WAT, "
+        "generation at 6:30AM WAT."
+    )
 
 def stop_scheduler():
     scheduler.shutdown()

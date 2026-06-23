@@ -77,7 +77,7 @@ Return ONLY a raw JSON object:
     "overwhelmingly_positive_toward_official": true/false,
     "has_clear_news_hook": true/false,
     "single_source_dependent": true/false,
-    "brown_envelope_suspected": true/false,
+    "promotional_alignment_flag": true/false,
     "evidence": "one sentence or null"
   }
 }

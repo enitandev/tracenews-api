@@ -70,7 +70,7 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
             tier = "blog"
         elif behav and behav.get("independence_score") is not None:
             score = behav.get("independence_score")
-            if behav.get("brown_envelope_suspected") or score < 35:
+            if behav.get("promotional_alignment_flag") or score < 35:
                 tier = "pro_establishment"
             elif score < 60:
                 tier = "institutional"

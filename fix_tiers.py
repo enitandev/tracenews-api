@@ -6,7 +6,7 @@ with open("app/main.py", "r") as f:
 
 # For /clusters/by-slug/{slug}
 old_main_slug = """            if behav and behav.get("independence_score") is not None:
-                if behav.get("brown_envelope_suspected"):
+                if behav.get("promotional_alignment_flag"):
                     s["outlet_coverage_tier"] = "captured"
                 else:
                     score = behav.get("independence_score")
@@ -26,7 +26,7 @@ old_main_slug = """            if behav and behav.get("independence_score") is n
 
 new_main_slug = """            if behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
-                if behav.get("brown_envelope_suspected") or score < 35:
+                if behav.get("promotional_alignment_flag") or score < 35:
                     s["outlet_coverage_tier"] = "pro_establishment"
                 elif score < 60:
                     s["outlet_coverage_tier"] = "institutional"
@@ -45,7 +45,7 @@ new_main_slug = """            if behav and behav.get("independence_score") is n
 
 # For /clusters/{id}/deep-dive and /clusters/{id}/framing
 old_main_tier = """            if behav and behav.get("independence_score") is not None:
-                if behav.get("brown_envelope_suspected"):
+                if behav.get("promotional_alignment_flag"):
                     tier = "captured"
                 else:
                     score = behav.get("independence_score")
@@ -60,7 +60,7 @@ old_main_tier = """            if behav and behav.get("independence_score") is n
 
 new_main_tier = """            if behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
-                if behav.get("brown_envelope_suspected") or score < 35:
+                if behav.get("promotional_alignment_flag") or score < 35:
                     tier = "pro_establishment"
                 elif score < 60:
                     tier = "institutional"

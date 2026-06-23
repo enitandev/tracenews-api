@@ -60,7 +60,7 @@ def run_batch():
                 "critical_distance_notes": analysis.get("critical_distance_notes", ""),
                 "accountability_notes": analysis.get("accountability_notes", ""),
                 "story_selection_notes": analysis.get("story_selection_notes", ""),
-                "brown_envelope_suspected": analysis.get("brown_envelope_suspected", False),
+                "promotional_alignment_flag": analysis.get("promotional_alignment_flag", False),
                 "brown_envelope_evidence": analysis.get("brown_envelope_evidence", ""),
                 "story_sample_size": sample_size,
                 "analyzed_at": datetime.now(timezone.utc).isoformat()
@@ -74,7 +74,7 @@ def run_batch():
             results_summary.append({
                 "outlet_slug": slug,
                 "independence_score": analysis.get("independence_score"),
-                "brown_envelope_suspected": analysis.get("brown_envelope_suspected")
+                "promotional_alignment_flag": analysis.get("promotional_alignment_flag")
             })
             
         except Exception as e:
@@ -91,7 +91,7 @@ def run_batch():
     print(f"{'OUTLET SLUG':<30} | {'SCORE':<5} | {'BROWN ENVELOPE'}")
     print("-" * 60)
     for res in results_summary:
-        print(f"{res['outlet_slug']:<30} | {res['independence_score']:<5} | {res['brown_envelope_suspected']}")
+        print(f"{res['outlet_slug']:<30} | {res['independence_score']:<5} | {res['promotional_alignment_flag']}")
     print("*"*60)
 
 if __name__ == "__main__":
