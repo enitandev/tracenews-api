@@ -7,6 +7,7 @@ import urllib.parse
 from bs4 import BeautifulSoup
 from app.db import supabase
 from openai import OpenAI
+from app.entity_tagger import tag_story
 
 logger = logging.getLogger(__name__)
 
@@ -204,7 +205,19 @@ def save_stories(stories: list[dict]) -> int:
             story["embedding"] = res.data[0].embedding
             
             # Save the story
-            supabase.table("stories").insert(story).execute()
+            result = supabase.table("stories").insert(story).execute()
+            inserted_id = result.data[0]['id']
+            
+            try:
+                tag_story(
+                    story_id=inserted_id,
+                    title=story.get('title', ''),
+                    summary=story.get('summary', ''),
+                    category=None
+                )
+            except Exception as e:
+                logger.warning(f"[fetcher] Entity tagging failed for story: {e}")
+                
             saved += 1
         except Exception as e:
             logger.warning(f"Failed to process and save story {story.get('url')}: {e}")
