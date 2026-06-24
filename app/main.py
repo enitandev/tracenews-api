@@ -1,9 +1,11 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
+from fastapi.responses import Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import traceback
+import time
 from app.scheduler import start_scheduler, stop_scheduler
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
@@ -926,3 +928,298 @@ def get_daily_briefing_story(slug: str):
         "location_context": row.get("location_context"),
         "more_from_briefing": more_from_briefing
     }
+
+@app.get("/sitemap.xml")
+async def sitemap():
+    """
+    Generates sitemap.xml for all 
+    clusters with slugs.
+    Served at tracenews.ng/sitemap.xml
+    via Vercel proxy.
+    """
+    try:
+        # Fetch all clusters with slugs
+        # in batches to avoid URL limits
+        all_clusters = []
+        offset = 0
+        batch_size = 1000
+        
+        while True:
+            res = supabase.table(
+                "clusters"
+            ).select(
+                "slug, first_seen_at, "
+                "outlet_count"
+            ).not_(
+                "slug", "is", None
+            ).order(
+                "outlet_count", 
+                desc=True
+            ).range(
+                offset, 
+                offset + batch_size - 1
+            ).execute()
+            
+            batch = res.data or []
+            if not batch:
+                break
+            all_clusters.extend(batch)
+            if len(batch) < batch_size:
+                break
+            offset += batch_size
+        
+        # Also add static pages
+        static_pages = [
+            {
+                "loc": "https://tracenews.ng/",
+                "priority": "1.0",
+                "changefreq": "hourly"
+            },
+            {
+                "loc": "https://tracenews.ng/daily-briefing",
+                "priority": "0.9",
+                "changefreq": "daily"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/politics",
+                "priority": "0.8",
+                "changefreq": "hourly"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/security",
+                "priority": "0.8",
+                "changefreq": "hourly"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/economy",
+                "priority": "0.8",
+                "changefreq": "hourly"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/judiciary",
+                "priority": "0.7",
+                "changefreq": "daily"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/health",
+                "priority": "0.7",
+                "changefreq": "daily"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/education",
+                "priority": "0.7",
+                "changefreq": "daily"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/sports",
+                "priority": "0.6",
+                "changefreq": "daily"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/technology",
+                "priority": "0.6",
+                "changefreq": "daily"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/entertainment",
+                "priority": "0.5",
+                "changefreq": "daily"
+            },
+            {
+                "loc": "https://tracenews.ng/topics/international",
+                "priority": "0.6",
+                "changefreq": "daily"
+            },
+        ]
+        
+        # Build XML
+        urls = []
+        
+        # Static pages first
+        for page in static_pages:
+            urls.append(
+                f"  <url>\n"
+                f"    <loc>{page['loc']}</loc>\n"
+                f"    <changefreq>{page['changefreq']}</changefreq>\n"
+                f"    <priority>{page['priority']}</priority>\n"
+                f"  </url>"
+            )
+        
+        # Story pages
+        for c in all_clusters:
+            if not c.get("slug"):
+                continue
+            loc = f"https://tracenews.ng/story/{c['slug']}"
+            lastmod = (
+                c.get("first_seen_at", "")
+                or ""
+            )[:10]  # YYYY-MM-DD
+            
+            # Priority based on outlet_count
+            count = c.get("outlet_count", 1)
+            if count >= 20:
+                priority = "0.9"
+            elif count >= 10:
+                priority = "0.8"
+            elif count >= 5:
+                priority = "0.7"
+            else:
+                priority = "0.6"
+            
+            url_xml = f"  <url>\n"
+            url_xml += f"    <loc>{loc}</loc>\n"
+            if lastmod:
+                url_xml += f"    <lastmod>{lastmod}</lastmod>\n"
+            url_xml += f"    <changefreq>weekly</changefreq>\n"
+            url_xml += f"    <priority>{priority}</priority>\n"
+            url_xml += f"  </url>"
+            urls.append(url_xml)
+        
+        xml = (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        )
+        xml += "\n".join(urls)
+        xml += "\n</urlset>"
+        
+        return Response(
+            content=xml,
+            media_type="application/xml",
+            headers={
+                "Cache-Control": 
+                    "public, max-age=3600"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Sitemap error: {e}")
+        return Response(
+            content='<?xml version="1.0"?>'
+                    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>',
+            media_type="application/xml"
+        )
+
+
+@app.get("/news-sitemap.xml")
+async def news_sitemap():
+    """
+    Google News sitemap — last 48 hours
+    only, per Google News spec.
+    Max 1000 articles per Google News
+    sitemap spec.
+    """
+    try:
+        from datetime import datetime, timezone, timedelta
+        
+        cutoff = (
+            datetime.now(timezone.utc) - 
+            timedelta(hours=48)
+        ).isoformat()
+        
+        res = supabase.table(
+            "clusters"
+        ).select(
+            "slug, representative_title, "
+            "first_seen_at, category"
+        ).not_(
+            "slug", "is", None
+        ).gte(
+            "first_seen_at", cutoff
+        ).order(
+            "first_seen_at", desc=True
+        ).limit(1000).execute()
+        
+        clusters = res.data or []
+        
+        urls = []
+        for c in clusters:
+            if not c.get("slug"):
+                continue
+            if not c.get(
+                "representative_title"
+            ):
+                continue
+            
+            loc = (
+                f"https://tracenews.ng"
+                f"/story/{c['slug']}"
+            )
+            
+            # Format publication date
+            # for Google News
+            pub_date = c.get(
+                "first_seen_at", ""
+            )
+            if pub_date:
+                # Already ISO format
+                pub_date = pub_date
+            else:
+                pub_date = (
+                    datetime.now(
+                        timezone.utc
+                    ).isoformat()
+                )
+            
+            # Escape title for XML
+            title = (
+                c.get(
+                    "representative_title",
+                    ""
+                )
+                .replace("&", "&amp;")
+                .replace("<", "&lt;")
+                .replace(">", "&gt;")
+                .replace('"', "&quot;")
+            )
+            
+            url_xml = (
+                f"  <url>\n"
+                f"    <loc>{loc}</loc>\n"
+                f"    <news:news>\n"
+                f"      <news:publication>\n"
+                f"        <news:name>"
+                f"TraceNews"
+                f"</news:name>\n"
+                f"        <news:language>"
+                f"en"
+                f"</news:language>\n"
+                f"      </news:publication>\n"
+                f"      <news:publication_date>"
+                f"{pub_date}"
+                f"</news:publication_date>\n"
+                f"      <news:title>"
+                f"{title}"
+                f"</news:title>\n"
+                f"    </news:news>\n"
+                f"  </url>"
+            )
+            urls.append(url_xml)
+        
+        xml = (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>\n'
+            '<urlset '
+            'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+            'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9">\n'
+        )
+        xml += "\n".join(urls)
+        xml += "\n</urlset>"
+        
+        return Response(
+            content=xml,
+            media_type="application/xml",
+            headers={
+                "Cache-Control": 
+                    "public, max-age=1800"
+            }
+        )
+    except Exception as e:
+        logger.error(
+            f"News sitemap error: {e}"
+        )
+        return Response(
+            content='<?xml version="1.0"?>'
+                '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" '
+                'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"/>',
+            media_type="application/xml"
+        )
