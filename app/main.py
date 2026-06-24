@@ -337,7 +337,7 @@ def get_cluster_by_slug(slug: str):
     outlets_map, behavioral_map = get_outlets_cache()
     
     cluster["coverage_stats"] = cluster.get("coverage_stats") or {}
-    live_dist = compute_live_coverage_tier_distribution(
+    live_dist, churnalism_ratio = compute_live_coverage_tier_distribution(
         cluster["id"], 
         stories, 
         outlets_map, 
@@ -348,6 +348,7 @@ def get_cluster_by_slug(slug: str):
     cluster["coverage_stats"]["coverage_tier_distribution"] = live_dist
     cluster["coverage_stats"]["total_coverage"] = sum(live_dist.values())
     cluster["coverage_stats"]["blog_count"] = blog_count
+    cluster["coverage_stats"]["churnalism_ratio"] = churnalism_ratio
     
     # Flatten the outlet metadata directly onto the story object
     for s in stories:
