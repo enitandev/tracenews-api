@@ -950,8 +950,8 @@ async def sitemap():
             ).select(
                 "slug, first_seen_at, "
                 "outlet_count"
-            ).not_(
-                "slug", "is", None
+            ).filter(
+                "slug", "not.is", "null"
             ).order(
                 "outlet_count", 
                 desc=True
@@ -1121,8 +1121,8 @@ async def news_sitemap():
         ).select(
             "slug, representative_title, "
             "first_seen_at, category"
-        ).not_(
-            "slug", "is", None
+        ).filter(
+            "slug", "not.is", "null"
         ).gte(
             "first_seen_at", cutoff
         ).order(
