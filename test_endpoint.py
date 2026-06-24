@@ -15,7 +15,7 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
     # Fetch clusters for the last 30 days
     # Since we need to compute aggregates, we get up to 1000 recent clusters
     clusters_res = supabase.table("clusters").select(
-        "id, slug, representative_title, outlet_count, category, coverage_stats, monitoring_flags, first_seen_at, stories(id, published_at, created_at, image_url, outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, brown_envelope_count, headquarters_city, geopolitical_lean))"
+        "id, slug, representative_title, outlet_count, category, coverage_stats, monitoring_flags, first_seen_at, stories(id, published_at, created_at, image_url, outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean))"
     ).eq("category", category).gte("first_seen_at", thirty_days_str).order("first_seen_at", desc=True).limit(1000).execute()
     
     clusters = clusters_res.data or []
