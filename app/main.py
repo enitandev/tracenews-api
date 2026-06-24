@@ -177,7 +177,32 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
             if tier in tier_dist:
                 tier_dist[tier] += 1
             
-    return tier_dist
+    scored_s2 = []
+    for oid in unique_outlet_ids:
+        if oid not in outlets_map:
+            continue
+        out = outlets_map[oid]
+        slug = out.get('slug')
+        behav = behavioral_map.get(slug) \
+            if slug else None
+        if behav and behav.get(
+            's2_score'
+        ) is not None:
+            scored_s2.append(
+                behav['s2_score']
+            )
+
+    if len(scored_s2) >= 3:
+        republished = sum(
+            1 for s in scored_s2 if s < 40
+        )
+        churnalism_ratio = round(
+            republished / len(scored_s2), 3
+        )
+    else:
+        churnalism_ratio = None
+
+    return tier_dist, churnalism_ratio
 
 def enrich_clusters_with_live_tiers(clusters):
     if not clusters: return clusters
@@ -198,7 +223,7 @@ def enrich_clusters_with_live_tiers(clusters):
     for c in clusters:
         cid = c["id"]
         c_stories = stories_by_cluster.get(cid, [])
-        live_dist = compute_live_coverage_tier_distribution(cid, c_stories, outlets_map, behavioral_map)
+        live_dist, churnalism_ratio = compute_live_coverage_tier_distribution(cid, c_stories, outlets_map, behavioral_map)
         
         blog_count = live_dist.pop("blog", 0)
         
@@ -207,6 +232,7 @@ def enrich_clusters_with_live_tiers(clusters):
         c["coverage_stats"]["coverage_tier_distribution"] = live_dist
         c["coverage_stats"]["total_coverage"] = sum(live_dist.values())
         c["coverage_stats"]["blog_count"] = blog_count
+        c["coverage_stats"]["churnalism_ratio"] = churnalism_ratio
         
     return clusters
 
@@ -376,7 +402,7 @@ def get_cluster_deep_dive(id: str):
     outlets_map, behavioral_map = get_outlets_cache()
     
     cluster["coverage_stats"] = cluster.get("coverage_stats") or {}
-    live_dist = compute_live_coverage_tier_distribution(
+    live_dist, churnalism_ratio = compute_live_coverage_tier_distribution(
         cluster["id"], 
         stories, 
         outlets_map, 
@@ -387,6 +413,7 @@ def get_cluster_deep_dive(id: str):
     cluster["coverage_stats"]["coverage_tier_distribution"] = live_dist
     cluster["coverage_stats"]["total_coverage"] = sum(live_dist.values())
     cluster["coverage_stats"]["blog_count"] = blog_count
+    cluster["coverage_stats"]["churnalism_ratio"] = churnalism_ratio
     
     # Flatten the outlet metadata directly onto the story object
     for s in stories:
