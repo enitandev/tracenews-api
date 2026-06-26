@@ -738,17 +738,30 @@ def get_outlet(slug: str):
         "slug", slug
     ).single().execute()
     
-    stories_res = supabase.table("stories").select(
-        "id, title, url, summary, "
-        "published_at, image_url, "
-        "source_type, cluster_id, "
-        "clusters(slug, outlet_count, "
-        "category, coverage_stats)"
-    ).eq(
-        "outlet_slug", slug
-    ).order("published_at", desc=True).limit(20).execute()
-    
-    stories_data = stories_res.data or []
+    outlet_id = None
+    if result.data:
+        outlet_obj = result.data
+        if isinstance(outlet_obj, list):
+            outlet_id = outlet_obj[0].get("id")
+        elif isinstance(outlet_obj, dict):
+            outlet_id = outlet_obj.get("id")
+
+    stories_data = []
+    if outlet_id:
+        stories_res = supabase.table(
+            "stories"
+        ).select(
+            "id, title, url, summary, "
+            "published_at, image_url, "
+            "source_type, cluster_id, "
+            "clusters(slug, outlet_count, "
+            "category, coverage_stats)"
+        ).eq(
+            "outlet_id", outlet_id
+        ).order(
+            "published_at", desc=True
+        ).limit(20).execute()
+        stories_data = stories_res.data or []
     
     for s in stories_data:
         cluster_data = s.pop("clusters", {}) or {}
