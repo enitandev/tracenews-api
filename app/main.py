@@ -737,12 +737,29 @@ def get_outlet(slug: str):
     result = supabase.table("outlets").select("*").eq(
         "slug", slug
     ).single().execute()
-    stories = supabase.table("stories").select("*").eq(
+    
+    stories_res = supabase.table("stories").select(
+        "id, title, url, summary, "
+        "published_at, image_url, "
+        "source_type, cluster_id, "
+        "clusters(slug, outlet_count, "
+        "category, coverage_stats)"
+    ).eq(
         "outlet_slug", slug
     ).order("published_at", desc=True).limit(20).execute()
+    
+    stories_data = stories_res.data or []
+    
+    for s in stories_data:
+        cluster_data = s.pop("clusters", {}) or {}
+        s["cluster_slug"] = cluster_data.get("slug")
+        s["cluster_outlet_count"] = cluster_data.get("outlet_count")
+        s["cluster_category"] = cluster_data.get("category")
+        s["cluster_coverage_stats"] = cluster_data.get("coverage_stats")
+
     return {
         "outlet": result.data,
-        "recent_stories": stories.data,
+        "recent_stories": stories_data,
     }
 
 
