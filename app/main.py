@@ -824,93 +824,92 @@ def get_politician(slug: str):
     
     total_count = len(story_ids)
     
-    # Get recent stories (last 20)
-    # with cluster data
+    # Get recent stories via join
+    # instead of .in_() with large list
+    recent_res = supabase.table(
+        "story_entities"
+    ).select(
+        "story_id, "
+        "stories(id, title, url, "
+        "published_at, image_url, "
+        "cluster_id, "
+        "clusters(slug, outlet_count, "
+        "category, coverage_stats))"
+    ).eq(
+        "politician_id", pid
+    ).eq(
+        "entity_type", "politician"
+    ).order(
+        "story_id", desc=False
+    ).limit(20).execute()
+
     recent_stories = []
-    if story_ids:
-        # Take most recent 20 story IDs
-        # We'll sort by fetching stories
-        stories_res = supabase.table(
-            "stories"
-        ).select(
-            "id, title, url, "
-            "published_at, image_url, "
-            "cluster_id, "
-            "clusters(slug, outlet_count, "
-            "category, coverage_stats)"
-        ).in_(
-            "id", story_ids[:500]
-        ).order(
-            "published_at", desc=True
-        ).limit(20).execute()
-        
-        for s in (stories_res.data or []):
-            cluster_data = \
-                s.pop("clusters", {}) or {}
-            s["cluster_slug"] = \
-                cluster_data.get("slug")
-            s["cluster_outlet_count"] = \
-                cluster_data.get(
-                    "outlet_count"
-                )
-            s["cluster_category"] = \
-                cluster_data.get("category")
-            s["cluster_coverage_stats"] = \
-                cluster_data.get(
-                    "coverage_stats"
-                )
-            recent_stories.append(s)
+    for e in (recent_res.data or []):
+        s = e.get("stories") or {}
+        if not s:
+            continue
+        cluster_data = \
+            s.pop("clusters", {}) or {}
+        s["cluster_slug"] = \
+            cluster_data.get("slug")
+        s["cluster_outlet_count"] = \
+            cluster_data.get("outlet_count")
+        s["cluster_category"] = \
+            cluster_data.get("category")
+        s["cluster_coverage_stats"] = \
+            cluster_data.get(
+                "coverage_stats"
+            )
+        recent_stories.append(s)
+
+    # Get tier distribution via 
+    # story_entities join
+    dist_res = supabase.table(
+        "story_entities"
+    ).select(
+        "story_id, "
+        "stories(cluster_id, "
+        "clusters(coverage_stats))"
+    ).eq(
+        "politician_id", pid
+    ).eq(
+        "entity_type", "politician"
+    ).execute()
     
-    # Compute tier distribution 
-    # across all mentioned stories
-    # Use coverage_stats from clusters
     tier_dist = {
         "pro_establishment": 0,
         "institutional": 0,
         "adversarial": 0
     }
+    seen_clusters = set()
     stories_with_dist = 0
     
-    if story_ids:
-        # Get coverage stats for 
-        # all clusters mentioning 
-        # this politician
-        all_stories_res = supabase.table(
-            "stories"
-        ).select(
-            "cluster_id, "
-            "clusters(coverage_stats)"
-        ).in_(
-            "id", story_ids
-        ).execute()
+    for e in (dist_res.data or []):
+        s = e.get("stories") or {}
+        cid = s.get("cluster_id")
+        if not cid or cid in seen_clusters:
+            continue
+        seen_clusters.add(cid)
         
-        seen_clusters = set()
-        for s in (all_stories_res.data 
-                  or []):
-            cid = s.get("cluster_id")
-            if cid in seen_clusters:
-                continue
-            seen_clusters.add(cid)
-            
-            cluster_data = \
-                s.get("clusters") or {}
-            stats = cluster_data.get(
-                "coverage_stats", {}
-            ) or {}
-            dist = stats.get(
-                "coverage_tier_distribution",
-                {}
-            ) or {}
-            
-            if dist:
-                stories_with_dist += 1
-                for tier in [
-                    "pro_establishment",
-                    "institutional",
-                    "adversarial"
-                ]:
-                    tier_dist[tier] += \
-                        dist.get(tier, 0)
+        cluster_data = \
+            s.get("clusters") or {}
+        stats = cluster_data.get(
+            "coverage_stats", {}
+        ) or {}
+        dist = stats.get(
+            "coverage_tier_distribution",
+            {}
+        ) or {}
+        
+        if dist:
+            stories_with_dist += 1
+            for tier in [
+                "pro_establishment",
+                "institutional",
+                "adversarial"
+            ]:
+                tier_dist[tier] += \
+                    dist.get(tier, 0)
     
     return {
         "politician": politician,
