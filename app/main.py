@@ -776,6 +776,152 @@ def get_outlet(slug: str):
     }
 
 
+@app.get("/politicians/{slug}")
+def get_politician(slug: str):
+    # Fetch politician by slug
+    result = supabase.table(
+        "politicians"
+    ).select(
+        "id, full_name, common_name, "
+        "slug, party, state, "
+        "geopolitical_region, category, "
+        "current_position, active, "
+        "wikipedia_image_url"
+    ).eq(
+        "slug", slug
+    ).eq(
+        "active", True
+    ).single().execute()
+    
+    if not result.data:
+        from fastapi import HTTPException
+        raise HTTPException(
+            status_code=404,
+            detail="Politician not found"
+        )
+    
+    politician = result.data
+    pid = politician["id"]
+    
+    # Fetch story entities for 
+    # this politician
+    # Get cluster IDs where this 
+    # politician is mentioned
+    entities_res = supabase.table(
+        "story_entities"
+    ).select(
+        "story_id"
+    ).eq(
+        "politician_id", pid
+    ).eq(
+        "entity_type", "politician"
+    ).execute()
+    
+    story_ids = [
+        e["story_id"] 
+        for e in (entities_res.data or [])
+    ]
+    
+    total_count = len(story_ids)
+    
+    # Get recent stories (last 20)
+    # with cluster data
+    recent_stories = []
+    if story_ids:
+        # Take most recent 20 story IDs
+        # We'll sort by fetching stories
+        stories_res = supabase.table(
+            "stories"
+        ).select(
+            "id, title, url, "
+            "published_at, image_url, "
+            "cluster_id, "
+            "clusters(slug, outlet_count, "
+            "category, coverage_stats)"
+        ).in_(
+            "id", story_ids[:500]
+        ).order(
+            "published_at", desc=True
+        ).limit(20).execute()
+        
+        for s in (stories_res.data or []):
+            cluster_data = \
+                s.pop("clusters", {}) or {}
+            s["cluster_slug"] = \
+                cluster_data.get("slug")
+            s["cluster_outlet_count"] = \
+                cluster_data.get(
+                    "outlet_count"
+                )
+            s["cluster_category"] = \
+                cluster_data.get("category")
+            s["cluster_coverage_stats"] = \
+                cluster_data.get(
+                    "coverage_stats"
+                )
+            recent_stories.append(s)
+    
+    # Compute tier distribution 
+    # across all mentioned stories
+    # Use coverage_stats from clusters
+    tier_dist = {
+        "pro_establishment": 0,
+        "institutional": 0,
+        "adversarial": 0
+    }
+    stories_with_dist = 0
+    
+    if story_ids:
+        # Get coverage stats for 
+        # all clusters mentioning 
+        # this politician
+        all_stories_res = supabase.table(
+            "stories"
+        ).select(
+            "cluster_id, "
+            "clusters(coverage_stats)"
+        ).in_(
+            "id", story_ids
+        ).execute()
+        
+        seen_clusters = set()
+        for s in (all_stories_res.data 
+                  or []):
+            cid = s.get("cluster_id")
+            if cid in seen_clusters:
+                continue
+            seen_clusters.add(cid)
+            
+            cluster_data = \
+                s.get("clusters") or {}
+            stats = cluster_data.get(
+                "coverage_stats", {}
+            ) or {}
+            dist = stats.get(
+                "coverage_tier_distribution",
+                {}
+            ) or {}
+            
+            if dist:
+                stories_with_dist += 1
+                for tier in [
+                    "pro_establishment",
+                    "institutional",
+                    "adversarial"
+                ]:
+                    tier_dist[tier] += \
+                        dist.get(tier, 0)
+    
+    return {
+        "politician": politician,
+        "total_story_count": total_count,
+        "tier_distribution": tier_dist,
+        "stories_with_distribution": 
+            stories_with_dist,
+        "recent_stories": recent_stories
+    }
+
+
 @app.get("/daily-briefing")
 def get_daily_briefing():
     from datetime import datetime, timezone, timedelta
