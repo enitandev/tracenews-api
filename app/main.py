@@ -1113,35 +1113,21 @@ async def sitemap():
     via Vercel proxy.
     """
     try:
-        # Fetch all clusters with slugs
-        # in batches to avoid URL limits
-        all_clusters = []
-        offset = 0
-        batch_size = 1000
-        
-        while True:
-            res = supabase.table(
-                "clusters"
-            ).select(
-                "slug, first_seen_at, "
-                "outlet_count"
-            ).filter(
-                "slug", "not.is", "null"
-            ).order(
-                "outlet_count", 
-                desc=True
-            ).range(
-                offset, 
-                offset + batch_size - 1
-            ).execute()
-            
-            batch = res.data or []
-            if not batch:
-                break
-            all_clusters.extend(batch)
-            if len(batch) < batch_size:
-                break
-            offset += batch_size
+        res = supabase.table(
+            "clusters"
+        ).select(
+            "slug, first_seen_at, "
+            "outlet_count"
+        ).filter(
+            "slug", "not.is", "null"
+        ).gte(
+            "outlet_count", 2
+        ).order(
+            "outlet_count",
+            desc=True
+        ).limit(50000).execute()
+
+        all_clusters = res.data or []
         
         # Also add static pages
         static_pages = [
