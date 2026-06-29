@@ -1523,21 +1523,40 @@ async def sitemap_stories():
     under the 50,000 URL limit.
     """
     try:
-        res = supabase.table(
-            "clusters"
-        ).select(
-            "slug, first_seen_at, "
-            "outlet_count"
-        ).filter(
-            "slug", "not.is", "null"
-        ).gte(
-            "outlet_count", 2
-        ).order(
-            "outlet_count",
-            desc=True
-        ).limit(49000).execute()
+        clusters = []
+        offset = 0
+        page_size = 1000
         
-        clusters = res.data or []
+        while True:
+            res = supabase.table(
+                "clusters"
+            ).select(
+                "slug, first_seen_at, "
+                "outlet_count"
+            ).filter(
+                "slug", "not.is", "null"
+            ).gte(
+                "outlet_count", 2
+            ).order(
+                "outlet_count",
+                desc=True
+            ).range(
+                offset,
+                offset + page_size - 1
+            ).execute()
+            
+            batch = res.data or []
+            if not batch:
+                break
+            clusters.extend(batch)
+            if len(batch) < page_size:
+                break
+            offset += page_size
+            
+            # Safety cap at 49,000
+            if len(clusters) >= 49000:
+                clusters = clusters[:49000]
+                break
         
         urls = []
         for c in clusters:
