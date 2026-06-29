@@ -1463,3 +1463,374 @@ async def news_sitemap():
                 'xmlns:news="http://www.google.com/schemas/sitemap-news/0.9"/>',
             media_type="application/xml"
         )
+
+@app.get("/sitemap-index.xml")
+async def sitemap_index():
+    """
+    Sitemap index pointing to all 
+    child sitemaps.
+    Submit this to Search Console 
+    instead of /sitemap.xml.
+    """
+    base = "https://tracenews.ng"
+    
+    from datetime import datetime, timezone
+    today = datetime.now(
+        timezone.utc
+    ).strftime("%Y-%m-%d")
+    
+    sitemaps = [
+        f"{base}/sitemap-stories.xml",
+        f"{base}/sitemap-outlets.xml",
+        f"{base}/sitemap-politicians.xml",
+        f"{base}/sitemap-static.xml",
+    ]
+    
+    urls = []
+    for loc in sitemaps:
+        urls.append(
+            f"  <sitemap>\n"
+            f"    <loc>{loc}</loc>\n"
+            f"    <lastmod>{today}</lastmod>\n"
+            f"  </sitemap>"
+        )
+    
+    xml = (
+        '<?xml version="1.0" '
+        'encoding="UTF-8"?>\n'
+        '<sitemapindex xmlns="'
+        'http://www.sitemaps.org/'
+        'schemas/sitemap/0.9">\n'
+    )
+    xml += "\n".join(urls)
+    xml += "\n</sitemapindex>"
+    
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={
+            "Cache-Control": 
+                "public, max-age=3600"
+        }
+    )
+
+@app.get("/sitemap-stories.xml")
+async def sitemap_stories():
+    """
+    All story clusters with 
+    outlet_count >= 2.
+    Capped at 49,000 to stay 
+    under the 50,000 URL limit.
+    """
+    try:
+        res = supabase.table(
+            "clusters"
+        ).select(
+            "slug, first_seen_at, "
+            "outlet_count"
+        ).filter(
+            "slug", "not.is", "null"
+        ).gte(
+            "outlet_count", 2
+        ).order(
+            "outlet_count",
+            desc=True
+        ).limit(49000).execute()
+        
+        clusters = res.data or []
+        
+        urls = []
+        for c in clusters:
+            if not c.get("slug"):
+                continue
+            loc = (
+                f"https://tracenews.ng"
+                f"/story/{c['slug']}"
+            )
+            lastmod = (
+                c.get(
+                    "first_seen_at", ""
+                ) or ""
+            )[:10]
+            count = c.get(
+                "outlet_count", 1
+            )
+            if count >= 20:
+                priority = "0.9"
+            elif count >= 10:
+                priority = "0.8"
+            elif count >= 5:
+                priority = "0.7"
+            else:
+                priority = "0.6"
+            
+            url_xml = f"  <url>\n"
+            url_xml += (
+                f"    <loc>{loc}</loc>\n"
+            )
+            if lastmod:
+                url_xml += (
+                    f"    <lastmod>"
+                    f"{lastmod}"
+                    f"</lastmod>\n"
+                )
+            url_xml += (
+                f"    <changefreq>"
+                f"weekly"
+                f"</changefreq>\n"
+            )
+            url_xml += (
+                f"    <priority>"
+                f"{priority}"
+                f"</priority>\n"
+            )
+            url_xml += f"  </url>"
+            urls.append(url_xml)
+        
+        xml = (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://'
+            'www.sitemaps.org/schemas/'
+            'sitemap/0.9">\n'
+        )
+        xml += "\n".join(urls)
+        xml += "\n</urlset>"
+        
+        return Response(
+            content=xml,
+            media_type="application/xml",
+            headers={
+                "Cache-Control": 
+                    "public, max-age=3600"
+            }
+        )
+    except Exception as e:
+        logger.error(
+            f"Stories sitemap error: {e}"
+        )
+        return Response(
+            content=(
+                '<?xml version="1.0"?>'
+                '<urlset xmlns="http://'
+                'www.sitemaps.org/schemas/'
+                'sitemap/0.9"/>'
+            ),
+            media_type="application/xml"
+        )
+
+@app.get("/sitemap-outlets.xml")
+async def sitemap_outlets():
+    try:
+        res = supabase.table(
+            "outlets"
+        ).select(
+            "slug"
+        ).filter(
+            "slug", "not.is", "null"
+        ).eq(
+            "active", True
+        ).execute()
+        
+        outlets = res.data or []
+        
+        urls = []
+        for o in outlets:
+            if not o.get("slug"):
+                continue
+            loc = (
+                f"https://tracenews.ng"
+                f"/outlets/{o['slug']}"
+            )
+            url_xml = (
+                f"  <url>\n"
+                f"    <loc>{loc}</loc>\n"
+                f"    <changefreq>"
+                f"weekly"
+                f"</changefreq>\n"
+                f"    <priority>"
+                f"0.8"
+                f"</priority>\n"
+                f"  </url>"
+            )
+            urls.append(url_xml)
+        
+        xml = (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://'
+            'www.sitemaps.org/schemas/'
+            'sitemap/0.9">\n'
+        )
+        xml += "\n".join(urls)
+        xml += "\n</urlset>"
+        
+        return Response(
+            content=xml,
+            media_type="application/xml",
+            headers={
+                "Cache-Control": 
+                    "public, max-age=86400"
+            }
+        )
+    except Exception as e:
+        logger.error(
+            f"Outlets sitemap error: {e}"
+        )
+        return Response(
+            content=(
+                '<?xml version="1.0"?>'
+                '<urlset xmlns="http://'
+                'www.sitemaps.org/schemas/'
+                'sitemap/0.9"/>'
+            ),
+            media_type="application/xml"
+        )
+
+@app.get("/sitemap-politicians.xml")
+async def sitemap_politicians():
+    try:
+        res = supabase.table(
+            "politicians"
+        ).select(
+            "slug, updated_at"
+        ).filter(
+            "slug", "not.is", "null"
+        ).eq(
+            "active", True
+        ).execute()
+        
+        politicians = res.data or []
+        
+        urls = []
+        for p in politicians:
+            if not p.get("slug"):
+                continue
+            loc = (
+                f"https://tracenews.ng"
+                f"/politicians/{p['slug']}"
+            )
+            lastmod = (
+                p.get("updated_at", "") 
+                or ""
+            )[:10]
+            
+            url_xml = f"  <url>\n"
+            url_xml += (
+                f"    <loc>{loc}</loc>\n"
+            )
+            if lastmod:
+                url_xml += (
+                    f"    <lastmod>"
+                    f"{lastmod}"
+                    f"</lastmod>\n"
+                )
+            url_xml += (
+                f"    <changefreq>"
+                f"weekly"
+                f"</changefreq>\n"
+                f"    <priority>"
+                f"0.8"
+                f"</priority>\n"
+                f"  </url>"
+            )
+            urls.append(url_xml)
+        
+        xml = (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://'
+            'www.sitemaps.org/schemas/'
+            'sitemap/0.9">\n'
+        )
+        xml += "\n".join(urls)
+        xml += "\n</urlset>"
+        
+        return Response(
+            content=xml,
+            media_type="application/xml",
+            headers={
+                "Cache-Control": 
+                    "public, max-age=86400"
+            }
+        )
+    except Exception as e:
+        logger.error(
+            f"Politicians sitemap error: {e}"
+        )
+        return Response(
+            content=(
+                '<?xml version="1.0"?>'
+                '<urlset xmlns="http://'
+                'www.sitemaps.org/schemas/'
+                'sitemap/0.9"/>'
+            ),
+            media_type="application/xml"
+        )
+
+@app.get("/sitemap-static.xml")
+async def sitemap_static():
+    static_pages = [
+        ("https://tracenews.ng/", 
+         "1.0", "hourly"),
+        ("https://tracenews.ng/daily-briefing", 
+         "0.9", "daily"),
+        ("https://tracenews.ng/methodology", 
+         "0.8", "monthly"),
+        ("https://tracenews.ng/corrections", 
+         "0.5", "monthly"),
+        ("https://tracenews.ng/topics/politics", 
+         "0.8", "hourly"),
+        ("https://tracenews.ng/topics/security", 
+         "0.8", "hourly"),
+        ("https://tracenews.ng/topics/economy", 
+         "0.8", "hourly"),
+        ("https://tracenews.ng/topics/judiciary", 
+         "0.7", "daily"),
+        ("https://tracenews.ng/topics/health", 
+         "0.7", "daily"),
+        ("https://tracenews.ng/topics/education", 
+         "0.7", "daily"),
+        ("https://tracenews.ng/topics/sports", 
+         "0.6", "daily"),
+        ("https://tracenews.ng/topics/technology", 
+         "0.6", "daily"),
+        ("https://tracenews.ng/topics/entertainment", 
+         "0.5", "daily"),
+        ("https://tracenews.ng/topics/international", 
+         "0.6", "daily"),
+    ]
+    
+    urls = []
+    for loc, priority, changefreq \
+            in static_pages:
+        urls.append(
+            f"  <url>\n"
+            f"    <loc>{loc}</loc>\n"
+            f"    <changefreq>"
+            f"{changefreq}"
+            f"</changefreq>\n"
+            f"    <priority>"
+            f"{priority}"
+            f"</priority>\n"
+            f"  </url>"
+        )
+    
+    xml = (
+        '<?xml version="1.0" '
+        'encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://'
+        'www.sitemaps.org/schemas/'
+        'sitemap/0.9">\n'
+    )
+    xml += "\n".join(urls)
+    xml += "\n</urlset>"
+    
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={
+            "Cache-Control": 
+                "public, max-age=86400"
+        }
+    )
