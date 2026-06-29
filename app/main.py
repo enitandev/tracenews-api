@@ -1250,6 +1250,85 @@ async def sitemap():
             url_xml += f"  </url>"
             urls.append(url_xml)
         
+        # Fetch all active politicians 
+        # with slugs
+        pol_res = supabase.table(
+            "politicians"
+        ).select(
+            "slug, updated_at"
+        ).not_(
+            "slug", "is", "null"
+        ).eq(
+            "active", True
+        ).execute()
+        
+        politicians_data = pol_res.data or []
+        
+        # Add politician URLs to sitemap
+        for p in politicians_data:
+            if not p.get("slug"):
+                continue
+            loc = (
+                f"https://tracenews.ng"
+                f"/politicians/{p['slug']}"
+            )
+            lastmod = (
+                p.get("updated_at", "") or ""
+            )[:10]
+            
+            url_xml = f"  <url>\n"
+            url_xml += f"    <loc>{loc}</loc>\n"
+            if lastmod:
+                url_xml += (
+                    f"    <lastmod>"
+                    f"{lastmod}"
+                    f"</lastmod>\n"
+                )
+            url_xml += (
+                f"    <changefreq>"
+                f"weekly"
+                f"</changefreq>\n"
+            )
+            url_xml += (
+                f"    <priority>0.7</priority>\n"
+            )
+            url_xml += f"  </url>"
+            urls.append(url_xml)
+
+        # Fetch all active outlets 
+        # with slugs
+        outlet_res = supabase.table(
+            "outlets"
+        ).select(
+            "slug"
+        ).not_(
+            "slug", "is", "null"
+        ).eq(
+            "active", True
+        ).execute()
+        
+        outlets_data = outlet_res.data or []
+        
+        for o in outlets_data:
+            if not o.get("slug"):
+                continue
+            loc = (
+                f"https://tracenews.ng"
+                f"/outlets/{o['slug']}"
+            )
+            url_xml = f"  <url>\n"
+            url_xml += f"    <loc>{loc}</loc>\n"
+            url_xml += (
+                f"    <changefreq>"
+                f"weekly"
+                f"</changefreq>\n"
+            )
+            url_xml += (
+                f"    <priority>0.7</priority>\n"
+            )
+            url_xml += f"  </url>"
+            urls.append(url_xml)
+        
         xml = (
             '<?xml version="1.0" '
             'encoding="UTF-8"?>\n'
