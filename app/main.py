@@ -1256,8 +1256,8 @@ async def sitemap():
             "politicians"
         ).select(
             "slug, updated_at"
-        ).not_(
-            "slug", "is", "null"
+        ).filter(
+            "slug", "not.is", "null"
         ).eq(
             "active", True
         ).execute()
@@ -1301,8 +1301,8 @@ async def sitemap():
             "outlets"
         ).select(
             "slug"
-        ).not_(
-            "slug", "is", "null"
+        ).filter(
+            "slug", "not.is", "null"
         ).eq(
             "active", True
         ).execute()
