@@ -1853,3 +1853,70 @@ async def sitemap_static():
                 "public, max-age=86400"
         }
     )
+
+@app.get("/sitemap-health")
+async def sitemap_health():
+    """
+    Checks all sitemap endpoints 
+    return URLs. Returns 200 if 
+    healthy, 503 if any sitemap 
+    is empty.
+    """
+    import httpx
+    
+    base = "https://tracenews.ng"
+    sitemaps_to_check = [
+        "/sitemap-stories.xml",
+        "/sitemap-outlets.xml",
+        "/sitemap-politicians.xml",
+        "/sitemap-static.xml",
+        "/news-sitemap.xml"
+    ]
+    
+    results = {}
+    all_healthy = True
+    
+    async with httpx.AsyncClient(
+        timeout=15
+    ) as client:
+        for path in sitemaps_to_check:
+            try:
+                r = await client.get(
+                    f"{base}{path}"
+                )
+                count = r.text.count(
+                    "<url>"
+                )
+                healthy = count > 0
+                results[path] = {
+                    "url_count": count,
+                    "healthy": healthy,
+                    "status_code": 
+                        r.status_code
+                }
+                if not healthy:
+                    all_healthy = False
+            except Exception as e:
+                results[path] = {
+                    "error": str(e),
+                    "healthy": False
+                }
+                all_healthy = False
+    
+    from fastapi.responses import (
+        JSONResponse
+    )
+    return JSONResponse(
+        status_code=200 
+            if all_healthy else 503,
+        content={
+            "healthy": all_healthy,
+            "checked_at": 
+                __import__('datetime')
+                .datetime.now(
+                    __import__('datetime')
+                    .timezone.utc
+                ).isoformat(),
+            "sitemaps": results
+        }
+    )

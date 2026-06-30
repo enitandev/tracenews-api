@@ -99,6 +99,60 @@ def run_daily_briefing_generation():
         )
 
 
+def run_sitemap_health_check():
+    """
+    Daily check that all sitemaps 
+    have URLs. Logs an error if 
+    any sitemap is empty so it 
+    shows in Railway logs.
+    """
+    import asyncio
+    
+    async def _check():
+        import httpx
+        
+        base = "https://tracenews.ng"
+        sitemaps_to_check = [
+            "/sitemap-stories.xml",
+            "/sitemap-outlets.xml",
+            "/sitemap-politicians.xml",
+            "/sitemap-static.xml",
+            "/news-sitemap.xml"
+        ]
+        
+        async with httpx.AsyncClient(
+            timeout=15
+        ) as client:
+            for path in sitemaps_to_check:
+                try:
+                    r = await client.get(
+                        f"{base}{path}"
+                    )
+                    count = r.text.count(
+                        "<url>"
+                    )
+                    if count == 0:
+                        logger.error(
+                            f"SITEMAP HEALTH "
+                            f"ALERT: {path} "
+                            f"returned 0 URLs!"
+                        )
+                    else:
+                        logger.info(
+                            f"Sitemap health "
+                            f"OK: {path} has "
+                            f"{count} URLs"
+                        )
+                except Exception as e:
+                    logger.error(
+                        f"SITEMAP HEALTH "
+                        f"ALERT: {path} "
+                        f"failed: {e}"
+                    )
+                    
+    asyncio.run(_check())
+
+
 def start_scheduler():
     interval = int(os.environ.get("FETCH_INTERVAL_MINUTES", 10))
     
@@ -154,6 +208,20 @@ def start_scheduler():
         hour=5,
         minute=30,
         id="run_daily_briefing_generation",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300
+    )
+
+    # Sitemap Health Check
+    # Runs at 7:00 AM WAT = 6:00 AM UTC
+    scheduler.add_job(
+        run_sitemap_health_check,
+        "cron",
+        hour=6,
+        minute=0,
+        id="run_sitemap_health_check",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
