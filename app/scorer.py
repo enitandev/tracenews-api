@@ -210,7 +210,7 @@ def run_scoring(all_time: bool = False):
                 })
 
             # 5. Update the Clusters table
-            safe_execute(supabase.table("clusters").update({"coverage_stats": coverage_stats, "monitoring_flags": monitoring_flags}).eq("id", cluster["id"]))
+            safe_execute(supabase.table("clusters").update({"coverage_stats": coverage_stats}).eq("id", cluster["id"]))
 
             # --- coverage snapshot ---
             try:
