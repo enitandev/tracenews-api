@@ -188,26 +188,6 @@ def run_scoring(all_time: bool = False):
                     "icon": "alert-triangle"
                 })
 
-            # Rule 3: Fast Brown Envelope Detection (Identical Text Overlap)
-            # We do a rapid text similarity check across summaries
-            has_identical_pr = False
-            if total_stories >= 3:
-                summaries = [(s.get("summary") or "").strip() for s in stories if len(s.get("summary") or "") > 50]
-                if len(summaries) >= 2:
-                    # Compare first 100 chars of summaries
-                    prefixes = [s[:100].lower() for s in summaries]
-                    # If any prefix appears 3 or more times exactly, it's a copy-paste PR
-                    counts = {p: prefixes.count(p) for p in set(prefixes)}
-                    if any(c >= 3 for c in counts.values()):
-                        has_identical_pr = True
-
-            if has_identical_pr:
-                monitoring_flags.append({
-                    "type": "BROWN_ENVELOPE",
-                    "severity": "medium",
-                    "message": "High textual overlap detected. Coverage likely driven by synchronized Press Releases.",
-                    "icon": "copy"
-                })
 
             # 5. Update the Clusters table
             safe_execute(supabase.table("clusters").update({"coverage_stats": coverage_stats}).eq("id", cluster["id"]))
