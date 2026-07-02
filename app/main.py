@@ -1796,6 +1796,8 @@ async def sitemap_static():
          "0.9", "daily"),
         ("https://tracenews.ng/methodology", 
          "0.8", "monthly"),
+        ("https://tracenews.ng/about", 
+         "0.8", "monthly"),
         ("https://tracenews.ng/corrections", 
          "0.5", "monthly"),
         ("https://tracenews.ng/topics/politics", 
