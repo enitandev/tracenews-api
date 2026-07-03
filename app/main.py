@@ -786,7 +786,8 @@ def get_politician(slug: str):
         "slug, party, state, "
         "geopolitical_region, category, "
         "current_position, active, "
-        "wikipedia_image_url"
+        "wikipedia_image_url, "
+        "publication_status"
     ).eq(
         "slug", slug
     ).eq(
@@ -801,6 +802,29 @@ def get_politician(slug: str):
         )
     
     politician = result.data
+    pub_status = politician.get(
+        "publication_status", "published"
+    )
+
+    if pub_status == "excluded":
+        from fastapi.responses import Response
+        return Response(
+            content='{"detail": "Gone — '
+            'this page has been permanently '
+            'withdrawn."}',
+            status_code=410,
+            media_type="application/json"
+        )
+
+    if pub_status == "pending_review":
+        from fastapi.responses import Response
+        return Response(
+            content='{"detail": '
+            '"Not found"}',
+            status_code=404,
+            media_type="application/json"
+        )
+
     pid = politician["id"]
     
     # Fetch story entities for 
@@ -1712,11 +1736,14 @@ async def sitemap_politicians():
         res = supabase.table(
             "politicians"
         ).select(
-            "slug, updated_at"
+            "slug, updated_at, "
+            "publication_status"
         ).filter(
             "slug", "not.is", "null"
         ).eq(
             "active", True
+        ).eq(
+            "publication_status", "published"
         ).execute()
         
         politicians = res.data or []
