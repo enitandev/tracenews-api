@@ -197,9 +197,9 @@ def generate_briefing_for_story(briefing_row):
 
         article_context = ""
         tier_labels = {
-            "adversarial": "ADVERSARIAL OUTLETS",
-            "institutional": "INSTITUTIONAL OUTLETS", 
-            "pro_establishment": "PRO-ESTABLISHMENT OUTLETS",
+            "adversarial": "WATCHDOG OUTLETS",
+            "institutional": "MAINSTREAM OUTLETS", 
+            "pro_establishment": "GOVERNMENT-ALIGNED OUTLETS",
             "unscored": "OTHER OUTLETS"
         }
         for tier, label in tier_labels.items():

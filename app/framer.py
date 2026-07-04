@@ -153,9 +153,9 @@ def generate_single_cluster_framing(cluster_id: str, title: str = None, behavior
             if tier in groups:
                 groups[tier].append(s)
 
-    pro = generate_tier_summary(groups["pro_establishment"], "Pro-Establishment").get("bullets", [])
-    inst = generate_tier_summary(groups["institutional"], "Institutional").get("bullets", [])
-    adv = generate_tier_summary(groups["adversarial"], "Adversarial").get("bullets", [])
+    pro = generate_tier_summary(groups["pro_establishment"], "Government-aligned").get("bullets", [])
+    inst = generate_tier_summary(groups["institutional"], "Mainstream").get("bullets", [])
+    adv = generate_tier_summary(groups["adversarial"], "Watchdog").get("bullets", [])
     
     comp = generate_comparison_summary(pro, inst, adv).get("bullets", [])
     
