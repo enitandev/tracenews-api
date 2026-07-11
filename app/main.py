@@ -11,7 +11,7 @@ from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 from app.db import supabase
 from app.monitoring_spirit import resolve_verdict
-from app.monitoring_spirit_shadow import get_sourcing_info
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,79 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def get_sourcing_info(
+    cluster_stories,
+    outlets_map,
+    behavioral_map,
+    tier_a
+):
+    """
+    Computes sourcing info for 
+    the Monitoring Spirit engine.
+    Uses same tier-assignment logic
+    as compute_live_coverage_tier_distribution.
+    """
+    loud_tier_outlet_ids = set()
+    has_original = False
+    
+    seen_outlet_ids = set()
+    for s in cluster_stories:
+        oid = s.get("outlet_id")
+        if not oid or oid in seen_outlet_ids:
+            continue
+        seen_outlet_ids.add(oid)
+        
+        if oid not in outlets_map:
+            continue
+        out = outlets_map[oid]
+        slug = out.get("slug")
+        behav = behavioral_map.get(slug) \
+            if slug else None
+        
+        tier = "unscored"
+        if out.get("credibility_tier") \
+                == "blog":
+            tier = "blog"
+        elif behav and behav.get(
+            "independence_score"
+        ) is not None:
+            score = behav.get(
+                "independence_score"
+            )
+            if behav.get(
+                "promotional_alignment_flag"
+            ) or score < 35:
+                tier = "pro_establishment"
+            elif score < 60:
+                tier = "institutional"
+            else:
+                tier = "adversarial"
+        else:
+            g_align = out.get(
+                "government_alignment"
+            )
+            if g_align == "pro_government":
+                tier = "pro_establishment"
+            elif g_align == "opposition":
+                tier = "adversarial"
+            elif g_align == "neutral":
+                tier = "institutional"
+        
+        if tier == tier_a:
+            loud_tier_outlet_ids.add(oid)
+            if behav and behav.get(
+                "s2_score", 0
+            ) and behav["s2_score"] >= 50:
+                has_original = True
+    
+    return {
+        "distinct_outlets_in_loud_tier":
+            len(loud_tier_outlet_ids),
+        "has_original_reporting_outlet":
+            has_original
+    }
+
 
 
 # ── HEALTH ──────────────────────────────────────────
