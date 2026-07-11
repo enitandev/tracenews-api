@@ -10,6 +10,8 @@ from app.scheduler import start_scheduler, stop_scheduler
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 from app.db import supabase
+from app.monitoring_spirit import resolve_verdict
+from app.monitoring_spirit_shadow import get_sourcing_info
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -386,6 +388,67 @@ def get_cluster_by_slug(slug: str):
                 else:
                     s["outlet_coverage_tier"] = "unscored"
 
+    # --- MONITORING SPIRIT VERDICT (LIVE ATOMIC COMPUTATION) ---
+    try:
+        # Determine the "loudest" tier for sourcing check
+        loud_tier = "unscored"
+        max_count = 0
+        for t, c in live_dist.items():
+            if t != "blog" and c > max_count:
+                max_count = c
+                loud_tier = t
+        
+        # 1. Synthesize sourcing info using the ported logic
+        sourcing_info = get_sourcing_info(
+            stories,
+            outlets_map,
+            behavioral_map,
+            loud_tier
+        )
+        
+        # 2. Extract entity and money figure tags
+        has_entity_tag = False
+        has_money_figure = False
+        for s in stories:
+            for t in s.get("story_bias_tags", []):
+                cat_id = t.get("bias_category_id")
+                if cat_id == "entity_mentions":
+                    has_entity_tag = True
+                elif cat_id == "money_figures":
+                    has_money_figure = True
+        
+        # 3. Query the 3 most recent snapshots for persistence
+        snap_res = supabase.table("coverage_snapshots") \
+            .select("coverage_tier_distribution, outlet_count, snapshot_at") \
+            .eq("cluster_id", cluster["id"]) \
+            .order("snapshot_at", desc=True) \
+            .limit(3) \
+            .execute()
+            
+        snapshot_reads = snap_res.data or []
+        
+        # 4. Resolve verdict live
+        verdict_res = resolve_verdict(
+            tier_distribution=live_dist,
+            total_outlets=cluster["coverage_stats"]["total_coverage"],
+            churnalism_ratio=churnalism_ratio,
+            category=cluster.get("category"),
+            has_entity_tag=has_entity_tag,
+            has_money_figure=has_money_figure,
+            snapshot_reads=snapshot_reads,
+            sourcing_info=sourcing_info
+        )
+        
+        # Attach to the response. If anything above failed, this won't execute,
+        # guaranteeing Invariant 1 (withhold rather than render stale).
+        cluster["monitoring_spirit_live"] = verdict_res
+        cluster["monitoring_spirit_live"]["snapshots"] = snapshot_reads
+        
+    except Exception as e:
+        logger.error(f"Live verdict computation failed for cluster {cluster['id']}: {e}")
+        # Invariant 1: do not set monitoring_spirit_live
+        pass
+        
     return {"cluster": cluster, "stories": stories}
 
 
@@ -531,42 +594,17 @@ async def story_og(slug: str):
 
 @app.get("/clusters/{id}/framing")
 def get_cluster_framing(id: str, alignment: str):
-    """Fetch cached AI framing summary for a specific alignment."""
-    target_tier = alignment
-    if target_tier not in ["pro_establishment", "institutional", "adversarial", "all", "comparison"]:
-        return {"bullets": []}
-
-    cluster_res = supabase.table("clusters").select("framing_cache").eq("id", id).execute()
-    cluster_data = cluster_res.data[0] if cluster_res.data else {}
-    framing_cache = cluster_data.get("framing_cache") or {}
-
-    from app.framer import generate_single_cluster_framing
-    
-    needs_regen = False
-    if target_tier not in framing_cache:
-        needs_regen = True
-    else:
-        bullets = framing_cache[target_tier]
-        if not bullets or len(bullets) == 0:
-            needs_regen = True
-        elif any("insufficient" in str(b).lower() for b in bullets):
-            needs_regen = True
-            
-    if needs_regen:
-        try:
-            new_framing = generate_single_cluster_framing(id)
-            if new_framing:
-                framing_cache = new_framing
-        except Exception as e:
-            logger.error(f"[get_cluster_framing] regen failed for {id}: {type(e).__name__}: {e}")
-            logger.error(traceback.format_exc())
-
-    if target_tier in framing_cache:
-        bullets = framing_cache[target_tier]
-        if bullets and len(bullets) > 0 and not any("insufficient" in str(b).lower() for b in bullets):
-            return {"bullets": bullets, "cached": True}
-        
-    return {"bullets": [], "cached": False}
+    """
+    SUPPRESSED — Bridge Chambers 
+    ruling 9 Jul 2026.
+    AI-generated characterisation 
+    of named outlets' coverage 
+    cannot publish without human 
+    verification gate. 
+    Returns empty pending redesign.
+    """
+    return {"bullets": [], 
+            "suppressed": True}
 
 
 class FeedbackRequest(BaseModel):
