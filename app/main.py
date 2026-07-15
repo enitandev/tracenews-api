@@ -42,6 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.routers import corrections
+app.include_router(corrections.router)
+
 def get_sourcing_info(
     cluster_stories,
     outlets_map,
