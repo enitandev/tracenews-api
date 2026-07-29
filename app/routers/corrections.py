@@ -4,6 +4,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import os
 from app.db import supabase
+from app.admin_auth import require_admin
 
 router = APIRouter()
 
@@ -51,15 +52,6 @@ async def submit_correction(payload: CorrectionSubmit):
 # --- Internal admin auth ---
 # NOT the reader-facing NDPA auth (unscoped). A separate, lightweight gate
 # for internal staff only. Never reuse this mechanism for anything reader-facing.
-
-ADMIN_API_TOKEN = os.environ.get("ADMIN_API_TOKEN")  # fail loudly if unset — no default
-if not ADMIN_API_TOKEN:
-    raise RuntimeError("ADMIN_API_TOKEN is not set")
-
-def require_admin(authorization: Optional[str] = Header(None)):
-    if not authorization or authorization != f"Bearer {ADMIN_API_TOKEN}":
-        raise HTTPException(status_code=401, detail="Unauthorized")
-    return True
 
 
 # --- Admin queue ---
