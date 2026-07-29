@@ -11,7 +11,14 @@ from app.daily_briefing import (
     select_daily_briefing_stories,
     generate_briefing_for_story
 )
+from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat
+from datetime import datetime, timezone
+
 logger = logging.getLogger(__name__)
+
+def log_scheduler_alive():
+    logger.info(f"[heartbeat] Scheduler alive at {datetime.now(timezone.utc).isoformat()}")
+
 
 scheduler = BackgroundScheduler()
 
@@ -226,6 +233,38 @@ def start_scheduler():
         max_instances=1,
         coalesce=True,
         misfire_grace_time=300
+    )
+
+    # Feed heartbeat — every 30 min, catches a stalled feed within the hour
+    scheduler.add_job(
+        check_feed_heartbeat,
+        "interval",
+        minutes=30,
+        id="check_feed_heartbeat",
+        replace_existing=True,
+    )
+
+    # Briefing heartbeat — checked once at 07:00 WAT (06:00 UTC), one hour
+    # after generation is supposed to complete at 06:30 WAT
+    scheduler.add_job(
+        check_briefing_heartbeat,
+        "cron",
+        hour=6,
+        minute=0,
+        id="check_briefing_heartbeat",
+        replace_existing=True,
+        max_instances=1,
+        coalesce=True,
+        misfire_grace_time=300,
+    )
+
+    # Scheduler tripwire logging
+    scheduler.add_job(
+        log_scheduler_alive,
+        "interval",
+        minutes=5,
+        id="log_scheduler_alive",
+        replace_existing=True,
     )
 
     scheduler.start()
