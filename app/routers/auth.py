@@ -18,12 +18,15 @@ async def signup(payload: SignupRequest):
             detail="You must confirm you are 18 or older to create an account.",
         )
 
-    auth_res = supabase.auth.sign_up({
-        "email": payload.email,
-        "password": payload.password,
-    })
-    if not auth_res.user:
-        raise HTTPException(status_code=400, detail="Signup failed")
+    try:
+        auth_res = supabase.auth.sign_up({
+            "email": payload.email,
+            "password": payload.password,
+        })
+        if not auth_res.user:
+            raise HTTPException(status_code=400, detail="Signup failed")
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     supabase.table("profiles").insert({
         "id": auth_res.user.id,
