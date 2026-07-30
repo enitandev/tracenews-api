@@ -44,9 +44,11 @@ app.add_middleware(
 
 from app.routers import corrections
 from app.routers import monitoring_spirit_admin
+from app.routers import auth as auth_router
 
 app.include_router(corrections.router)
 app.include_router(monitoring_spirit_admin.router)
+app.include_router(auth_router.router)
 
 def get_sourcing_info(
     cluster_stories,
