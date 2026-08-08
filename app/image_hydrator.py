@@ -1,16 +1,19 @@
 import httpx
 import logging
-import asyncio
 from bs4 import BeautifulSoup
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from app.db import supabase
 
 logger = logging.getLogger(__name__)
 
-async def fetch_og_image_async(url: str, client: httpx.AsyncClient) -> str | None:
+# Module-level reused sync client
+image_client = httpx.Client(timeout=10, follow_redirects=True)
+
+def fetch_og_image(url: str) -> str | None:
     """Fetch og:image from article URL."""
     try:
         headers = {"User-Agent": "Mozilla/5.0 (compatible; TraceNewsBot/1.0)"}
-        response = await client.get(url, headers=headers, timeout=10, follow_redirects=True)
+        response = image_client.get(url, headers=headers)
         if response.status_code == 200:
             soup = BeautifulSoup(response.text, "html.parser")
             og_img = soup.find("meta", property="og:image")
@@ -34,8 +37,8 @@ def is_valid_image(url: str) -> bool:
         return False
     return True
 
-async def hydrate_images_task():
-    logger.info("Starting async image hydration...")
+def run_image_hydration():
+    logger.info("Starting image hydration...")
     
     # Get stories from the last 24 hours without images
     from datetime import datetime, timezone, timedelta
@@ -51,23 +54,22 @@ async def hydrate_images_task():
     logger.info(f"Hydrating images for {len(stories)} stories.")
     
     updated = 0
-    async with httpx.AsyncClient() as client:
-        # Process in batches to avoid overwhelming the network
-        batch_size = 10
-        for i in range(0, len(stories), batch_size):
-            batch = stories[i:i+batch_size]
-            tasks = [fetch_og_image_async(s["url"], client) for s in batch]
-            results = await asyncio.gather(*tasks)
-            
-            for story, img_url in zip(batch, results):
-                if is_valid_image(img_url):
-                    supabase.table("stories").update({"image_url": img_url}).eq("id", story["id"]).execute()
-                    updated += 1
-            
-            await asyncio.sleep(1) # Be nice to servers
+    # Process in batches to avoid overwhelming the network
+    batch_size = 10
+    
+    for i in range(0, len(stories), batch_size):
+        batch = stories[i:i+batch_size]
+        
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            future_to_story = {executor.submit(fetch_og_image, s["url"]): s for s in batch}
+            for future in as_completed(future_to_story):
+                story = future_to_story[future]
+                try:
+                    img_url = future.result()
+                    if is_valid_image(img_url):
+                        supabase.table("stories").update({"image_url": img_url}).eq("id", story["id"]).execute()
+                        updated += 1
+                except Exception as e:
+                    logger.debug(f"Exception during hydration for {story['url']}: {e}")
 
     logger.info(f"Image hydration complete. {updated} images found and saved.")
-
-def run_image_hydration():
-    """Wrapper to run the async task from sync context."""
-    asyncio.run(hydrate_images_task())

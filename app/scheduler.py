@@ -14,26 +14,34 @@ from app.daily_briefing import (
 from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat
 from datetime import datetime, timezone
 
+import httpx
+
 logger = logging.getLogger(__name__)
 
+sitemap_client = httpx.Client(timeout=15)
+
 def log_scheduler_alive():
-    logger.info(f"[heartbeat] Scheduler alive at {datetime.now(timezone.utc).isoformat()}")
+    import psutil
+    process = psutil.Process(os.getpid())
+    rss_mb = process.memory_info().rss / (1024 * 1024)
+    logger.info(f"[heartbeat] Scheduler alive at {datetime.now(timezone.utc).isoformat()} - RSS: {rss_mb:.1f}MB")
 
 
 scheduler = BackgroundScheduler()
 
 
 def run_fetch_job():
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        future = executor.submit(run_fetch)
-        try:
-            result = future.result(timeout=480)  # 8 minute max
-            logger.info(f"Fetch result: {result}")
-        except FuturesTimeoutError:
-            logger.error("[fetch] Job timed out after 8 minutes - cancelling")
-            future.cancel()
-        except Exception as e:
-            logger.error(f"[fetch] Job failed: {e}")
+    executor = ThreadPoolExecutor(max_workers=1)
+    future = executor.submit(run_fetch)
+    try:
+        result = future.result(timeout=480)  # 8 minute max
+        logger.info(f"Fetch result: {result}")
+    except FuturesTimeoutError:
+        logger.error("[fetch] Job timed out after 8 minutes - proceeding without blocking")
+    except Exception as e:
+        logger.error(f"[fetch] Job failed: {e}")
+    finally:
+        executor.shutdown(wait=False)
 
 
 def run_process_job():
@@ -113,51 +121,41 @@ def run_sitemap_health_check():
     any sitemap is empty so it 
     shows in Railway logs.
     """
-    import asyncio
+    base = "https://tracenews.ng"
+    sitemaps_to_check = [
+        "/sitemap-stories.xml",
+        "/sitemap-outlets.xml",
+        "/sitemap-politicians.xml",
+        "/sitemap-static.xml",
+        "/news-sitemap.xml"
+    ]
     
-    async def _check():
-        import httpx
-        
-        base = "https://tracenews.ng"
-        sitemaps_to_check = [
-            "/sitemap-stories.xml",
-            "/sitemap-outlets.xml",
-            "/sitemap-politicians.xml",
-            "/sitemap-static.xml",
-            "/news-sitemap.xml"
-        ]
-        
-        async with httpx.AsyncClient(
-            timeout=15
-        ) as client:
-            for path in sitemaps_to_check:
-                try:
-                    r = await client.get(
-                        f"{base}{path}"
-                    )
-                    count = r.text.count(
-                        "<url>"
-                    )
-                    if count == 0:
-                        logger.error(
-                            f"SITEMAP HEALTH "
-                            f"ALERT: {path} "
-                            f"returned 0 URLs!"
-                        )
-                    else:
-                        logger.info(
-                            f"Sitemap health "
-                            f"OK: {path} has "
-                            f"{count} URLs"
-                        )
-                except Exception as e:
-                    logger.error(
-                        f"SITEMAP HEALTH "
-                        f"ALERT: {path} "
-                        f"failed: {e}"
-                    )
-                    
-    asyncio.run(_check())
+    for path in sitemaps_to_check:
+        try:
+            r = sitemap_client.get(
+                f"{base}{path}"
+            )
+            count = r.text.count(
+                "<url>"
+            )
+            if count == 0:
+                logger.error(
+                    f"SITEMAP HEALTH "
+                    f"ALERT: {path} "
+                    f"returned 0 URLs!"
+                )
+            else:
+                logger.info(
+                    f"Sitemap health "
+                    f"OK: {path} has "
+                    f"{count} URLs"
+                )
+        except Exception as e:
+            logger.error(
+                f"SITEMAP HEALTH "
+                f"ALERT: {path} "
+                f"failed: {e}"
+            )
 
 
 def start_scheduler():

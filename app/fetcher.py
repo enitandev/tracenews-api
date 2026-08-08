@@ -5,12 +5,14 @@ from dateutil import parser as dateparser
 import os
 import urllib.parse
 from bs4 import BeautifulSoup
+import httpx
 from app.db import supabase
 from openai import OpenAI
 from app.entity_tagger import tag_story
 
 logger = logging.getLogger(__name__)
 
+rss_client = httpx.Client(timeout=15, follow_redirects=True)
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 RSS_IMAGE_UNRELIABLE_OUTLETS = ['punch-nigeria', 'punch-metro']
@@ -91,10 +93,19 @@ def parse_feed(outlet: dict) -> list[dict]:
     for feed_url in outlet["rss_feeds"]:
         try:
             feed_url_with_count = add_count_param(feed_url)
-            feed = feedparser.parse(
-                feed_url_with_count, 
-                agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            )
+            
+            try:
+                res = rss_client.get(
+                    feed_url_with_count, 
+                    headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                )
+                res.raise_for_status()
+                feed_content = res.content
+            except Exception as e:
+                logger.warning(f"Failed to fetch feed {feed_url_with_count} for {outlet['name']}: {e}")
+                continue
+                
+            feed = feedparser.parse(feed_content)
             
             feed_str = str(feed)
             is_cloudflare = "Just a moment" in feed_str or "Enable JavaScript and cookies" in feed_str
@@ -109,10 +120,17 @@ def parse_feed(outlet: dict) -> list[dict]:
                 
                 fallback_url = f"https://news.google.com/rss/search?q=site:{domain}&hl=en-NG&gl=NG&ceid=NG:en"
                 logger.info(f"Using Google News fallback for {outlet['name']} ({domain})")
-                feed = feedparser.parse(
-                    fallback_url, 
-                    agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-                )
+                
+                try:
+                    fallback_res = rss_client.get(
+                        fallback_url,
+                        headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
+                    )
+                    fallback_res.raise_for_status()
+                    feed = feedparser.parse(fallback_res.content)
+                except Exception as e:
+                    logger.warning(f"Failed to fetch fallback feed {fallback_url} for {outlet['name']}: {e}")
+                    continue
 
             for entry in feed.entries:
                 title = entry.get("title", "").strip()
