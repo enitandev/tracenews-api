@@ -17,11 +17,14 @@ async def list_by_status(status: str = "pending_review", _: bool = Depends(requi
 
     res = (
         supabase.table("politicians")
-        .select("id, slug, name, category, publication_status, updated_at")
+        .select("id, slug, full_name, category, publication_status, updated_at")
         .eq("publication_status", status)
-        .order("name")
+        .order("full_name")
         .execute()
     )
+    # Rename full_name to name for frontend
+    for row in res.data:
+        row["name"] = row.pop("full_name", "Unknown")
     return res.data
 
 
