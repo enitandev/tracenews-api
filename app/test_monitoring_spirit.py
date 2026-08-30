@@ -13,12 +13,12 @@ from app.monitoring_spirit import (
 class TestSignificanceRail:
     def test_accountability_category_fires(self):
         assert is_significant(
-            "Politics", False, False
+            "Politics", False, False, 5
         ) == True
 
     def test_sport_category_does_not_fire(self):
         assert is_significant(
-            "Sports", False, False
+            "Sports", False, False, 5
         ) == False
 
     def test_entity_tag_overrides_category(self):
@@ -26,19 +26,19 @@ class TestSignificanceRail:
         # a politician should still 
         # be significant
         assert is_significant(
-            "Health", True, False
+            "Health", True, False, 5
         ) == True
 
     def test_money_figure_overrides_category(self):
         assert is_significant(
-            "Entertainment", False, True
+            "Entertainment", False, True, 5
         ) == True
 
     def test_sport_with_no_tags_fails(self):
         # The England-Ghana false 
         # positive case
         assert is_significant(
-            "Sports", False, False
+            "Sports", False, False, 5
         ) == False
 
 
@@ -95,6 +95,21 @@ class TestPersistenceRail:
         reads = self.make_reads([
             (0.3, 0.3, 10),  # resolved
             (0.9, 0.0, 3)    # was imbalanced
+        ])
+        assert has_persistence(
+            reads, TIER_WATCHDOG, TIER_GOVT
+        ) == False
+
+    def test_invariant_7_stale_imbalance_fails(self):
+        # I7: Must break on the first non-matching read.
+        # If read 2 and 3 had the imbalance, but read 1 
+        # (the most recent) does not, it MUST fail. This
+        # ensures "not yet reported" is literally true at
+        # render time.
+        reads = self.make_reads([
+            (0.3, 0.3, 15),  # read 1 (most recent): resolved
+            (0.8, 0.05, 10), # read 2: imbalanced
+            (0.75, 0.05, 8)  # read 3: imbalanced
         ])
         assert has_persistence(
             reads, TIER_WATCHDOG, TIER_GOVT

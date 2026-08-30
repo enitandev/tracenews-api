@@ -12,19 +12,24 @@ ACCOUNTABILITY_CATEGORIES = [
 def is_significant(
     category: str,
     has_entity_tag: bool,
-    has_money_figure: bool
+    has_money_figure: bool,
+    outlet_count: int
 ) -> bool:
     """
     Fires the verdict toward alarm 
     only on accountability-relevant 
-    stories. Category alone is not 
-    enough — entity tags or money 
-    figures catch accountability 
-    stories outside the obvious 
-    categories (e.g. a health 
-    ministry procurement story 
+    stories that meet the significance 
+    floor (>= 3 outlets). Category alone is 
+    enough; entity tags and money 
+    figures are additional routes in 
+    for stories outside those 
+    accountability categories (e.g. a 
+    health ministry procurement story 
     tagged with a politician).
     """
+    if outlet_count < 3:
+        return False
+        
     if category in ACCOUNTABILITY_CATEGORIES:
         return True
     if has_entity_tag:
@@ -41,13 +46,23 @@ def has_persistence(
     silent_threshold: float = 0.1
 ) -> bool:
     """
-    Requires >=2 consecutive snapshot 
-    reads showing the SAME tier 
-    imbalance (tier_a loud, tier_b 
-    silent). A single snapshot could 
-    be a breaking-story artifact — 
-    coverage hasn't caught up yet, 
-    not suppression.
+    Requires the tier imbalance (tier_a loud, 
+    tier_b silent) to be present in the MOST 
+    RECENT snapshot read AND the one immediately 
+    before it. 
+    
+    CRITICAL INVARIANT (I7): This must break on 
+    the first non-matching read. The verdict card's 
+    approved language is present-tense ("Carried 
+    by watchdog outlets, not yet by others") and 
+    was cleared by counsel specifically ON THE 
+    CONDITION that "not yet" is literally true at 
+    render time. A rail that fired on a stale 
+    imbalance (true two reads ago, resolved since) 
+    would publish a false statement about named 
+    outlets. This current-state requirement is not 
+    an implementation detail — it's what makes the 
+    approved language honest.
     
     snapshot_reads: list of dicts,
     most recent first:
@@ -87,12 +102,12 @@ def has_sourcing(
 ) -> bool:
     """
     The planted-leak guard. If the 
-    "loud" tier's coverage all 
-    traces to a single outlet, this 
+    "loud" tier's coverage traces to 
+    fewer than 3 distinct outlets, this 
     fails — caps the verdict at 
     MIXED instead of DARK, because 
-    one outlet making noise is not 
-    the same as multi-source 
+    one or two outlets making noise is 
+    not the same as multi-source 
     accountability coverage.
     
     sourcing_info: {
@@ -279,7 +294,7 @@ def resolve_verdict(
     
     significant = is_significant(
         category, has_entity_tag, 
-        has_money_figure
+        has_money_figure, total_outlets
     )
     
     persistent = False
@@ -344,7 +359,8 @@ def resolve_verdict(
         is_significant(
             category, 
             has_entity_tag, 
-            has_money_figure
+            has_money_figure,
+            total_outlets
         )):
         evidence.append(
             churnalism_evidence(

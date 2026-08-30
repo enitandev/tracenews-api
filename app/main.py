@@ -1666,16 +1666,13 @@ async def sitemap_stories():
     import app.sitemap_cache as sc
     
     if sc.cached_sitemap_xml is None:
-        # Cold-start fallback: generate once, synchronously, rather than 
-        # serve empty content to a crawler
         await sc.regenerate_sitemap_cache()
         
     xml = sc.cached_sitemap_xml
     
     if xml is None:
         xml = (
-            '<?xml version="1.0" encoding="UTF-8"?>
-'
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"/>'
         )
 
@@ -1686,6 +1683,283 @@ async def sitemap_stories():
             "Cache-Control": "public, max-age=3600"
         }
     )
+
+@app.get("/sitemap-outlets.xml")
+async def sitemap_outlets():
+    try:
+        res = supabase.table(
+            "outlets"
+        ).select(
+            "slug"
+        ).filter(
+            "slug", "not.is", "null"
+        ).eq(
+            "active", True
+        ).execute()
+        
+        outlets = res.data or []
+        
+        urls = []
+        for o in outlets:
+            if not o.get("slug"):
+                continue
+            loc = (
+                f"https://tracenews.ng"
+                f"/outlets/{o['slug']}"
+            )
+            url_xml = (
+                f"  <url>\n"
+                f"    <loc>{loc}</loc>\n"
+                f"    <changefreq>"
+                f"weekly"
+                f"</changefreq>\n"
+                f"    <priority>"
+                f"0.8"
+                f"</priority>\n"
+                f"  </url>"
+            )
+            urls.append(url_xml)
+        
+        xml = (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://'
+            'www.sitemaps.org/schemas/'
+            'sitemap/0.9">\n'
+        )
+        xml += "\n".join(urls)
+        xml += "\n</urlset>"
+        
+        return Response(
+            content=xml,
+            media_type="application/xml",
+            headers={
+                "Cache-Control": 
+                    "public, max-age=86400"
+            }
+        )
+    except Exception as e:
+        logger.error(
+            f"Outlets sitemap error: {e}"
+        )
+        return Response(
+            content=(
+                '<?xml version="1.0"?>'
+                '<urlset xmlns="http://'
+                'www.sitemaps.org/schemas/'
+                'sitemap/0.9"/>'
+            ),
+            media_type="application/xml"
+        )
+
+@app.get("/sitemap-politicians.xml")
+async def sitemap_politicians():
+    try:
+        res = supabase.table(
+            "politicians"
+        ).select(
+            "slug, updated_at, "
+            "publication_status"
+        ).filter(
+            "slug", "not.is", "null"
+        ).eq(
+            "active", True
+        ).eq(
+            "publication_status", "published"
+        ).execute()
+        
+        politicians = res.data or []
+        
+        urls = []
+        for p in politicians:
+            if not p.get("slug"):
+                continue
+            loc = (
+                f"https://tracenews.ng"
+                f"/politicians/{p['slug']}"
+            )
+            lastmod = (
+                p.get("updated_at", "") 
+                or ""
+            )[:10]
+            
+            url_xml = f"  <url>\n"
+            url_xml += (
+                f"    <loc>{loc}</loc>\n"
+            )
+            if lastmod:
+                url_xml += (
+                    f"    <lastmod>"
+                    f"{lastmod}"
+                    f"</lastmod>\n"
+                )
+            url_xml += (
+                f"    <changefreq>"
+                f"weekly"
+                f"</changefreq>\n"
+                f"    <priority>"
+                f"0.8"
+                f"</priority>\n"
+                f"  </url>"
+            )
+            urls.append(url_xml)
+        
+        xml = (
+            '<?xml version="1.0" '
+            'encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://'
+            'www.sitemaps.org/schemas/'
+            'sitemap/0.9">\n'
+        )
+        xml += "\n".join(urls)
+        xml += "\n</urlset>"
+        
+        return Response(
+            content=xml,
+            media_type="application/xml",
+            headers={
+                "Cache-Control": 
+                    "public, max-age=86400"
+            }
+        )
+    except Exception as e:
+        logger.error(
+            f"Politicians sitemap error: {e}"
+        )
+        return Response(
+            content=(
+                '<?xml version="1.0"?>'
+                '<urlset xmlns="http://'
+                'www.sitemaps.org/schemas/'
+                'sitemap/0.9"/>'
+            ),
+            media_type="application/xml"
+        )
+
+@app.get("/sitemap-static.xml")
+async def sitemap_static():
+    static_pages = [
+        ("https://tracenews.ng/", 
+         "1.0", "hourly"),
+        ("https://tracenews.ng/daily-briefing", 
+         "0.9", "daily"),
+        ("https://tracenews.ng/methodology", 
+         "0.8", "monthly"),
+        ("https://tracenews.ng/about", 
+         "0.8", "monthly"),
+        ("https://tracenews.ng/corrections", 
+         "0.5", "monthly"),
+        ("https://tracenews.ng/topics/politics", 
+         "0.8", "hourly"),
+        ("https://tracenews.ng/topics/security", 
+         "0.8", "hourly"),
+        ("https://tracenews.ng/topics/economy", 
+         "0.8", "hourly"),
+        ("https://tracenews.ng/topics/judiciary", 
+         "0.7", "daily"),
+        ("https://tracenews.ng/topics/health", 
+         "0.7", "daily"),
+        ("https://tracenews.ng/topics/education", 
+         "0.7", "daily"),
+        ("https://tracenews.ng/topics/sports", 
+         "0.6", "daily"),
+        ("https://tracenews.ng/topics/technology", 
+         "0.6", "daily"),
+        ("https://tracenews.ng/topics/entertainment", 
+         "0.5", "daily"),
+        ("https://tracenews.ng/topics/international", 
+         "0.6", "daily"),
+    ]
+    
+    urls = []
+    for loc, priority, changefreq \
+            in static_pages:
+        urls.append(
+            f"  <url>\n"
+            f"    <loc>{loc}</loc>\n"
+            f"    <changefreq>"
+            f"{changefreq}"
+            f"</changefreq>\n"
+            f"    <priority>"
+            f"{priority}"
+            f"</priority>\n"
+            f"  </url>"
+        )
+    
+    xml = (
+        '<?xml version="1.0" '
+        'encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://'
+        'www.sitemaps.org/schemas/'
+        'sitemap/0.9">\n'
+    )
+    xml += "\n".join(urls)
+    xml += "\n</urlset>"
+    
+    return Response(
+        content=xml,
+        media_type="application/xml",
+        headers={
+            "Cache-Control": 
+                "public, max-age=86400"
+        }
+    )
+
+@app.get("/sitemap-health")
+async def sitemap_health():
+    """
+    Checks all sitemap endpoints 
+    return URLs. Returns 200 if 
+    healthy, 503 if any sitemap 
+    is empty.
+    """
+    import httpx
+    
+    base = "https://tracenews.ng"
+    sitemaps_to_check = [
+        "/sitemap-stories.xml",
+        "/sitemap-outlets.xml",
+        "/sitemap-politicians.xml",
+        "/sitemap-static.xml",
+        "/news-sitemap.xml"
+    ]
+    
+    results = {}
+    all_healthy = True
+    
+    async with httpx.AsyncClient(
+        timeout=15
+    ) as client:
+        for path in sitemaps_to_check:
+            try:
+                r = await client.get(
+                    f"{base}{path}"
+                )
+                count = r.text.count(
+                    "<url>"
+                )
+                healthy = count > 0
+                results[path] = {
+                    "url_count": count,
+                    "healthy": healthy,
+                    "status_code": 
+                        r.status_code
+                }
+                if not healthy:
+                    all_healthy = False
+            except Exception as e:
+                results[path] = {
+                    "error": str(e),
+                    "healthy": False
+                }
+                all_healthy = False
+    
+    from fastapi.responses import (
+        JSONResponse
+    )
+    return JSONResponse(
+        status_code=200 
+            if all_healthy else 503,
         content={
             "healthy": all_healthy,
             "checked_at": 
