@@ -12,6 +12,7 @@ from app.daily_briefing import (
     generate_briefing_for_story
 )
 from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat
+from app.sitemap_cache import run_sitemap_cache_job_sync
 from datetime import datetime, timezone
 
 import httpx
@@ -263,6 +264,17 @@ def start_scheduler():
         minutes=5,
         id="log_scheduler_alive",
         replace_existing=True,
+    )
+
+    # Background Stories Sitemap Generation
+    # Runs immediately on startup (next_run_time=now), then every 30 mins
+    scheduler.add_job(
+        run_sitemap_cache_job_sync,
+        "interval",
+        minutes=30,
+        id="run_sitemap_cache_job",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc)
     )
 
     scheduler.start()
