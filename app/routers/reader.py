@@ -136,3 +136,12 @@ def get_summary(user_id: str = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Failed to fetch reader summary for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch summary")
+
+@router.delete("/counts")
+def delete_counts(user_id: str = Depends(get_current_user)):
+    try:
+        supabase.table("reader_tier_counters").delete().eq("user_id", user_id).execute()
+        return {"status": "success", "recorded_event": "counts_deleted"}
+    except Exception as e:
+        logger.error(f"Failed to delete reader counts for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete counts")
