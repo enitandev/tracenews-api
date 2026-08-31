@@ -11,6 +11,6 @@ jobs:
       - run: pip install -r requirements.txt pytest
       - run: python3 -m pytest -v
         env:
-          SUPABASE_URL: "https://dummy.supabase.co"
+          SUPABASE_URL: "http://localhost:54321"
           SUPABASE_SERVICE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.dummy"
           OPENAI_API_KEY: "dummy"
