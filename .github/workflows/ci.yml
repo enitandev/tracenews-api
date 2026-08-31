@@ -10,3 +10,7 @@ jobs:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
       - run: python3 -m pytest -v
+        env:
+          SUPABASE_URL: "https://dummy.supabase.co"
+          SUPABASE_SERVICE_KEY: "dummy"
+          OPENAI_API_KEY: "dummy"
