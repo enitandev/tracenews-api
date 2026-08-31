@@ -9,8 +9,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements.txt pytest
-      - run: python3 -m pytest -v
+      - run: python3 -m pytest app/test_monitoring_spirit.py -v
         env:
-          SUPABASE_URL: "http://localhost:54321"
+          SUPABASE_URL: "https://dummy.supabase.co"
           SUPABASE_SERVICE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.dummy"
           OPENAI_API_KEY: "dummy"
