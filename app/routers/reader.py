@@ -110,3 +110,29 @@ def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_use
     except Exception as e:
         logger.error(f"Failed to track read for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to track read")
+
+@router.get("/summary")
+def get_summary(user_id: str = Depends(get_current_user)):
+    try:
+        res = supabase.table("reader_tier_counters") \
+            .select("govt_count, mainstream_count, watchdog_count") \
+            .eq("user_id", user_id) \
+            .limit(1) \
+            .execute()
+            
+        if res.data:
+            counts = res.data[0]
+            return {
+                "govt": counts.get("govt_count", 0),
+                "mainstream": counts.get("mainstream_count", 0),
+                "watchdog": counts.get("watchdog_count", 0)
+            }
+        else:
+            return {
+                "govt": 0,
+                "mainstream": 0,
+                "watchdog": 0
+            }
+    except Exception as e:
+        logger.error(f"Failed to fetch reader summary for user {user_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch summary")
