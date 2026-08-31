@@ -12,6 +12,21 @@ from app.clusterer import run_clustering
 from app.db import supabase
 from app.monitoring_spirit import resolve_verdict
 
+def render_safe_verdict(verdict_result: dict) -> dict:
+    """
+    DARK is computed but not shipped. Gate D closed 'not met' — see
+    Gate_D_Closure_Record.md. This function is the single point where
+    that restriction is enforced. Do not remove without a new Gate D
+    passing.
+    """
+    if verdict_result.get("verdict") == "dark":
+        return {
+            "verdict": "clear",
+            "evidence": None,
+            "note": "withheld_pending_story_type_classification",
+        }
+    return verdict_result
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -46,11 +61,13 @@ from app.routers import corrections
 from app.routers import monitoring_spirit_admin
 from app.routers import politicians_admin
 from app.routers import auth as auth_router
+from app.routers import reader
 
 app.include_router(corrections.router)
 app.include_router(monitoring_spirit_admin.router)
 app.include_router(politicians_admin.router)
 app.include_router(auth_router.router)
+app.include_router(reader.router)
 
 def get_sourcing_info(
     cluster_stories,
@@ -370,11 +387,15 @@ def get_landing_clusters(limit: int = 40):
 
 
 @app.get("/clusters/feed")
-def get_feed_clusters(limit: int = 30, offset: int = 0):
+def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     """Get full clusters with scores for the main feed."""
-    result = supabase.table("clusters").select(
+    query = supabase.table("clusters").select(
         "*, cluster_scores(*), stories(image_url)"
-    ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(200).execute()
+    ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(200)
+    
+    # If tier is requested, we can't filter at the SQL level easily because coverage_stats is JSON.
+    # We will filter in Python below.
+    result = query.execute()
     
     clusters = result.data or []
     from datetime import datetime, timezone, timedelta
@@ -389,7 +410,31 @@ def get_feed_clusters(limit: int = 30, offset: int = 0):
         return outlet_count / (age_hours + 2)
         
     clusters.sort(key=relevance_score, reverse=True)
-    paginated = clusters[offset:offset + limit]
+    
+    enriched_clusters = enrich_clusters_with_live_tiers(clusters)
+    if tier:
+        filtered_clusters = []
+        for c in enriched_clusters:
+            dist = c.get("coverage_stats", {}).get("coverage_tier_distribution", {})
+            # Find the loud tier
+            loud_tier = "unscored"
+            max_count = 0
+            for t, count in dist.items():
+                if t != "blog" and count > max_count:
+                    max_count = count
+                    loud_tier = t
+            
+            # Map API query to the internal tier name
+            tier_mapping = {
+                "govt": "pro_establishment",
+                "mainstream": "institutional",
+                "watchdog": "adversarial"
+            }
+            if loud_tier == tier_mapping.get(tier, tier):
+                filtered_clusters.append(c)
+        enriched_clusters = filtered_clusters
+
+    paginated = enriched_clusters[offset:offset + limit]
     
     formatted = []
     for c in paginated:
@@ -403,7 +448,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0):
         c_dict["image_url"] = image_url
         formatted.append(c_dict)
     
-    return {"clusters": enrich_clusters_with_live_tiers(formatted), "count": len(clusters)}
+    return {"clusters": formatted, "count": len(enriched_clusters)}
 
 @app.get("/clusters/by-slug/{slug}")
 def get_cluster_by_slug(slug: str):
@@ -524,7 +569,7 @@ def get_cluster_by_slug(slug: str):
         
         # Attach to the response. If anything above failed, this won't execute,
         # guaranteeing Invariant 1 (withhold rather than render stale).
-        cluster["monitoring_spirit_live"] = verdict_res
+        cluster["monitoring_spirit_live"] = render_safe_verdict(verdict_res)
         cluster["monitoring_spirit_live"]["snapshots"] = snapshot_reads
         
     except Exception as e:

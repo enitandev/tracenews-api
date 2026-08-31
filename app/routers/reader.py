@@ -54,6 +54,7 @@ def submit_consent(request: ConsentRequest, user_id: str = Depends(get_current_u
 
 class TrackReadRequest(BaseModel):
     tier: str
+    verdict: str = None
 
 @router.post("/track-read")
 def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_user)):
@@ -92,6 +93,11 @@ def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_use
                 counter_column: new_count,
                 "updated_at": now_iso
             }
+            if request.verdict == "clear":
+                payload["broad_count"] = current.get("broad_count", 0) + 1
+            elif request.verdict == "mixed":
+                payload["partial_count"] = current.get("partial_count", 0) + 1
+
             supabase.table("reader_tier_counters").update(payload).eq("user_id", user_id).execute()
         else:
             payload = {
@@ -99,9 +105,15 @@ def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_use
                 "govt_count": 0,
                 "mainstream_count": 0,
                 "watchdog_count": 0,
+                "broad_count": 0,
+                "partial_count": 0,
                 counter_column: 1,
                 "updated_at": now_iso
             }
+            if request.verdict == "clear":
+                payload["broad_count"] = 1
+            elif request.verdict == "mixed":
+                payload["partial_count"] = 1
             supabase.table("reader_tier_counters").insert(payload).execute()
             
         return {"status": "success", "recorded_event": "read_tracked"}
@@ -115,7 +127,7 @@ def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_use
 def get_summary(user_id: str = Depends(get_current_user)):
     try:
         res = supabase.table("reader_tier_counters") \
-            .select("govt_count, mainstream_count, watchdog_count") \
+            .select("govt_count, mainstream_count, watchdog_count, broad_count, partial_count") \
             .eq("user_id", user_id) \
             .limit(1) \
             .execute()
@@ -125,13 +137,17 @@ def get_summary(user_id: str = Depends(get_current_user)):
             return {
                 "govt": counts.get("govt_count", 0),
                 "mainstream": counts.get("mainstream_count", 0),
-                "watchdog": counts.get("watchdog_count", 0)
+                "watchdog": counts.get("watchdog_count", 0),
+                "broad": counts.get("broad_count", 0),
+                "partial": counts.get("partial_count", 0)
             }
         else:
             return {
                 "govt": 0,
                 "mainstream": 0,
-                "watchdog": 0
+                "watchdog": 0,
+                "broad": 0,
+                "partial": 0
             }
     except Exception as e:
         logger.error(f"Failed to fetch reader summary for user {user_id}: {e}")
