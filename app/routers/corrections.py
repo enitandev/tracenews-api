@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import os
 from app.db import supabase
-from app.admin_auth import require_admin
+from app.admin_auth import require_staff, get_actor_name
 
 router = APIRouter()
 
@@ -57,7 +57,7 @@ async def submit_correction(payload: CorrectionSubmit):
 # --- Admin queue ---
 
 @router.get("/api/admin/corrections")
-async def list_corrections(status: Optional[str] = None, _: bool = Depends(require_admin)):
+async def list_corrections(status: Optional[str] = None, _: str = Depends(require_staff)):
     query = supabase.table("correction_requests").select("*")
     if status:
         query = query.eq("status", status)
@@ -68,13 +68,12 @@ async def list_corrections(status: Optional[str] = None, _: bool = Depends(requi
 class CorrectionUpdate(BaseModel):
     status: Optional[str] = None
     resolution_note: Optional[str] = None
-    actor: str  # named person — required, never "admin"
 
 @router.patch("/api/admin/corrections/{correction_id}")
 async def update_correction(
     correction_id: str,
     payload: CorrectionUpdate,
-    _: bool = Depends(require_admin),
+    actor: str = Depends(get_actor_name),
 ):
     before_res = supabase.table("correction_requests").select("*").eq("id", correction_id).execute()
     if not before_res.data:
@@ -86,7 +85,7 @@ async def update_correction(
         updates["status"] = payload.status
         if payload.status in ("actioned", "declined"):
             updates["resolved_at"] = datetime.utcnow().isoformat()
-            updates["resolved_by"] = payload.actor
+            updates["resolved_by"] = actor
     if payload.resolution_note:
         updates["resolution_note"] = payload.resolution_note
 
@@ -102,7 +101,7 @@ async def update_correction(
     after = after_res.data[0]
 
     supabase.table("admin_audit_log").insert({
-        "actor": payload.actor,
+        "actor": actor,
         "action": "correction.update",
         "target_table": "correction_requests",
         "target_id": correction_id,

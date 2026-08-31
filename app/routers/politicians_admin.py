@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from app.admin_auth import require_admin
+from app.admin_auth import require_staff, get_actor_name
 from app.db import supabase
 
 router = APIRouter()
 
 
 @router.get("/api/admin/politicians")
-async def list_by_status(status: str = "pending_review", _: bool = Depends(require_admin)):
+async def list_by_status(status: str = "pending_review", _: str = Depends(require_staff)):
     """
     status: 'pending_review' | 'excluded' | 'published'
     Defaults to pending_review — the working queue.
@@ -31,16 +31,13 @@ async def list_by_status(status: str = "pending_review", _: bool = Depends(requi
 class StatusUpdate(BaseModel):
     publication_status: str  # 'published' | 'excluded' | 'pending_review'
     reason: str              # required — cite the addendum disposition or new basis
-    actor: str                # named person, required
 
 @router.patch("/api/admin/politicians/{politician_id}")
-async def update_status(politician_id: str, payload: StatusUpdate, _: bool = Depends(require_admin)):
+async def update_status(politician_id: str, payload: StatusUpdate, actor: str = Depends(get_actor_name)):
     if payload.publication_status not in ("published", "excluded", "pending_review"):
         raise HTTPException(status_code=400, detail="Invalid publication_status")
     if not payload.reason.strip():
         raise HTTPException(status_code=400, detail="Reason is required")
-    if not payload.actor.strip():
-        raise HTTPException(status_code=400, detail="Actor is required")
 
     before_res = supabase.table("politicians").select("*").eq("id", politician_id).execute()
     if not before_res.data:
@@ -56,7 +53,7 @@ async def update_status(politician_id: str, payload: StatusUpdate, _: bool = Dep
     after = after_res.data[0]
 
     supabase.table("admin_audit_log").insert({
-        "actor": payload.actor,
+        "actor": actor,
         "action": "politician.status_change",
         "target_table": "politicians",
         "target_id": politician_id,
@@ -68,7 +65,7 @@ async def update_status(politician_id: str, payload: StatusUpdate, _: bool = Dep
 
 
 @router.get("/api/admin/politicians/{politician_id}/history")
-async def get_history(politician_id: str, _: bool = Depends(require_admin)):
+async def get_history(politician_id: str, _: str = Depends(require_staff)):
     """Full audit trail for one politician — every status change, who, when, why."""
     res = (
         supabase.table("admin_audit_log")

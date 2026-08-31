@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
-from app.admin_auth import require_admin
+from app.admin_auth import require_staff, get_actor_name
 from app.db import supabase
 from app.monitoring_spirit import resolve_verdict
 
@@ -15,7 +15,7 @@ def _get_outlets_cache():
     return outlets_map, behavioral_map
 
 @router.get("/api/admin/monitoring-spirit/verdicts")
-async def list_current_verdicts(_: bool = Depends(require_admin)):
+async def list_current_verdicts(_: str = Depends(require_staff)):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=72)).isoformat()
     clusters = (
         supabase.table("clusters")
@@ -103,25 +103,22 @@ class OverrideCreate(BaseModel):
     cluster_id: str
     original_verdict: str  # 'mixed' | 'dark'
     reason: str
-    actor: str  # named person, required — never "admin"
 
 @router.post("/api/admin/monitoring-spirit/overrides", status_code=201)
-async def create_override(payload: OverrideCreate, _: bool = Depends(require_admin)):
+async def create_override(payload: OverrideCreate, actor: str = Depends(get_actor_name)):
     if not payload.reason.strip():
         raise HTTPException(status_code=400, detail="Reason is required")
-    if not payload.actor.strip():
-        raise HTTPException(status_code=400, detail="Actor is required")
 
     res = supabase.table("verdict_overrides").insert({
         "cluster_id": payload.cluster_id,
         "original_verdict": payload.original_verdict,
         "reason": payload.reason,
-        "actor": payload.actor,
+        "actor": actor,
     }).execute()
     row = res.data[0]
 
     supabase.table("admin_audit_log").insert({
-        "actor": payload.actor,
+        "actor": actor,
         "action": "verdict.dismiss",
         "target_table": "verdict_overrides",
         "target_id": row["id"],
@@ -133,7 +130,7 @@ async def create_override(payload: OverrideCreate, _: bool = Depends(require_adm
 
 
 @router.get("/api/admin/monitoring-spirit/overrides")
-async def list_overrides(_: bool = Depends(require_admin)):
+async def list_overrides(_: str = Depends(require_staff)):
     res = (
         supabase.table("verdict_overrides")
         .select("*")
@@ -144,11 +141,8 @@ async def list_overrides(_: bool = Depends(require_admin)):
     return res.data
 
 
-class ReinstateRequest(BaseModel):
-    actor: str
-
 @router.post("/api/admin/monitoring-spirit/overrides/{override_id}/reinstate")
-async def reinstate_override(override_id: str, payload: ReinstateRequest, _: bool = Depends(require_admin)):
+async def reinstate_override(override_id: str, actor: str = Depends(get_actor_name)):
     before_res = supabase.table("verdict_overrides").select("*").eq("id", override_id).execute()
     if not before_res.data:
         raise HTTPException(status_code=404, detail="Not found")
@@ -159,7 +153,7 @@ async def reinstate_override(override_id: str, payload: ReinstateRequest, _: boo
         .update({
             "active": False,
             "reinstated_at": datetime.now(timezone.utc).isoformat(),
-            "reinstated_by": payload.actor,
+            "reinstated_by": actor,
         })
         .eq("id", override_id)
         .execute()
@@ -167,7 +161,7 @@ async def reinstate_override(override_id: str, payload: ReinstateRequest, _: boo
     after = after_res.data[0]
 
     supabase.table("admin_audit_log").insert({
-        "actor": payload.actor,
+        "actor": actor,
         "action": "verdict.reinstate",
         "target_table": "verdict_overrides",
         "target_id": override_id,
