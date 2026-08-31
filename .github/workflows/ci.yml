@@ -12,5 +12,5 @@ jobs:
       - run: python3 -m pytest -v
         env:
           SUPABASE_URL: "https://dummy.supabase.co"
-          SUPABASE_SERVICE_KEY: "dummy"
+          SUPABASE_SERVICE_KEY: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIn0.dummy"
           OPENAI_API_KEY: "dummy"
