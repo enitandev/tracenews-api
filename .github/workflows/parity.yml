@@ -18,14 +18,14 @@ jobs:
           python3 -c "
           import json, sys
           try:
-              with open("backend/app/readerAnalyticsConsent.json") as f1, open("frontend/src/components/MonitoringSpirit/readerAnalyticsConsent.json") as f2:
+              with open('backend/app/readerAnalyticsConsent.json') as f1, open('frontend/src/components/MonitoringSpirit/readerAnalyticsConsent.json') as f2:
                   d1 = json.load(f1)
                   d2 = json.load(f2)
                   if d1 != d2:
-                      print("Mismatch found!")
+                      print('Mismatch found!')
                       sys.exit(1)
-                  print("Match successful.")
+                  print('Match successful.')
           except Exception as e:
-              print(f"Error: {e}")
+              print(f'Error: {e}')
               sys.exit(1)
           "
