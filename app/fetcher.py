@@ -194,8 +194,8 @@ def save_stories(stories: list[dict]) -> int:
     
     # Check DB for existing URLs
     existing_urls = set()
-    for i in range(0, len(incoming_urls), 200):
-        batch = incoming_urls[i:i+200]
+    for i in range(0, len(incoming_urls), 50):
+        batch = incoming_urls[i:i+50]
         try:
             res = supabase.table("stories").select("url").in_("url", batch).execute()
             if res.data:
@@ -213,18 +213,30 @@ def save_stories(stories: list[dict]) -> int:
     error_count = 0
     for story in new_stories:
         try:
-            text_to_embed = f"{story.get('title', '')} {story.get('summary', '')}".strip()
+            # First, attempt to insert without embedding to catch duplicate keys BEFORE calling OpenAI
+            story_copy = story.copy()
+            story_copy.pop("embedding", None)
             
-            # Generate embedding for the individual story
+            try:
+                result = supabase.table("stories").insert(story_copy).execute()
+                inserted_id = result.data[0]['id']
+            except Exception as e:
+                # If it's a duplicate key violation, skip silently without wasting an OpenAI call
+                if "duplicate key" in str(e).lower() or "23505" in str(e):
+                    duplicate_count += 1
+                    continue
+                raise e # re-raise other errors
+            
+            # Story is genuinely new. Generate embedding.
+            text_to_embed = f"{story.get('title', '')} {story.get('summary', '')}".strip()
             res = openai_client.embeddings.create(
                 input=[text_to_embed],
                 model="text-embedding-3-small"
             )
-            story["embedding"] = res.data[0].embedding
+            embedding = res.data[0].embedding
             
-            # Save the story
-            result = supabase.table("stories").insert(story).execute()
-            inserted_id = result.data[0]['id']
+            # Update the story with the embedding
+            supabase.table("stories").update({"embedding": embedding}).eq("id", inserted_id).execute()
             
             try:
                 tag_story(
