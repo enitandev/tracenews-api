@@ -39,7 +39,14 @@ async def signup(payload: SignupRequest):
 def get_current_user(authorization: str = Header(...)):
     """Validates the Supabase session token, returns the user id."""
     token = authorization.replace("Bearer ", "")
-    user_res = supabase.auth.get_user(token)
+    import gotrue.errors
+    try:
+        user_res = supabase.auth.get_user(token)
+    except gotrue.errors.AuthApiError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid token")
+        
     if not user_res or not user_res.user:
         raise HTTPException(status_code=401, detail="Invalid or expired session")
     return user_res.user.id

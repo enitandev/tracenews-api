@@ -151,11 +151,8 @@ async def get_summary(user_id: str = Depends(get_current_user)):
         consent_granted = consent_res.data[0].get("granted") if consent_res.data else False
         
         # Follows (no mock data)
-        try:
-            follows_res = supabase.table("reader_follows").select("*", count="exact").eq("user_id", user_id).execute()
-            follow_count = follows_res.count if follows_res.count is not None else 0
-        except Exception:
-            follow_count = 0
+        # Table reader_follows does not exist yet (Phase 2)
+        follow_count = 0
             
         # Public one-tier stories
         from app.routers.monitoring_spirit_admin import list_current_verdicts

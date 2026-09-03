@@ -18,7 +18,7 @@ async def get_overview(_: str = Depends(require_permission('console_access', 'vi
     live_verdicts_count = len(verdicts_data)
     
     # Politicians held (needing review)
-    pol_res = supabase.table("politicians").select("id", count="exact").eq("publication_status", "held").execute()
+    pol_res = supabase.table("politicians").select("id", count="exact").eq("publication_status", "pending_review").execute()
     politicians_held_count = pol_res.count if pol_res.count is not None else 0
     
     # Ingestion health (return empty if no real table)
@@ -32,7 +32,7 @@ async def get_overview(_: str = Depends(require_permission('console_access', 'vi
     }
     
     # 2. Sections
-    open_corrections = supabase.table("correction_requests").select("id, type, outlet_slug, created_at").eq("status", "open").order("created_at", desc=True).limit(5).execute().data or []
+    open_corrections = supabase.table("correction_requests").select("id, category, subject_id, created_at").eq("status", "open").order("created_at", desc=True).limit(5).execute().data or []
     live_verdicts = verdicts_data[:5]
     
     # 3. Standing Column
