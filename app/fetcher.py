@@ -201,7 +201,17 @@ def save_stories(stories: list[dict]) -> int:
             if res.data:
                 existing_urls.update(row["url"] for row in res.data)
         except Exception as e:
-            logger.warning(f"Error checking existing URLs: {e}")
+            logger.error(f"Error checking existing URLs in batch (falling back to per-URL check): {e}")
+            for url in batch:
+                try:
+                    res_single = supabase.table("stories").select("url").eq("url", url).limit(1).execute()
+                    if res_single.data:
+                        existing_urls.add(url)
+                except Exception as e_single:
+                    logger.error(f"Error checking existing URL {url}: {e_single}")
+                    # If even the single URL check fails, we cannot safely assume it doesn't exist
+                    # Adding it to existing_urls ensures we don't proceed and risk wasted embeddings or duplicate errors
+                    existing_urls.add(url)
 
     new_stories = [s for url, s in unique_stories.items() if url not in existing_urls]
     duplicate_count = len(stories) - len(new_stories)
