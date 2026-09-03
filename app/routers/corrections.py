@@ -4,7 +4,7 @@ from typing import Optional
 from datetime import datetime, timedelta
 import os
 from app.db import supabase
-from app.admin_auth import require_staff, get_actor_name
+from app.admin_auth import require_permission, get_actor_name
 
 router = APIRouter()
 
@@ -57,7 +57,7 @@ async def submit_correction(payload: CorrectionSubmit):
 # --- Admin queue ---
 
 @router.get("/api/admin/corrections")
-async def list_corrections(status: Optional[str] = None, _: str = Depends(require_staff)):
+async def list_corrections(status: Optional[str] = None, _: str = Depends(require_permission('corrections', 'view'))):
     query = supabase.table("correction_requests").select("*")
     if status:
         query = query.eq("status", status)
@@ -74,6 +74,7 @@ async def update_correction(
     correction_id: str,
     payload: CorrectionUpdate,
     actor: str = Depends(get_actor_name),
+    _: str = Depends(require_permission('corrections', 'yes')),
 ):
     before_res = supabase.table("correction_requests").select("*").eq("id", correction_id).execute()
     if not before_res.data:

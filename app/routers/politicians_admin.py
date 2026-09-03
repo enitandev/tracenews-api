@@ -1,13 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
-from app.admin_auth import require_staff, get_actor_name
+from app.admin_auth import require_permission, get_actor_name
 from app.db import supabase
 
 router = APIRouter()
 
 
 @router.get("/api/admin/politicians")
-async def list_by_status(status: str = "pending_review", _: str = Depends(require_staff)):
+async def list_by_status(status: str = "pending_review", _: str = Depends(require_permission('politicians', 'view'))):
     """
     status: 'pending_review' | 'excluded' | 'published'
     Defaults to pending_review — the working queue.
@@ -33,7 +33,7 @@ class StatusUpdate(BaseModel):
     reason: str              # required — cite the addendum disposition or new basis
 
 @router.patch("/api/admin/politicians/{politician_id}")
-async def update_status(politician_id: str, payload: StatusUpdate, actor: str = Depends(get_actor_name)):
+async def update_status(politician_id: str, payload: StatusUpdate, actor: str = Depends(get_actor_name), _: str = Depends(require_permission('politicians', 'yes'))):
     if payload.publication_status not in ("published", "excluded", "pending_review"):
         raise HTTPException(status_code=400, detail="Invalid publication_status")
     if not payload.reason.strip():
@@ -65,7 +65,7 @@ async def update_status(politician_id: str, payload: StatusUpdate, actor: str = 
 
 
 @router.get("/api/admin/politicians/{politician_id}/history")
-async def get_history(politician_id: str, _: str = Depends(require_staff)):
+async def get_history(politician_id: str, _: str = Depends(require_permission('politicians', 'view'))):
     """Full audit trail for one politician — every status change, who, when, why."""
     res = (
         supabase.table("admin_audit_log")

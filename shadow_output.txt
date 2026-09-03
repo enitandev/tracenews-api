@@ -1,0 +1,506 @@
+======================================================================
+MONITORING SPIRIT — SHADOW RUN
+Started: 2026-08-04T12:29:02.756481+00:00
+======================================================================
+Fetching snapshot counts to rank top 500 clusters...
+Counted 737975 total snapshots.
+Sampled 500 clusters initially
+
+Initial sample Osun/Election matches: 25
+Initial sample Borno/Security matches: 61
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+
+======================================================================
+DIAGNOSTIC: WHY DID DARK NOT FIRE?
+======================================================================
+total_analyzed: 445
+had_silence_pattern: 117
+silence_pattern_significant: 73
+silence_pattern_persistent: 116
+silence_pattern_sourced: 1
+had_2plus_snapshot_reads: 445
+had_0_snapshot_reads: 0
+had_1_snapshot_read: 0
+blocked_by_persistence: 0
+blocked_by_sourcing: 73
+
+Clusters with a silence SHAPE (loud/silent tier pattern, before rails): 117
+Of those, significant: 73
+Clusters with 2+ snapshot reads (persistence rail even possible): 445
+Clusters with 0 snapshot reads (persistence rail CANNOT pass): 0
+
+Of the 73 significant silence patterns:
+  Blocked by PERSISTENCE rail: 0
+  Blocked by SOURCING rail (passed persistence): 73
+  Passed all rails (should be in DARK count): 0
+
+
+======================================================================
+BLOCKED BY PERSISTENCE — review each
+======================================================================
+
+======================================================================
+BLOCKED BY SOURCING — review each
+======================================================================
+
+Tinubu mourns ex-lawmaker Adeniyi, lauds democratic footprints
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Family, Friends Celebrate Samuel Diminas At 50
+  Category: Health
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Tension in Osun as Police confirm custody of ‘abducted’ Accord Party members
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Bamidele Mourns Adeniyi, Describes Death As End Of Dignified Era
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Anambra State Governor Reaffirms Commitment to Combat Drug Abuse
+  Category: Health
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+A philosophical and political case for continuity
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+1,000 members benefit from POWA free eye screening initiative
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Dalian 2026: Why the WEF Meeting Matters for Africa
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+National Assembly Is Not Retirement Home
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Taiwo Oyedele: Nigeria still not generating enough revenue from tax
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Gender Gap Widens In Telecom Sector As Men Dominate Workforce
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+BOOK REVIEW: Fada’s Pikin: Uche Onyebadi’s odyssey through mission boyhood
+  Category: Health
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Borno education college deserted, 3yrs after N200m takeoff grants
+  Category: Education
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Global Fund Charts Way Forward In Tackling HIV/AIDs, Tuberculosis, Malaria
+  Category: Health
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Abdulkareem Musa: Sowore’s Trial Has Shifted From Prosecution To Persecution
+  Category: Judiciary
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Osun 2026: Popularity, Billboards Don’t Translate To Votes – Farinloye
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Like Ekiti, like Anambra – two elections same outcomes
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+EU Accounts For 31% Of Nigeria’s Trade, Expands Investment Push
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Stakeholders Renew Call for Coordinated Peacebuilding Efforts in Nigeria
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Parties divided over proposed state police as debate intensifies
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Benue APC Aspirant Urges Fresh Primary, Seeks Declaration As Winner
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+State policing bill as a major win for the restructuring movement
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Inclusivity as panacea for peace, development in Plateau state
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Firm unveils Abuja Trade Centre project in Kuje
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Struggle for Biafra must not be built on lies, bloodshed — Ifeanyi Ejiofor
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+False Narrative: Governor Has Done Nothing in Kogi East? The Facts Tell a Different Story
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+FCT-IRS engages MDAs, says new portal will ease tax compliance
+  Category: Economy
+  Outlets: 2
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 2}
+  Sourcing: {'distinct_outlets_in_loud_tier': 2, 'has_original_reporting_outlet': True}
+
+Cleric cautions INEC against using military for 2027 elections
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Adamawa ADC Condemns Court Action On Candidate
+  Category: Judiciary
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+NUC approves Medicine, four health programmes for Wellspring varsity
+  Category: Education
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+FRC to transform financial reporting through actuarial regulations
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Explainer: Cash today, less tomorrow: The trade-off of pension withdrawals after job loss
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Osegbo Assumes Anambra APC Chairmanship, Pledges Strategic Reforms
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Jigawa Police Arraign 24 Traffic Offenders Over Vehicle Registration Violations
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+LP rep: Sustained military operations weakening criminal networks
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+FERMA Leads Senate Committees’ Reconstruction Tour Ogobia-Onyangede Road
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+FPL Media appoints Oluwatobi Dada as Chief Marketing Officer to drive strategic growth and innovation
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Shagari Advocates Enhanced Maritime Capacity Collaboration
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Explainer: What Nigeria’s Green Tax means for car buyers, dealers
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+World Population Day: Radda pledges data-driven development in Katsina
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Sourcing: {'distinct_outlets_in_loud_tier': 2, 'has_original_reporting_outlet': True}
+
+UK awards £3.16m contracts to develop low-cost drone interceptors
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Your Nomination Confirmation Of Competence, Loyalty, Abbas To Shettima
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Who was Lauren? Remembering Amir Boroumand’s late first wife
+  Category: Health
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Senate identifies soldiers, policeman killed, injured in Oyo rescue operation
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Sourcing: {'distinct_outlets_in_loud_tier': 2, 'has_original_reporting_outlet': True}
+
+CBM Appoints Ajimati North Central Coordinator For Policy, Strategy, ICT Ahead Of 2027
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Oloyede’s  sprezzatura
+  Category: Education
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Àwọn oníjìbìtì orí ayélujára tọwọ́ bọ ojú òpó Ààrẹ Kenya, wọ́n ń bèèrè $320,000
+  Category: International
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Taraba PDP Governorship Candidate Urges Calm After Court Dismisses Turaki Faction Suit
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Borno govt, partners hold education summit on school safety
+  Category: Education
+  Outlets: 2
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 2}
+  Sourcing: {'distinct_outlets_in_loud_tier': 2, 'has_original_reporting_outlet': True}
+
+CSO drags Umahi, IGP, father of Ms Habila to court over death of nurse
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Media group hails Oloyede, describes his tenure as extraordinary
+  Category: Education
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+2nd airport: Soludo shouldn’t waste resources on white elephant project –Uzochukwu
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+My life is in danger, EFCC targeting my family, businesses – Achimugu
+  Category: Judiciary
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Sourcing: {'distinct_outlets_in_loud_tier': 2, 'has_original_reporting_outlet': True}
+
+NASS Moves To Strengthen Nigeria’s Cyberspace Protection, Enhance Digital Capacity
+  Category: Politics
+  Outlets: 2
+  Tier dist: {'pro_establishment': 2, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 2, 'has_original_reporting_outlet': True}
+
+‘Traditional advertising is not dead’, says Lanre Adisa as AAAN begins 53rd AGM
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+FG Inaugurates 10th Surveyors Council Of Nigeria
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+PFIPC scandal: Opara asks Gbajabiamila, top officials to resign
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Nigeria’s prisons are filling up with victims of abuse of power
+  Category: Judiciary
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Nigeria leans on legal clarity to keep energy investors through net zero
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Sweet potato prices double amid rising input costs, insecurity
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+The richest person in Wisconsin — 10 names, ranked by net worth and how they made it
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Rare Identical Quadruplets Born In Australia
+  Category: Health
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+Lady overjoyed as her Netherlands study visa gets approved after multiple applications
+  Category: Education
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+The exploitative lending rates conundrum
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+ASo Multimedia reaffirms commitment to promoting investment, leadership excellence
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Transparency Key to Unlocking Diaspora Billions for Nigeria’s Real Estate Market – Attarhi MD
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Legacy of action: The trail of renewed hope across Imo and Kogi
+  Category: Politics
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+LCCI pushes urgent action on food production, inflation
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Pretty Okafor lauds Alex Otti for supporting ailing Daddy Fresh, Ngozi Nwosu, Sunny McDon, others
+  Category: Entertainment
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Tambuwal Supports IDPs In Tureta, Bodinga With N20m, Relief Materials
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+From revenue collection to intelligence: The new Nigeria Customs Service
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': True}
+
+Former UBA Chairman Bello-Osagie Says Bank Was ‘Bankrupt’ Before Turnaround
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Sourcing: {'distinct_outlets_in_loud_tier': 1, 'has_original_reporting_outlet': False}
+
+How Nigerians can apply for World Bank’s 2027 Africa fellowship in US
+  Category: Education
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Sourcing: {'distinct_outlets_in_loud_tier': 2, 'has_original_reporting_outlet': True}
+
+CLEAR: 362
+MIXED: 83
+DARK:  0
+
+======================================================================
+ALL DARK VERDICTS — MANUAL REVIEW REQUIRED
+Adversarial check: does EVERY one of these genuinely look like a coverage gap worth alarming a reader about? Any that don't are false positives the engine needs fixing for.
+======================================================================
+
+======================================================================
+SPORT/ENTERTAINMENT CHECK — should be zero DARK or MIXED from low-stakes categories unless entity/money tagged
+======================================================================
+⚠ FOUND 1 sport/entertainment clusters flagged — REVIEW THESE:
+  - Pretty Okafor lauds Alex Otti for supporting ailing Daddy Fresh, Ngozi Nwosu, Sunny McDon, others (mixed)
+
+======================================================================
+Total clusters analyzed: 500
+Completed: 2026-08-04T12:34:24.279382+00:00
+======================================================================

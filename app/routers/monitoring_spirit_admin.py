@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
-from app.admin_auth import require_staff, get_actor_name
+from app.admin_auth import require_permission, get_actor_name
 from app.db import supabase
 from app.monitoring_spirit import resolve_verdict
 
@@ -15,7 +15,7 @@ def _get_outlets_cache():
     return outlets_map, behavioral_map
 
 @router.get("/api/admin/monitoring-spirit/verdicts")
-async def list_current_verdicts(_: str = Depends(require_staff)):
+async def list_current_verdicts(_: str = Depends(require_permission('monitoring_spirit', 'view'))):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=72)).isoformat()
     clusters = (
         supabase.table("clusters")
@@ -105,7 +105,7 @@ class OverrideCreate(BaseModel):
     reason: str
 
 @router.post("/api/admin/monitoring-spirit/overrides", status_code=201)
-async def create_override(payload: OverrideCreate, actor: str = Depends(get_actor_name)):
+async def create_override(payload: OverrideCreate, actor: str = Depends(get_actor_name), _: str = Depends(require_permission('monitoring_spirit', 'yes'))):
     if not payload.reason.strip():
         raise HTTPException(status_code=400, detail="Reason is required")
 
@@ -130,7 +130,7 @@ async def create_override(payload: OverrideCreate, actor: str = Depends(get_acto
 
 
 @router.get("/api/admin/monitoring-spirit/overrides")
-async def list_overrides(_: str = Depends(require_staff)):
+async def list_overrides(_: str = Depends(require_permission('monitoring_spirit', 'view'))):
     res = (
         supabase.table("verdict_overrides")
         .select("*")
@@ -142,7 +142,7 @@ async def list_overrides(_: str = Depends(require_staff)):
 
 
 @router.post("/api/admin/monitoring-spirit/overrides/{override_id}/reinstate")
-async def reinstate_override(override_id: str, actor: str = Depends(get_actor_name)):
+async def reinstate_override(override_id: str, actor: str = Depends(get_actor_name), _: str = Depends(require_permission('monitoring_spirit', 'yes'))):
     before_res = supabase.table("verdict_overrides").select("*").eq("id", override_id).execute()
     if not before_res.data:
         raise HTTPException(status_code=404, detail="Not found")

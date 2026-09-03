@@ -1,0 +1,378 @@
+======================================================================
+MONITORING SPIRIT — SHADOW RUN
+Started: 2026-08-04T12:03:19.448631+00:00
+======================================================================
+Sampled 500 clusters initially
+
+Initial sample Osun/Election matches: 19
+Initial sample Borno/Security matches: 125
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+outlet tier sample: Institutional
+
+======================================================================
+DIAGNOSTIC: WHY DID DARK NOT FIRE?
+======================================================================
+total_analyzed: 500
+had_silence_pattern: 75
+silence_pattern_significant: 52
+silence_pattern_persistent: 0
+silence_pattern_sourced: 28
+had_2plus_snapshot_reads: 0
+had_0_snapshot_reads: 500
+had_1_snapshot_read: 0
+blocked_by_persistence: 52
+blocked_by_sourcing: 0
+
+Clusters with a silence SHAPE (loud/silent tier pattern, before rails): 75
+Of those, significant: 52
+Clusters with 2+ snapshot reads (persistence rail even possible): 0
+Clusters with 0 snapshot reads (persistence rail CANNOT pass): 500
+
+Of the 52 significant silence patterns:
+  Blocked by PERSISTENCE rail: 52
+  Blocked by SOURCING rail (passed persistence): 0
+  Passed all rails (should be in DARK count): 0
+
+
+======================================================================
+BLOCKED BY PERSISTENCE — review each
+======================================================================
+
+INEC probes voter data leak
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Rowdy Session In House As Agbese Denies Endorsing Ugochinyere, Alleges Signature Forgery
+  Category: Health
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Aso Rock beefs up security as protesters hit streets of Abuja
+  Category: Security
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Tinubu appoints Zainab Marwa into NDDC Board
+  Category: Politics
+  Outlets: 5
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 3}
+  Snapshot reads available: 0
+
+131 Nigerian Firms Secure Africa Quality Mark, Gain Continental Access
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Presidency announces arrest of culprit behind fake Tinubu’s voice note as FG struggles to rescue abducted schoolchildren
+  Category: Politics
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Hashim promises N525 to dollar exchange rate
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+NBA admonishes Nigerian courts, agencies to stop insisting on civil servants with assets as bail sureties
+  Category: Judiciary
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Breaking: Atiku's aide tells DSS who to summon and question over Oyo school abduction
+  Category: Security
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Defence Minister Musa Challenges Nigerian Innovators To Develop Homegrown Defence Technology Solutions
+  Category: Security
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Abia APC petitions national headquarters over NASS primaries
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 3}
+  Snapshot reads available: 0
+
+FBI releases new Top 10 list of fraudsters wanted for multibillion-dollar fraud
+  Category: Health
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Anambra Government Signs Regulations To Guide Operations In Power Sector
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+How true is claim northerners pay more for electricity?
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Eti-Osa APC stakeholders send message to Tinubu over Noheem Adams’ victory
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Kano NDC governorship candidate hails Kwankwasiyya social media influencers
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Forgery, blackmail allegations rock Reps over minority leadership
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Cholera: Children worst hit as 5,260 cases, 67 deaths recorded
+  Category: Education
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+NUPRC Urges Financial Institutions to Support Funding for Gas Sector
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Blue Economy: FG Reiterates Commitment to Actualisation of Agge Deep Sea Port
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+WAEC exams run into night again, parents protest; we’re working on it – Council
+  Category: Education
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Nigeria’s kidnapping crisis and the dangerous normalisation of fear
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Bandits kill vigilante, 2 farmers in Niger
+  Category: Security
+  Outlets: 2
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 2}
+  Snapshot reads available: 0
+
+ADC chieftain sues CJ Tsoho over transfer of Nafiu Bala’s suit to another judge
+  Category: Judiciary
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Umahi: Tinubu will defeat insecurity
+  Category: Politics
+  Outlets: 5
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 3}
+  Snapshot reads available: 0
+
+2027: Kwankwaso will destroy your presidential ambition – Primate Ayodele tells Peter Obi
+  Category: Politics
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Read how UNIPORT graduate bagged first class from school
+  Category: Education
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Snapshot reads available: 0
+
+Peter Obi: Nigerians must not normalise school abductions, insecurity
+  Category: Politics
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Find out more as marketers slash diesel price below Dangote refinery price
+  Category: Economy
+  Outlets: 1
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 1}
+  Snapshot reads available: 0
+
+Oyo Abduction: Youths threaten shutdown of commercial activities in Ogbomoso over delayed rescue of schoolchildren, teachers
+  Category: Security
+  Outlets: 6
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 4}
+  Snapshot reads available: 0
+
+Accord Party presents certificates of return to 28 candidates in Lagos
+  Category: Politics
+  Outlets: 5
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Ekiti people not gale of endorsements will determine who wins June 20 guber poll – Oluyede
+  Category: Politics
+  Outlets: 2
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Ojude Oba drives culture, economic growth –FCMB boss
+  Category: Economy
+  Outlets: 5
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 3}
+  Snapshot reads available: 0
+
+NRC running at loss, borrowing to sustain train operations – Opeifa
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+US Judge Blocks Trump Immigration Restrictions Affecting 39 Countries
+  Category: Judiciary
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Nigeria Risks Future GDP Growth on Early Childhood Underinvestment
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+FCCPC reveals the names of nine companies licensed to lend airtime, data
+  Category: Economy
+  Outlets: 2
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Breaking: Accord party announces its 2027 presidential candidate to Battle Tinubu, Obi, Atiku
+  Category: Politics
+  Outlets: 8
+  Tier dist: {'pro_establishment': 0, 'institutional': 3, 'adversarial': 5}
+  Snapshot reads available: 0
+
+In new Video, Abducted General, Wife Beg Gov’t for Rescue
+  Category: Security
+  Outlets: 6
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 4}
+  Snapshot reads available: 0
+
+Why Gov Alia forced me out of office – Ex-Benue Speaker
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Through CBN, banks expand naira card limit abroad
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Insecurity: Yari calls for national unity, collective responsibility, renewed hope
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Not a Fodder for Politics: Orire Abduction & Security Challenges
+  Category: Security
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Safe rescue of kidnap victims shows power of national unity against insecurity — Adelabu family
+  Category: Security
+  Outlets: 5
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Atiku’s presidency will be synonymous to Fulani taking power – Babachir Lawal
+  Category: Politics
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Charcoal, firewood business booms as Abuja residents groan over Rising gas prices
+  Category: Economy
+  Outlets: 5
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Afri-Invoice unveils double NRS accreditation ahead of July deadline
+  Category: Economy
+  Outlets: 5
+  Tier dist: {'pro_establishment': 0, 'institutional': 2, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Farmers raise concerns over N2.34 billion import bill, insecurity
+  Category: Economy
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 0, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Patients lament shortage of staff, drugs in Ondo, Osun, Ekiti hospitals
+  Category: Health
+  Outlets: 3
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 2}
+  Snapshot reads available: 0
+
+Otunba Adeniyi Olayemi Commends Security Forces for Foiling Bandit Attack in Ikoyi Community
+  Category: Security
+  Outlets: 1
+  Tier dist: {'pro_establishment': 1, 'institutional': 0, 'adversarial': 0}
+  Snapshot reads available: 0
+
+ABIA 2027: We’ll build infrastructure with human face – Anosike, PDP gov candidate
+  Category: Politics
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+Atiku’s Team Rejects Terrorism Allegations From Babachir Lawal
+  Category: Politics
+  Outlets: 4
+  Tier dist: {'pro_establishment': 0, 'institutional': 1, 'adversarial': 3}
+  Snapshot reads available: 0
+
+======================================================================
+BLOCKED BY SOURCING — review each
+======================================================================
+
+CLEAR: 419
+MIXED: 81
+DARK:  0
+
+======================================================================
+ALL DARK VERDICTS — MANUAL REVIEW REQUIRED
+Adversarial check: does EVERY one of these genuinely look like a coverage gap worth alarming a reader about? Any that don't are false positives the engine needs fixing for.
+======================================================================
+
+======================================================================
+SPORT/ENTERTAINMENT CHECK — should be zero DARK or MIXED from low-stakes categories unless entity/money tagged
+======================================================================
+⚠ FOUND 1 sport/entertainment clusters flagged — REVIEW THESE:
+  - 2026 World Cup: Clubs Get $355m For Releasing Players (mixed)
+
+======================================================================
+Total clusters analyzed: 500
+Completed: 2026-08-04T12:07:47.642345+00:00
+======================================================================
