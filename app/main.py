@@ -62,12 +62,18 @@ from app.routers import monitoring_spirit_admin
 from app.routers import politicians_admin
 from app.routers import auth as auth_router
 from app.routers import reader
+from app.routers import admin_overview
+
 
 app.include_router(corrections.router)
 app.include_router(monitoring_spirit_admin.router)
 app.include_router(politicians_admin.router)
+app.include_router(admin_overview.router)
+
 app.include_router(auth_router.router)
 app.include_router(reader.router)
+app.include_router(admin_overview.router)
+
 
 def get_sourcing_info(
     cluster_stories,

@@ -18,7 +18,6 @@ class ConsentRequest(BaseModel):
 import json
 import os
 
-# Load consent strings from the single source of truth
 json_path = os.path.join(os.path.dirname(__file__), "..", "readerAnalyticsConsent.json")
 with open(json_path, "r") as f:
     CONSENT_DATA = json.load(f)
@@ -33,7 +32,6 @@ SHOWN_STRINGS = {
 @router.post("/consent")
 def submit_consent(request: ConsentRequest, user_id: str = Depends(get_current_user)):
     try:
-        # Construct the consent receipt
         payload = {
             "user_id": user_id,
             "granted": request.granted,
@@ -43,10 +41,7 @@ def submit_consent(request: ConsentRequest, user_id: str = Depends(get_current_u
             "at": datetime.now(timezone.utc).isoformat()
         }
         
-        # This table is append-only — never update or delete an existing row,
-        # always insert a new one per event.
         supabase.table("reader_analytics_consent").insert(payload).execute()
-        
         return {"status": "success", "recorded_event": "granted" if request.granted else "withdrawn"}
     except Exception as e:
         logger.error(f"Failed to record consent for user {user_id}: {e}")
@@ -59,11 +54,9 @@ class TrackReadRequest(BaseModel):
 @router.post("/track-read")
 def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_user)):
     try:
-        # Validate tier
         if request.tier not in ["govt", "mainstream", "watchdog"]:
             raise HTTPException(status_code=400, detail="Invalid tier")
             
-        # 1. Check for active consent
         consent_res = supabase.table("reader_analytics_consent") \
             .select("granted") \
             .eq("user_id", user_id) \
@@ -72,10 +65,8 @@ def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_use
             .execute()
             
         if not consent_res.data or not consent_res.data[0].get("granted"):
-            # Return 403, do not track anything
             raise HTTPException(status_code=403, detail="Active consent not found. Tracking aborted.")
             
-        # 2. Increment matching counter via upsert pattern (read-modify-write if no RPC)
         counter_column = f"{request.tier}_count"
         
         counter_res = supabase.table("reader_tier_counters") \
@@ -124,31 +115,67 @@ def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_use
         raise HTTPException(status_code=500, detail="Failed to track read")
 
 @router.get("/summary")
-def get_summary(user_id: str = Depends(get_current_user)):
+async def get_summary(user_id: str = Depends(get_current_user)):
     try:
+        # Counters
         res = supabase.table("reader_tier_counters") \
             .select("govt_count, mainstream_count, watchdog_count, broad_count, partial_count") \
             .eq("user_id", user_id) \
             .limit(1) \
             .execute()
             
+        counts = {
+            "govt": 0,
+            "mainstream": 0,
+            "watchdog": 0,
+            "broad": 0,
+            "partial": 0
+        }
         if res.data:
-            counts = res.data[0]
-            return {
-                "govt": counts.get("govt_count", 0),
-                "mainstream": counts.get("mainstream_count", 0),
-                "watchdog": counts.get("watchdog_count", 0),
-                "broad": counts.get("broad_count", 0),
-                "partial": counts.get("partial_count", 0)
+            c = res.data[0]
+            counts = {
+                "govt": c.get("govt_count", 0),
+                "mainstream": c.get("mainstream_count", 0),
+                "watchdog": c.get("watchdog_count", 0),
+                "broad": c.get("broad_count", 0),
+                "partial": c.get("partial_count", 0)
             }
-        else:
-            return {
-                "govt": 0,
-                "mainstream": 0,
-                "watchdog": 0,
-                "broad": 0,
-                "partial": 0
-            }
+            
+        # Consent
+        consent_res = supabase.table("reader_analytics_consent") \
+            .select("granted") \
+            .eq("user_id", user_id) \
+            .order("at", desc=True) \
+            .limit(1) \
+            .execute()
+        consent_granted = consent_res.data[0].get("granted") if consent_res.data else False
+        
+        # Follows (no mock data)
+        try:
+            follows_res = supabase.table("reader_follows").select("*", count="exact").eq("user_id", user_id).execute()
+            follow_count = follows_res.count if follows_res.count is not None else 0
+        except Exception:
+            follow_count = 0
+            
+        # Public one-tier stories
+        from app.routers.monitoring_spirit_admin import list_current_verdicts
+        verdicts = await list_current_verdicts("bypass")
+        public_one_tier = [v for v in verdicts if v["verdict"] == "dark"][:5]
+        
+        total_opened = counts["govt"] + counts["mainstream"] + counts["watchdog"]
+        
+        return {
+            "counters": {
+                "stories_opened": total_opened,
+                "broadly_covered": counts["broad"],
+                "one_tier_only": counts["partial"],
+                "following": follow_count
+            },
+            "tier_distribution": counts,
+            "consent_granted": consent_granted,
+            "public_one_tier_stories": public_one_tier,
+            "alerts": []
+        }
     except Exception as e:
         logger.error(f"Failed to fetch reader summary for user {user_id}: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch summary")
@@ -157,6 +184,16 @@ def get_summary(user_id: str = Depends(get_current_user)):
 def delete_counts(user_id: str = Depends(get_current_user)):
     try:
         supabase.table("reader_tier_counters").delete().eq("user_id", user_id).execute()
+        # Withdraw consent automatically when counts deleted to stop future tracking
+        payload = {
+            "user_id": user_id,
+            "granted": False,
+            "copy_version": CONSENT_VERSION,
+            "shown_strings": SHOWN_STRINGS,
+            "method": "counts_deleted",
+            "at": datetime.now(timezone.utc).isoformat()
+        }
+        supabase.table("reader_analytics_consent").insert(payload).execute()
         return {"status": "success", "recorded_event": "counts_deleted"}
     except Exception as e:
         logger.error(f"Failed to delete reader counts for user {user_id}: {e}")
