@@ -29,35 +29,41 @@ async def list_current_verdicts(_: str = Depends(require_permission('monitoring_
 
     cluster_ids = [c["id"] for c in clusters]
 
-    overrides_res = (
-        supabase.table("verdict_overrides")
-        .select("cluster_id")
-        .eq("active", True)
-        .in_("cluster_id", cluster_ids)
-        .execute()
-    )
-    overridden_ids = {o["cluster_id"] for o in (overrides_res.data or [])}
+    overrides_data = []
+    stories_data = []
+    snaps_data = []
+    
+    for i in range(0, len(cluster_ids), 50):
+        batch = cluster_ids[i:i+50]
+        
+        # Overrides chunk
+        o_res = supabase.table("verdict_overrides").select("cluster_id").eq("active", True).in_("cluster_id", batch).execute()
+        overrides_data.extend(o_res.data or [])
+        
+        # Stories chunk
+        s_res = supabase.table("stories").select(
+            "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
+        ).in_("cluster_id", batch).execute()
+        stories_data.extend(s_res.data or [])
+        
+        # Snapshots chunk
+        sn_res = supabase.table("coverage_snapshots").select(
+            "cluster_id, coverage_tier_distribution, outlet_count, snapshot_at"
+        ).in_("cluster_id", batch).order("snapshot_at", desc=True).execute()
+        snaps_data.extend(sn_res.data or [])
+
+    overridden_ids = {o["cluster_id"] for o in overrides_data}
 
     outlets_map, behavioral_map = _get_outlets_cache()
     from app.main import compute_live_coverage_tier_distribution, get_sourcing_info
     
-    # Bulk fetch stories
-    stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
-    ).in_("cluster_id", cluster_ids).execute()
-    
     from collections import defaultdict
     stories_by_cluster = defaultdict(list)
-    for s in (stories_res.data or []):
+    for s in stories_data:
         stories_by_cluster[s["cluster_id"]].append(s)
         
-    # Bulk fetch snapshots
-    snap_res = supabase.table("coverage_snapshots").select(
-        "cluster_id, coverage_tier_distribution, outlet_count, snapshot_at"
-    ).in_("cluster_id", cluster_ids).order("snapshot_at", desc=True).execute()
-    
     snaps_by_cluster = defaultdict(list)
-    for snap in (snap_res.data or []):
+    for snap in snaps_data:
         if len(snaps_by_cluster[snap["cluster_id"]]) < 3:
             snaps_by_cluster[snap["cluster_id"]].append(snap)
 
