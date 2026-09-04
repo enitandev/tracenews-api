@@ -62,17 +62,18 @@ def generate_cluster_summary(cluster_id: str) -> dict:
     combined_bullets_lower = " ".join(bullets).lower()
     combined_summaries_lower = articles_text.lower()
     
+    import re
     # 3. Eval Check
     flags = []
     
     # a) Escalation check
     for term in ESCALATION_TERMS:
-        if term.lower() in combined_bullets_lower and term.lower() not in combined_summaries_lower:
+        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower) and not re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_summaries_lower):
             flags.append(f"escalation: {term}")
             
     # b) Coverage check
     for term in FORBIDDEN_COVERAGE_TERMS:
-        if term.lower() in combined_bullets_lower:
+        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower):
             flags.append(f"forbidden_coverage: {term}")
             
     # c) Length check
@@ -81,8 +82,8 @@ def generate_cluster_summary(cluster_id: str) -> dict:
         
     # 4. Gating Check
     gate = GATE_DEFAULT
-    has_adverse = any(t.lower() in combined_bullets_lower for t in ADVERSE_CONTEXT_TERMS)
-    has_anchor = any(t.lower() in combined_bullets_lower for t in PUBLIC_RECORD_ANCHORS)
+    has_adverse = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
+    has_anchor = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
     
     if has_adverse:
         if has_anchor:

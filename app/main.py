@@ -2029,7 +2029,7 @@ async def sitemap_health():
 def get_cluster_summary(id: str):
     try:
         from app.storySummaryStrings import UI
-        res = supabase.table("cluster_summaries").select("*").eq("cluster_id", id).execute()
+        res = supabase.table("cluster_summaries").select("*").eq("cluster_id", id).order("generated_at", desc=True).limit(1).execute()
         if not res.data:
             return {"status": "pending", "bullets": [], "message": UI["pending"]}
         

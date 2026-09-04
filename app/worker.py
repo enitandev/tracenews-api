@@ -137,10 +137,21 @@ def main():
             recent_ids = [c["id"] for c in recent_clusters_res.data] if recent_clusters_res.data else []
             
             if recent_ids:
-                existing_summaries_res = supabase.table("cluster_summaries").select("cluster_id").in_("cluster_id", recent_ids).execute()
-                existing_ids = set([s["cluster_id"] for s in existing_summaries_res.data]) if existing_summaries_res.data else set()
+                # Fetch the most recent summary for each cluster. PostgREST doesn't easily do DISTINCT ON,
+                # but we can fetch all summaries for recent_ids and sort them locally to find the latest.
+                existing_summaries_res = supabase.table("cluster_summaries").select("cluster_id, superseded, generated_at").in_("cluster_id", recent_ids).order("generated_at", desc=True).execute()
                 
-                missing_ids = [cid for cid in recent_ids if cid not in existing_ids]
+                latest_summaries = {}
+                for s in (existing_summaries_res.data or []):
+                    if s["cluster_id"] not in latest_summaries:
+                        latest_summaries[s["cluster_id"]] = s
+                
+                missing_ids = []
+                for cid in recent_ids:
+                    if cid not in latest_summaries:
+                        missing_ids.append(cid)
+                    elif latest_summaries[cid].get("superseded") is True:
+                        missing_ids.append(cid)
                 
                 # Cap at 50 per run
                 to_summarise = missing_ids[:50]

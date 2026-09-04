@@ -153,7 +153,7 @@ ADVERSE_CONTEXT_TERMS = [
 
 PUBLIC_RECORD_ANCHORS = [
     "court", "judge", "tribunal", "commission", "efcc", "icpc", "police",
-    "senate", "house of representatives", "assembly", "ministry",
+    "senate", "house of representatives", "assembly", 
     "regulator", "gazette", "filing", "affidavit", "charge sheet",
 ]
 
@@ -172,7 +172,7 @@ ESCALATION_TERMS = [
 ]
 
 FORBIDDEN_COVERAGE_TERMS = [
-    "outlet", "outlets", "coverage", "reported by", "the press", "media",
+    "outlet", "outlets", "coverage", "reported by", "the press",
     "emphasis", "emphasised", "emphasized", "downplayed", "omitted",
     "ignored", "framed", "framing", "tier", "government-aligned",
     "mainstream", "watchdog", "some publications", "several sources",

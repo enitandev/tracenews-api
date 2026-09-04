@@ -44,7 +44,7 @@ async def submit_correction(payload: CorrectionSubmit):
         "requester_name": payload.requester_name,
         "requester_email": payload.requester_email,
         "requester_relationship": payload.requester_relationship,
-        "sla_due_at": add_business_days(datetime.utcnow(), 5).isoformat(),
+        "sla_due_at": (datetime.utcnow() + timedelta(hours=12)).isoformat() if payload.subject_type == "cluster_summary" else add_business_days(datetime.utcnow(), 5).isoformat(),
     }).execute()
     return res.data[0]
 
@@ -92,6 +92,13 @@ async def update_correction(
 
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    if payload.status == "actioned" and before.get("subject_type") == "cluster_summary":
+        # Supersede the most recent cluster summary for this cluster
+        cluster_id = before.get("subject_id")
+        latest_summary_res = supabase.table("cluster_summaries").select("id").eq("cluster_id", cluster_id).order("generated_at", desc=True).limit(1).execute()
+        if latest_summary_res.data:
+            supabase.table("cluster_summaries").update({"superseded": True}).eq("id", latest_summary_res.data[0]["id"]).execute()
 
     after_res = (
         supabase.table("correction_requests")
