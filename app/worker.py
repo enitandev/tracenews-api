@@ -124,6 +124,43 @@ def main():
         run_image_hydration()
         logger.info("[worker] Image hydration done.")
 
+        # 5. Event Summaries
+        logger.info("[worker] === EVENT SUMMARIES ===")
+        try:
+            # Check for clusters without summaries
+            # We want clusters that exist, but their id is not in cluster_summaries.
+            # Using Supabase syntax, we can query clusters and filter out ones that have a summary,
+            # or just fetch recent clusters and check.
+            # PostgREST doesn't support NOT IN easily without an RPC, so let's fetch the most recent 100 clusters,
+            # then fetch the summaries for those, and process the difference.
+            recent_clusters_res = supabase.table("clusters").select("id").order("first_seen_at", desc=True).limit(200).execute()
+            recent_ids = [c["id"] for c in recent_clusters_res.data] if recent_clusters_res.data else []
+            
+            if recent_ids:
+                existing_summaries_res = supabase.table("cluster_summaries").select("cluster_id").in_("cluster_id", recent_ids).execute()
+                existing_ids = set([s["cluster_id"] for s in existing_summaries_res.data]) if existing_summaries_res.data else set()
+                
+                missing_ids = [cid for cid in recent_ids if cid not in existing_ids]
+                
+                # Cap at 50 per run
+                to_summarise = missing_ids[:50]
+                skipped_count = len(recent_ids) - len(missing_ids)
+                
+                logger.info(f"[worker] Summaries: skipped {skipped_count} existing, generating {len(to_summarise)} new.")
+                
+                if to_summarise:
+                    from app.summarizer import generate_cluster_summary
+                    for cid in to_summarise:
+                        try:
+                            generate_cluster_summary(cid)
+                        except Exception:
+                            logger.exception(f"[worker] Failed to generate summary for cluster {cid}")
+            else:
+                logger.info("[worker] No recent clusters found for summarisation.")
+        except Exception:
+            logger.exception("[worker] Event Summaries pipeline failed.")
+        logger.info("[worker] Event Summaries done.")
+
         # 6. Daily Briefing - only during 05:00-07:00 UTC (6-8 AM WAT)
         lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
         if 5 <= datetime.now(timezone.utc).hour <= 6:

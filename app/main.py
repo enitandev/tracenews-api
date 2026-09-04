@@ -2024,3 +2024,24 @@ async def sitemap_health():
             "sitemaps": results
         }
     )
+
+@app.get("/api/clusters/{id}/summary")
+def get_cluster_summary(id: str):
+    try:
+        from app.storySummaryStrings import UI
+        res = supabase.table("cluster_summaries").select("*").eq("cluster_id", id).execute()
+        if not res.data:
+            return {"status": "pending", "bullets": [], "message": UI["pending"]}
+        
+        summary = res.data[0]
+        if summary.get("published"):
+            return {"status": "published", "bullets": summary.get("bullets", [])}
+        
+        if summary.get("gate") in ["review", "suppress"] or summary.get("flags"):
+            return {"status": "withheld", "bullets": [], "message": UI["withheld"]}
+            
+        return {"status": "error", "bullets": [], "message": UI["error"]}
+    except Exception as e:
+        logger.error(f"Error fetching summary for {id}: {e}")
+        from app.storySummaryStrings import UI
+        return {"status": "error", "bullets": [], "message": UI["error"]}
