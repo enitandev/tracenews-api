@@ -739,19 +739,6 @@ async def story_og(slug: str):
     
     return HTMLResponse(content=html)
 
-@app.get("/clusters/{id}/framing")
-def get_cluster_framing(id: str, alignment: str):
-    """
-    SUPPRESSED — Bridge Chambers 
-    ruling 9 Jul 2026.
-    AI-generated characterisation 
-    of named outlets' coverage 
-    cannot publish without human 
-    verification gate. 
-    Returns empty pending redesign.
-    """
-    return {"bullets": [], 
-            "suppressed": True}
 
 
 class FeedbackRequest(BaseModel):

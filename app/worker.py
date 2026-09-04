@@ -124,13 +124,6 @@ def main():
         run_image_hydration()
         logger.info("[worker] Image hydration done.")
 
-        # 5. Framing (bounded to 20 clusters, skips already-cached)
-        # Disabled 4 Sep 2026 — output suppressed on the frontend since Bridge Chambers ruling 9 Jul 2026. Do not re-enable without counsel clearance.
-        # from app.framer import run_framing_job
-        logger.info("[worker] === FRAMING (DISABLED) ===")
-        # run_framing_job()
-        logger.info("[worker] Framing disabled.")
-
         # 6. Daily Briefing - only during 05:00-07:00 UTC (6-8 AM WAT)
         lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
         if 5 <= datetime.now(timezone.utc).hour <= 6:
