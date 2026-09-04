@@ -125,10 +125,11 @@ def main():
         logger.info("[worker] Image hydration done.")
 
         # 5. Framing (bounded to 20 clusters, skips already-cached)
-        from app.framer import run_framing_job
-        logger.info("[worker] === FRAMING ===")
-        run_framing_job()
-        logger.info("[worker] Framing done.")
+        # Disabled 4 Sep 2026 — output suppressed on the frontend since Bridge Chambers ruling 9 Jul 2026. Do not re-enable without counsel clearance.
+        # from app.framer import run_framing_job
+        logger.info("[worker] === FRAMING (DISABLED) ===")
+        # run_framing_job()
+        logger.info("[worker] Framing disabled.")
 
         # 6. Daily Briefing - only during 05:00-07:00 UTC (6-8 AM WAT)
         lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -159,6 +160,33 @@ def main():
                 logger.error(f"[worker] Daily briefing failed: {e}")
         else:
             logger.info("[worker] Skipping daily briefing (outside 05-07 UTC window).")
+
+        # 7. Update public one-tier feed (Cache for Reader Summary & Admin Overview)
+        logger.info("[worker] === PUBLIC FEED CACHING ===")
+        try:
+            from app.routers.monitoring_spirit_admin import list_current_verdicts
+            import asyncio
+            loop = asyncio.get_event_loop()
+            verdicts = loop.run_until_complete(list_current_verdicts("bypass"))
+            public_one_tier = [v for v in verdicts if v.get("verdict") == "dark"][:5]
+            
+            now_iso = datetime.now(timezone.utc).isoformat()
+            # Cache the full verdicts for admin overview
+            supabase.table("public_feeds").upsert({
+                "feed_key": "monitoring_spirit_verdicts",
+                "payload": verdicts,
+                "computed_at": now_iso
+            }).execute()
+            
+            # Cache the 5 stories for reader summary
+            supabase.table("public_feeds").upsert({
+                "feed_key": "public_one_tier_stories",
+                "payload": public_one_tier,
+                "computed_at": now_iso
+            }).execute()
+            logger.info("[worker] Public feeds cached.")
+        except Exception as e:
+            logger.error(f"[worker] Feed caching failed: {e}")
 
         elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
         logger.info(

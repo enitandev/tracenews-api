@@ -75,6 +75,10 @@ def generate_comparison_summary(pro_summary: list, inst_summary: list, adv_summa
 
 def run_framing_job():
     """Scheduled job to preemptively generate AI framings for recent clusters."""
+    # NOTE FOR FUTURE REVIVAL:
+    # 55,478 clusters were framed against 28k total clusters because this job 
+    # NEVER checks if framing_cache is already populated properly before attempting.
+    # When reviving this feature, ADD A CHECK to ensure framing_cache is actually empty!
     try:
         from datetime import datetime, timezone, timedelta
         forty_eight_hours_ago = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()

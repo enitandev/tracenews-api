@@ -13,8 +13,8 @@ async def get_overview(_: str = Depends(require_permission('console_access', 'vi
 
     from datetime import datetime, timezone, timedelta
     
-    from app.routers.monitoring_spirit_admin import list_current_verdicts
-    verdicts_data = await list_current_verdicts(_)
+    feed_res = supabase.table("public_feeds").select("payload").eq("feed_key", "monitoring_spirit_verdicts").execute()
+    verdicts_data = feed_res.data[0]["payload"] if feed_res.data else []
     live_verdicts_count = len(verdicts_data)
     
     # Politicians held (needing review)

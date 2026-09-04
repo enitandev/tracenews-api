@@ -154,10 +154,14 @@ async def get_summary(user_id: str = Depends(get_current_user)):
         # Table reader_follows does not exist yet (Phase 2)
         follow_count = 0
             
-        # Public one-tier stories
-        from app.routers.monitoring_spirit_admin import list_current_verdicts
-        verdicts = await list_current_verdicts("bypass")
-        public_one_tier = [v for v in verdicts if v["verdict"] == "dark"][:5]
+        # Public one-tier stories from cache
+        feed_res = supabase.table("public_feeds").select("payload, computed_at").eq("feed_key", "public_one_tier_stories").execute()
+        if feed_res.data:
+            public_one_tier = feed_res.data[0]["payload"]
+            computed_at = feed_res.data[0]["computed_at"]
+        else:
+            public_one_tier = []
+            computed_at = None
         
         total_opened = counts["govt"] + counts["mainstream"] + counts["watchdog"]
         
@@ -171,6 +175,7 @@ async def get_summary(user_id: str = Depends(get_current_user)):
             "tier_distribution": counts,
             "consent_granted": consent_granted,
             "public_one_tier_stories": public_one_tier,
+            "public_one_tier_computed_at": computed_at,
             "alerts": []
         }
     except Exception as e:
