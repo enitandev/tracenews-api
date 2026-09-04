@@ -1,5 +1,6 @@
-import os
 from app.db import supabase
-
-res = supabase.table("clusters").select("id, representative_title, category").execute()
-print(res.data)
+try:
+    res = supabase.table("reader_tier_counters").select("govt_count, mainstream_count, watchdog_count, broad_count, partial_count").limit(1).execute()
+    print("Counters Select Success")
+except Exception as e:
+    print("Counters Select Error:", e)
