@@ -149,13 +149,34 @@ a person's conduct. Do not mention outlets or coverage."""
 
 # ═══ GATING — counsel's three-tier treatment ═════════════════════════════════
 ADVERSE_CONTEXT_TERMS = [
-    "alleged", "allegation", "accused", "accuses", "fraud", "corruption",
-    "bribe", "bribery", "embezzle", "diverted", "misappropriat",
-    "investigation", "investigated", "probe", "arrested", "detained",
-    "charged", "indicted", "convicted", "sentenced", "guilty",
-    "misconduct", "wrongdoing", "scandal", "petition", "sued", "lawsuit",
-    "tribunal", "resigned", "sacked", "dismissed", "suspended",
-    "died", "death", "killed", "injured",
+    "allegation", "allegations", "alleged", "alleges", "allege",
+    "accuse", "accuses", "accused", "accusation", "accusations",
+    "fraud", "frauds", "fraudulent",
+    "corrupt", "corruption", "corrupts",
+    "bribe", "bribes", "bribery", "bribed",
+    "embezzle", "embezzles", "embezzled", "embezzlement",
+    "divert", "diverts", "diverted", "diversion",
+    "misappropriate", "misappropriates", "misappropriated", "misappropriation",
+    "investigate", "investigates", "investigated", "investigation", "investigations",
+    "probe", "probes", "probed", "probing",
+    "arrest", "arrests", "arrested",
+    "detain", "detains", "detained", "detention",
+    "charge", "charges", "charged",
+    "indict", "indicts", "indicted", "indictment", "indictments",
+    "convict", "convicts", "convicted", "conviction", "convictions",
+    "sentence", "sentences", "sentenced",
+    "guilt", "guilty",
+    "misconduct", "wrongdoing", "scandal", "scandals",
+    "petition", "petitions", "petitioned",
+    "sue", "sues", "sued", "lawsuit", "lawsuits",
+    "tribunal", "tribunals",
+    "resign", "resigns", "resigned", "resignation",
+    "sack", "sacks", "sacked",
+    "dismiss", "dismisses", "dismissed", "dismissal",
+    "suspend", "suspends", "suspended", "suspension",
+    "die", "dies", "died", "death", "deaths",
+    "kill", "kills", "killed",
+    "injure", "injures", "injured", "injury", "injuries",
 ]
 
 # The mere naming of a body is expressly NOT an anchor. An anchor requires
@@ -168,10 +189,22 @@ ADVERSE_CONTEXT_TERMS = [
 # other body name. An ICPC PUBLISHED FINDING anchors via "published findings"; an
 # ICPC press statement does not.
 PUBLIC_RECORD_ANCHORS = [
-    "court", "judge", "tribunal", "magistrate", "filed", "motion", "suit",
-    "lawsuit", "charged", "charges", "indicted", "convicted", "sentenced",
-    "ruling", "judgement", "verdict", "affidavit", "subpoena", "warrant",
-    "testified", "sworn", "gazette", "published findings", "formal petition"
+    "court", "courts", "judge", "judges", "tribunal", "tribunals", "magistrate", "magistrates",
+    "file", "files", "filed", "filing",
+    "motion", "motions", "suit", "suits", "lawsuit", "lawsuits",
+    "charge", "charges", "charged", "charging",
+    "indict", "indicts", "indicted", "indictment", "indictments",
+    "convict", "convicts", "convicted", "conviction", "convictions",
+    "sentence", "sentences", "sentenced", "sentencing",
+    "rule", "rules", "ruled", "ruling", "rulings",
+    "judgement", "judgements", "judgment", "judgments",
+    "verdict", "verdicts",
+    "affidavit", "affidavits", "subpoena", "subpoenas", "warrant", "warrants",
+    "testify", "testifies", "testified", "testifying",
+    "swear", "swears", "swore", "sworn",
+    "gazette", "gazettes", "gazetted",
+    "published finding", "published findings",
+    "formal petition", "formal petitions"
 ]
 
 GATE_AUTO_PUBLISH = "auto"       
@@ -194,16 +227,35 @@ PRINCIPAL_OFFICEHOLDERS = [
 
 # ═══ ANTI-EMBELLISHMENT EVAL ═════════════════════════════════════════════════
 ESCALATION_TERMS = [
-    "charged", "indicted", "convicted", "guilty", "sentenced", "jailed",
-    "confirmed", "proven", "found to have", "was sacked", "fired",
-    "embezzled", "stole", "took a bribe", "corrupt",
+    "charge", "charges", "charged", "charging",
+    "indict", "indicts", "indicted", "indictment", "indictments",
+    "convict", "convicts", "convicted", "conviction", "convictions",
+    "guilt", "guilty",
+    "sentence", "sentences", "sentenced", "sentencing",
+    "jail", "jails", "jailed", "jailing",
+    "confirm", "confirms", "confirmed", "confirming",
+    "prove", "proves", "proved", "proven", "proving",
+    "found to have", "finds to have", "find to have",
+    "was sacked", "were sacked", "is sacked", "are sacked",
+    "fire", "fires", "fired", "firing",
+    "embezzle", "embezzles", "embezzled", "embezzlement",
+    "stole", "steal", "steals", "stolen",
+    "took a bribe", "take a bribe", "takes a bribe", "taken a bribe",
+    "corrupt", "corruption"
 ]
 
 FORBIDDEN_COVERAGE_TERMS = [
-    "outlet", "outlets", "coverage", "reported by", "the press",
-    "emphasis", "emphasised", "emphasized", "downplayed", "omitted",
-    "ignored", "framed", "framing", "tier", "government-aligned",
-    "mainstream", "watchdog", "some publications", "several sources",
+    "outlet", "outlets", "coverage", "coverages",
+    "report by", "reports by", "reported by", "reporting by",
+    "the press",
+    "emphasis", "emphasise", "emphasises", "emphasised", "emphasize", "emphasizes", "emphasized",
+    "downplay", "downplays", "downplayed", "downplaying",
+    "omit", "omits", "omitted", "omitting", "omission",
+    "ignore", "ignores", "ignored", "ignoring",
+    "frame", "frames", "framed", "framing",
+    "tier", "tiers", "government-aligned", "government aligned",
+    "mainstream", "watchdog", "watchdogs",
+    "some publications", "some publication", "several sources", "several source"
 ]
 
 

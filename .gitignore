@@ -7,3 +7,9 @@ venv/
 dist/
 *.egg-info/
 .DS_Store
+
+.venv12/
+.venv/
+venv/
+__pycache__/
+*.pyc

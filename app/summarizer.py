@@ -22,24 +22,6 @@ from app.storySummaryStrings import (
     PRINCIPAL_OFFICEHOLDERS
 )
 
-try:
-    from nltk.stem.snowball import SnowballStemmer
-    stemmer = SnowballStemmer("english")
-except ImportError:
-    stemmer = None
-
-def stem_phrase(phrase):
-    if not stemmer:
-        return phrase
-    return " ".join(stemmer.stem(w) for w in phrase.split())
-
-def stem_text(text):
-    if not stemmer:
-        return text
-    parts = re.split(r'(\W+)', text)
-    return "".join(stemmer.stem(p) if p.isalnum() else p for p in parts)
-
-
 logger = logging.getLogger("summarizer")
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
@@ -78,23 +60,17 @@ def generate_cluster_summary(cluster_id: str) -> dict:
     combined_bullets_lower = " ".join(bullets).lower()
     combined_summaries_lower = articles_text.lower()
     
-    # Stem texts for evaluation
-    stemmed_bullets_lower = stem_text(combined_bullets_lower)
-    stemmed_summaries_lower = stem_text(combined_summaries_lower)
-    
     # 3. Eval Check
     flags = []
     
     # a) Escalation check
     for term in ESCALATION_TERMS:
-        stemmed_term = stem_phrase(term.lower())
-        if re.search(r'\b' + re.escape(stemmed_term) + r'\b', stemmed_bullets_lower) and not re.search(r'\b' + re.escape(stemmed_term) + r'\b', stemmed_summaries_lower):
+        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower) and not re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_summaries_lower):
             flags.append(f"escalation: {term}")
             
     # b) Coverage check
     for term in FORBIDDEN_COVERAGE_TERMS:
-        stemmed_term = stem_phrase(term.lower())
-        if re.search(r'\b' + re.escape(stemmed_term) + r'\b', stemmed_bullets_lower):
+        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower):
             flags.append(f"forbidden_coverage: {term}")
             
     # c) Length check
@@ -103,9 +79,9 @@ def generate_cluster_summary(cluster_id: str) -> dict:
         
     # 4. Gating Check
     gate = GATE_DEFAULT
-    has_adverse = any(re.search(r'\b' + re.escape(stem_phrase(t.lower())) + r'\b', stemmed_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
-    has_anchor = any(re.search(r'\b' + re.escape(stem_phrase(t.lower())) + r'\b', stemmed_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
-    has_principal = any(re.search(r'\b' + re.escape(stem_phrase(t.lower())) + r'\b', stemmed_bullets_lower) for t in PRINCIPAL_OFFICEHOLDERS)
+    has_adverse = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
+    has_anchor = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
+    has_principal = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in PRINCIPAL_OFFICEHOLDERS)
     
     if has_adverse:
         if has_principal:
