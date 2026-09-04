@@ -1,12 +1,13 @@
-import os
 import json
 import logging
+import os
+import re
 from openai import OpenAI
 from app.db import supabase
 from app.storySummaryStrings import (
     SUMMARY_MODEL,
-    SUMMARY_MAX_TOKENS,
     SUMMARY_TEMPERATURE,
+    SUMMARY_MAX_TOKENS,
     SUMMARY_SYSTEM_PROMPT,
     SUMMARY_USER_PROMPT,
     ADVERSE_CONTEXT_TERMS,
@@ -14,28 +15,43 @@ from app.storySummaryStrings import (
     GATE_AUTO_PUBLISH,
     GATE_HUMAN_REVIEW,
     GATE_SUPPRESS_CLAIM,
+    GATE_SENIOR_REVIEW,
     GATE_DEFAULT,
     ESCALATION_TERMS,
-    FORBIDDEN_COVERAGE_TERMS
+    FORBIDDEN_COVERAGE_TERMS,
+    PRINCIPAL_OFFICEHOLDERS
 )
 
-logger = logging.getLogger(__name__)
+try:
+    from nltk.stem.snowball import SnowballStemmer
+    stemmer = SnowballStemmer("english")
+except ImportError:
+    stemmer = None
+
+def stem_phrase(phrase):
+    if not stemmer:
+        return phrase
+    return " ".join(stemmer.stem(w) for w in phrase.split())
+
+def stem_text(text):
+    if not stemmer:
+        return text
+    parts = re.split(r'(\W+)', text)
+    return "".join(stemmer.stem(p) if p.isalnum() else p for p in parts)
+
+
+logger = logging.getLogger("summarizer")
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 def generate_cluster_summary(cluster_id: str) -> dict:
-    # 1. Fetch stories
-    res = supabase.table("stories").select("summary").eq("cluster_id", cluster_id).execute()
-    stories = res.data or []
+    """Generate and store an event summary for a given cluster."""
+    stories_res = supabase.table("stories").select("title, summary, outlet_id").eq("cluster_id", cluster_id).execute()
+    stories = stories_res.data
     
-    # Filter out empty summaries
-    valid_summaries = [s.get("summary") for s in stories if s.get("summary")]
-    if not valid_summaries:
-        logger.info(f"No valid summaries found for cluster {cluster_id}")
+    if len(stories) < 2:
         return None
         
-    articles_text = "\n\n---\n\n".join(valid_summaries)
-    
-    # 2. Generate
+    articles_text = "\n\n".join([f"Source: {s.get('outlet_id')}\nHeadline: {s.get('title')}\nSummary: {s.get('summary')}" for s in stories])
     user_prompt = SUMMARY_USER_PROMPT.format(articles_text=articles_text)
     
     try:
@@ -62,18 +78,23 @@ def generate_cluster_summary(cluster_id: str) -> dict:
     combined_bullets_lower = " ".join(bullets).lower()
     combined_summaries_lower = articles_text.lower()
     
-    import re
+    # Stem texts for evaluation
+    stemmed_bullets_lower = stem_text(combined_bullets_lower)
+    stemmed_summaries_lower = stem_text(combined_summaries_lower)
+    
     # 3. Eval Check
     flags = []
     
     # a) Escalation check
     for term in ESCALATION_TERMS:
-        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower) and not re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_summaries_lower):
+        stemmed_term = stem_phrase(term.lower())
+        if re.search(r'\b' + re.escape(stemmed_term) + r'\b', stemmed_bullets_lower) and not re.search(r'\b' + re.escape(stemmed_term) + r'\b', stemmed_summaries_lower):
             flags.append(f"escalation: {term}")
             
     # b) Coverage check
     for term in FORBIDDEN_COVERAGE_TERMS:
-        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower):
+        stemmed_term = stem_phrase(term.lower())
+        if re.search(r'\b' + re.escape(stemmed_term) + r'\b', stemmed_bullets_lower):
             flags.append(f"forbidden_coverage: {term}")
             
     # c) Length check
@@ -82,11 +103,14 @@ def generate_cluster_summary(cluster_id: str) -> dict:
         
     # 4. Gating Check
     gate = GATE_DEFAULT
-    has_adverse = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
-    has_anchor = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
+    has_adverse = any(re.search(r'\b' + re.escape(stem_phrase(t.lower())) + r'\b', stemmed_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
+    has_anchor = any(re.search(r'\b' + re.escape(stem_phrase(t.lower())) + r'\b', stemmed_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
+    has_principal = any(re.search(r'\b' + re.escape(stem_phrase(t.lower())) + r'\b', stemmed_bullets_lower) for t in PRINCIPAL_OFFICEHOLDERS)
     
     if has_adverse:
-        if has_anchor:
+        if has_principal:
+            gate = GATE_SENIOR_REVIEW
+        elif has_anchor:
             gate = GATE_HUMAN_REVIEW
         else:
             gate = GATE_SUPPRESS_CLAIM

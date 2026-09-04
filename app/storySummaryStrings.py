@@ -66,7 +66,7 @@ You are producing a factual record of an event. You are not analysing coverage.
 1. ATTRIBUTE EVERY CLAIM THAT BEARS ON A PERSON'S CONDUCT OR REPUTATION.
 
    Never state such a claim flat. Always name its origin — the court, the
-   report, the agency, the statement, the spokesperson.
+   report, the agency, the statement, the spokesperson. Use "according to" for institutional attribution — "according to the National Bureau of Statistics", "according to the court". Do not use "reported by".
 
    WRONG:  "The minister diverted N2bn from the budget."
    RIGHT:  "The EFCC alleges the minister diverted N2bn from the budget."
@@ -123,6 +123,13 @@ You are producing a factual record of an event. You are not analysing coverage.
    No motive language. No characterisation of anyone's intent. No emotive
    adjectives. Report; do not judge.
 
+7. NEVER NAME A MINOR.
+
+   NEVER name a person under 18. Where a source names a child — as a victim,
+   witness, or in any other capacity — report the fact and omit the name.
+   Describe them by relationship or age ("her two sons", "a 4-year-old") and
+   never by name. This applies even when the sources name them.
+
 ═══ OUTPUT ═══
 
 A JSON object with a single key "bullets" containing 4-5 strings.
@@ -151,17 +158,38 @@ ADVERSE_CONTEXT_TERMS = [
     "died", "death", "killed", "injured",
 ]
 
+# The mere naming of a body is expressly NOT an anchor. An anchor requires
+# evidence of an actual proceeding or published finding.
+# Worked example (sample 3): the ICPC said it found a fake agency, the President
+# ordered an arrest, three permanent secretaries were named and suspended — and
+# the summary correctly gated to SUPPRESS, because nobody had been charged and no
+# findings had been published. Institutional weight is not a protected record.
+# Do not re-add efcc, icpc, police, senate, ministry, commission, agency or any
+# other body name. An ICPC PUBLISHED FINDING anchors via "published findings"; an
+# ICPC press statement does not.
 PUBLIC_RECORD_ANCHORS = [
-    "court", "judge", "tribunal", "commission", "efcc", "icpc", "police",
-    "senate", "house of representatives", "assembly", 
-    "regulator", "gazette", "filing", "affidavit", "charge sheet",
+    "court", "judge", "tribunal", "magistrate", "filed", "motion", "suit",
+    "lawsuit", "charged", "charges", "indicted", "convicted", "sentenced",
+    "ruling", "judgement", "verdict", "affidavit", "subpoena", "warrant",
+    "testified", "sworn", "gazette", "published findings", "formal petition"
 ]
 
 GATE_AUTO_PUBLISH = "auto"       
 GATE_HUMAN_REVIEW = "review"     
 GATE_SUPPRESS_CLAIM = "suppress" 
+GATE_SENIOR_REVIEW = "senior_review"
 
 GATE_DEFAULT = GATE_HUMAN_REVIEW
+
+# Match on the office title AND on the current holder's name. 
+# Must be reviewed after any change of office.
+PRINCIPAL_OFFICEHOLDERS = [
+    "president", "bola tinubu", "tinubu",
+    "vice president", "kashim shettima", "shettima",
+    "senate president", "godswill akpabio", "akpabio",
+    "speaker", "tajudeen abbas", "abbas",
+    "chief justice", "kudirat kekere-ekun", "kekere-ekun"
+]
 
 
 # ═══ ANTI-EMBELLISHMENT EVAL ═════════════════════════════════════════════════
@@ -191,4 +219,19 @@ UI = {
 }
 
 SUMMARY_CORRECTION_SLA_HOURS = 12   
-SUMMARY_CORRECTION_PURGES_CACHE = True
+
+
+# ═══ STAFF CONSOLE REQUIREMENTS ══════════════════════════════════════════════
+# The following must be implemented in the frontend staff console for summaries:
+#
+# 1. SENIOR REVIEW UI:
+#    In the staff console, `senior_review` items must be visually distinct from
+#    ordinary `review` items and explicitly state why they are held (i.e. adverse
+#    context involving a principal officeholder).
+#
+# 2. REVIEW CHECKLIST:
+#    Add the following to the human-review checklist, visible to whoever actions a gated summary:
+#    - Does "according to a report" or "reports indicate" refer to a legitimate
+#      document (e.g. whistleblower report) or is it a euphemism for the press?
+#    - Is an escalation term being inappropriately flagged because it appeared in
+#      a source about Person B while the summary is about Person A? (Rare edge case).
