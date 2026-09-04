@@ -1,16 +1,6 @@
-from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
 import os
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.fetcher import run_fetch
-from app.clusterer import run_clustering
-from app.scorer import run_scoring
-from app.image_hydrator import run_image_hydration
-from app.framer import run_framing_job
-from app.daily_briefing import (
-    select_daily_briefing_stories,
-    generate_briefing_for_story
-)
 from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat
 from app.sitemap_cache import run_sitemap_cache_job_sync
 from datetime import datetime, timezone
@@ -29,90 +19,6 @@ def log_scheduler_alive():
 
 
 scheduler = BackgroundScheduler()
-
-
-def run_fetch_job():
-    executor = ThreadPoolExecutor(max_workers=1)
-    future = executor.submit(run_fetch)
-    try:
-        result = future.result(timeout=480)  # 8 minute max
-        logger.info(f"Fetch result: {result}")
-    except FuturesTimeoutError:
-        logger.error("[fetch] Job timed out after 8 minutes - proceeding without blocking")
-    except Exception as e:
-        logger.error(f"[fetch] Job failed: {e}")
-    finally:
-        executor.shutdown(wait=False)
-
-
-def run_process_job():
-    try:
-        cluster_result = run_clustering()
-        logger.info(f"Cluster result: {cluster_result}")
-        
-        score_result = run_scoring()
-        logger.info(f"Score result: {score_result}")
-        
-        scheduler.add_job(run_image_hydration, id="hydrate_images_job", replace_existing=True)
-    except Exception as e:
-        logger.error(f"Process job failed: {e}")
-
-
-def run_daily_briefing_selection():
-    try:
-        logger.info(
-            "[scheduler] Running daily "
-            "briefing story selection..."
-        )
-        result = select_daily_briefing_stories()
-        logger.info(
-            f"[scheduler] Briefing selection: "
-            f"{result}"
-        )
-    except Exception as e:
-        logger.error(
-            f"[scheduler] Briefing selection "
-            f"failed: {e}"
-        )
-
-
-def run_daily_briefing_generation():
-    try:
-        from datetime import datetime, timezone, timedelta
-        from app.db import supabase
-        
-        lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
-        today = lagos_now.date().isoformat()
-        
-        rows = supabase.table(
-            "daily_briefings"
-        ).select("*")\
-        .eq("date", today)\
-        .eq("generation_status", "pending")\
-        .order("position")\
-        .execute()
-        
-        pending = rows.data or []
-        logger.info(
-            f"[scheduler] Generating briefings "
-            f"for {len(pending)} stories..."
-        )
-        
-        for row in pending:
-            result = generate_briefing_for_story(
-                row
-            )
-            logger.info(
-                f"[scheduler] Position "
-                f"{row['position']}: "
-                f"{result['status']}"
-            )
-            
-    except Exception as e:
-        logger.error(
-            f"[scheduler] Briefing generation "
-            f"failed: {e}"
-        )
 
 
 def run_sitemap_health_check():
@@ -160,68 +66,11 @@ def run_sitemap_health_check():
 
 
 def start_scheduler():
-    interval = int(os.environ.get("FETCH_INTERVAL_MINUTES", 10))
-    
-    # 1. Fetch Job - High priority, runs strictly on schedule
-    scheduler.add_job(
-        run_fetch_job,
-        "interval",
-        minutes=interval,
-        id="run_fetch_job",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=60
-    )
-    
-    # 2. Process Job - Can take longer, runs independently
-    scheduler.add_job(
-        run_process_job,
-        "interval",
-        minutes=interval,
-        id="run_process_job",
-        replace_existing=True,
-    )
-    
-    # 3. Framing Job - Runs every 30 minutes independently
-    scheduler.add_job(
-        run_framing_job,
-        "interval",
-        minutes=30,
-        id="run_framing_job",
-        replace_existing=True,
-    )
-    
-    # Daily Briefing Selection
-    # Runs at 6:00 AM WAT = 5:00 AM UTC
-    scheduler.add_job(
-        run_daily_briefing_selection,
-        "cron",
-        hour=5,
-        minute=0,
-        id="run_daily_briefing_selection",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=300
-    )
+    # NOTE: Batch jobs (fetch, cluster, score, framing, hydration, briefing)
+    # have been moved to app/worker.py, run as a Railway Cron service every 20 min.
+    # This scheduler only runs lightweight monitoring and sitemap jobs.
 
-    # Daily Briefing Generation  
-    # Runs at 6:30 AM WAT = 5:30 AM UTC
-    scheduler.add_job(
-        run_daily_briefing_generation,
-        "cron",
-        hour=5,
-        minute=30,
-        id="run_daily_briefing_generation",
-        replace_existing=True,
-        max_instances=1,
-        coalesce=True,
-        misfire_grace_time=300
-    )
-
-    # Sitemap Health Check
-    # Runs at 7:00 AM WAT = 6:00 AM UTC
+    # Sitemap Health Check — daily at 7:00 AM WAT = 6:00 AM UTC
     scheduler.add_job(
         run_sitemap_health_check,
         "cron",
@@ -257,7 +106,7 @@ def start_scheduler():
         misfire_grace_time=300,
     )
 
-    # Scheduler tripwire logging
+    # Scheduler tripwire logging — reports RSS every 5 min
     scheduler.add_job(
         log_scheduler_alive,
         "interval",
@@ -279,11 +128,11 @@ def start_scheduler():
 
     scheduler.start()
     logger.info(
-        "Scheduler started. Fetch and Process "
-        "jobs running every 10 minutes. "
-        "Daily Briefing selection at 6AM WAT, "
-        "generation at 6:30AM WAT."
+        "Scheduler started (web-only mode). "
+        "Heartbeats every 30 min, sitemap every 30 min. "
+        "Batch jobs run via separate worker cron service."
     )
 
 def stop_scheduler():
     scheduler.shutdown()
+
