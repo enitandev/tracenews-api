@@ -476,96 +476,67 @@ def get_most_carried_clusters(category: str, limit: int = 6):
     now = datetime.now(timezone.utc)
     thirty_days_str = (now - timedelta(days=30)).isoformat()
 
-    all_clusters = []
-    page_size = 1000
-    offset = 0
+    # 1. Fetch 100 candidate clusters
+    query = supabase.table("clusters").select(
+        "id, slug, representative_title, category, coverage_stats, first_seen_at"
+    ).eq("category", category).gte("first_seen_at", thirty_days_str).gte("outlet_count", 8).order("outlet_count", desc=True).limit(100)
     
-    while True:
-        query = supabase.table("clusters").select(
-            "id, slug, representative_title, category, coverage_stats, first_seen_at"
-        ).eq("category", category).gte("first_seen_at", thirty_days_str).gte("outlet_count", 8).order("first_seen_at", desc=True).range(offset, offset + page_size - 1)
-        
-        result = query.execute()
-        data = result.data or []
-        all_clusters.extend(data)
-        
-        if len(data) < page_size:
-            break
-        offset += page_size
+    result = query.execute()
+    candidate_clusters = result.data or []
+    
+    if not candidate_clusters:
+        return {"clusters": [], "count": 0}
 
-    cluster_ids = [c["id"] for c in all_clusters]
+    cluster_ids = [c["id"] for c in candidate_clusters]
+    
+    # 2. Batch fetch distinct outlets via join
     cluster_stories = {}
-    
-    if cluster_ids:
-        # Fetch stories in batches of 100 to avoid URI length issues
-        batch_size = 100
-        for i in range(0, len(cluster_ids), batch_size):
-            batch_ids = cluster_ids[i:i + batch_size]
-            res = supabase.table("stories").select("cluster_id, outlet_id").in_("cluster_id", batch_ids).execute()
-            if res.data:
-                for s in res.data:
-                    cid = s.get("cluster_id")
-                    if cid not in cluster_stories:
-                        cluster_stories[cid] = []
-                    cluster_stories[cid].append(s)
-                    
-    outlets_map, behavioral_map = get_outlets_cache()
+    batch_size = 50
+    for i in range(0, len(cluster_ids), batch_size):
+        batch_ids = cluster_ids[i:i + batch_size]
+        res = supabase.table("stories").select("cluster_id, outlets!inner(slug, credibility_tier)").in_("cluster_id", batch_ids).execute()
+        if res.data:
+            for s in res.data:
+                cid = s.get("cluster_id")
+                if cid not in cluster_stories:
+                    cluster_stories[cid] = []
+                cluster_stories[cid].append(s)
 
+    # 3. Calculate true distinct counts and filter
     scored_clusters = []
-    for c in all_clusters:
-        stats = c.get("coverage_stats") or {}
-        
+    for c in candidate_clusters:
         cid = c["id"]
         stories = cluster_stories.get(cid, [])
         
-        # Calculate distinct outlet tier distribution
-        tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0, "blog": 0}
-        unique_outlet_ids = set()
+        tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0, "blog": 0}
+        unique_slugs = set()
         
         for s in stories:
-            oid = s.get("outlet_id")
-            if oid:
-                unique_outlet_ids.add(oid)
-                
-        for oid in unique_outlet_ids:
-            if oid not in outlets_map:
-                continue
-                
-            out = outlets_map[oid]
-            slug = out.get("slug")
-            behav = behavioral_map.get(slug) if slug else None
-            
-            tier = "unscored"
-            if out.get("credibility_tier") == "blog":
-                tier = "blog"
-            elif behav and behav.get("independence_score") is not None:
-                score = behav.get("independence_score")
-                if behav.get("promotional_alignment_flag") or score < 35:
-                    tier = "govt_aligned"
-                elif score < 60:
-                    tier = "mainstream"
-                else:
-                    tier = "watchdog"
-            else:
-                g_align = out.get("government_alignment")
-                if g_align == "pro_government":
-                    tier = "govt_aligned"
-                elif g_align == "opposition":
-                    tier = "watchdog"
-                elif g_align == "neutral":
-                    tier = "mainstream"
-                    
-            if tier in tier_dist:
-                tier_dist[tier] += 1
-                
-        scored = tier_dist["govt_aligned"] + tier_dist["mainstream"] + tier_dist["watchdog"]
+            out = s.get("outlets")
+            if out:
+                slug = out.get("slug")
+                if slug and slug not in unique_slugs:
+                    unique_slugs.add(slug)
+                    tier = out.get("credibility_tier")
+                    # Map legacy names if they appear, else use exact
+                    if tier in tier_dist:
+                        tier_dist[tier] += 1
+                    elif tier == "govt_aligned":
+                        tier_dist["pro_establishment"] += 1
+                    elif tier == "mainstream":
+                        tier_dist["institutional"] += 1
+                    elif tier == "watchdog":
+                        tier_dist["adversarial"] += 1
+                        
+        scored = tier_dist["pro_establishment"] + tier_dist["institutional"] + tier_dist["adversarial"]
         
         if scored >= 8:
+            stats = c.get("coverage_stats") or {}
             stats["coverage_tier_distribution"] = tier_dist
             stats["total_coverage"] = sum(tier_dist.values())
             c["coverage_stats"] = stats
             c["scored_count"] = scored
-            c["outlet_count"] = len(unique_outlet_ids) # Inject true distinct count for frontend if needed
+            c["outlet_count"] = len(unique_slugs)
             scored_clusters.append(c)
             
     # Sort by the derived scored count descending, then by age
@@ -574,6 +545,70 @@ def get_most_carried_clusters(category: str, limit: int = 6):
     top_clusters = scored_clusters[:limit]
     
     return {"clusters": top_clusters, "count": len(top_clusters)}
+
+@app.get("/clusters/by-category")
+def get_clusters_by_category(category: str, limit: int = 8):
+    """Get the most recent clusters for a category without an outlet floor (for COMPACT)."""
+    # 1. Fetch exactly `limit` clusters
+    query = supabase.table("clusters").select(
+        "id, slug, representative_title, category, coverage_stats, first_seen_at"
+    ).eq("category", category).order("first_seen_at", desc=True).limit(limit)
+    
+    result = query.execute()
+    clusters = result.data or []
+    
+    if not clusters:
+        return {"clusters": [], "count": 0}
+
+    cluster_ids = [c["id"] for c in clusters]
+    
+    # 2. Batch fetch distinct outlets via join
+    cluster_stories = {}
+    batch_size = 50
+    for i in range(0, len(cluster_ids), batch_size):
+        batch_ids = cluster_ids[i:i + batch_size]
+        res = supabase.table("stories").select("cluster_id, outlets!inner(slug, credibility_tier)").in_("cluster_id", batch_ids).execute()
+        if res.data:
+            for s in res.data:
+                cid = s.get("cluster_id")
+                if cid not in cluster_stories:
+                    cluster_stories[cid] = []
+                cluster_stories[cid].append(s)
+
+    # 3. Calculate true distinct counts (no floor filtering)
+    for c in clusters:
+        cid = c["id"]
+        stories = cluster_stories.get(cid, [])
+        
+        tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0, "blog": 0}
+        unique_slugs = set()
+        
+        for s in stories:
+            out = s.get("outlets")
+            if out:
+                slug = out.get("slug")
+                if slug and slug not in unique_slugs:
+                    unique_slugs.add(slug)
+                    tier = out.get("credibility_tier")
+                    if tier in tier_dist:
+                        tier_dist[tier] += 1
+                    elif tier == "govt_aligned":
+                        tier_dist["pro_establishment"] += 1
+                    elif tier == "mainstream":
+                        tier_dist["institutional"] += 1
+                    elif tier == "watchdog":
+                        tier_dist["adversarial"] += 1
+                        
+        scored = tier_dist["pro_establishment"] + tier_dist["institutional"] + tier_dist["adversarial"]
+        
+        stats = c.get("coverage_stats") or {}
+        stats["coverage_tier_distribution"] = tier_dist
+        stats["total_coverage"] = sum(tier_dist.values())
+        c["coverage_stats"] = stats
+        c["scored_count"] = scored
+        c["outlet_count"] = len(unique_slugs)
+            
+    return {"clusters": clusters, "count": len(clusters)}
 
 @app.get("/clusters/by-slug/{slug}")
 def get_cluster_by_slug(slug: str):
