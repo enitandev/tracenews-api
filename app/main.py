@@ -471,18 +471,21 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
 
 @app.get("/clusters/most-carried")
 def get_most_carried_clusters(category: str, limit: int = 6):
-    """Get the most widely carried clusters for a category (for the rail)."""
+    """Get the clusters with the highest distinct scored outlet coverage."""
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)
     thirty_days_str = (now - timedelta(days=30)).isoformat()
-
-    # 1. Fetch 100 candidate clusters
+    
+    # 1. Broad pre-filter: candidates from the last 30 days with outlet_count >= 8
     query = supabase.table("clusters").select(
         "id, slug, representative_title, category, coverage_stats, first_seen_at"
     ).eq("category", category).gte("first_seen_at", thirty_days_str).gte("outlet_count", 8).order("outlet_count", desc=True).limit(100)
     
     result = query.execute()
     candidate_clusters = result.data or []
+    
+    print(f"[DIAGNOSTICS] Category: {category}")
+    print(f"[DIAGNOSTICS] Stage A - Candidate clusters pre-filter: {len(candidate_clusters)}")
     
     if not candidate_clusters:
         return {"clusters": [], "count": 0}
@@ -492,23 +495,29 @@ def get_most_carried_clusters(category: str, limit: int = 6):
     # 2. Batch fetch distinct outlets via join
     cluster_stories = {}
     batch_size = 50
+    total_rows = 0
     for i in range(0, len(cluster_ids), batch_size):
         batch_ids = cluster_ids[i:i + batch_size]
         res = supabase.table("stories").select("cluster_id, outlets!inner(slug, credibility_tier)").in_("cluster_id", batch_ids).execute()
         if res.data:
+            total_rows += len(res.data)
             for s in res.data:
                 cid = s.get("cluster_id")
                 if cid not in cluster_stories:
                     cluster_stories[cid] = []
                 cluster_stories[cid].append(s)
+                
+    print(f"[DIAGNOSTICS] Stage B - Rows returned by join: {total_rows}")
 
     # 3. Calculate true distinct counts and filter
     scored_clusters = []
+    total_computed = 0
     for c in candidate_clusters:
         cid = c["id"]
         stories = cluster_stories.get(cid, [])
+        total_computed += 1
         
-        tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0, "blog": 0}
+        tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0, "blog": 0}
         unique_slugs = set()
         
         for s in stories:
@@ -518,17 +527,21 @@ def get_most_carried_clusters(category: str, limit: int = 6):
                 if slug and slug not in unique_slugs:
                     unique_slugs.add(slug)
                     tier = out.get("credibility_tier")
-                    # Map legacy names if they appear, else use exact
+                    if tier:
+                        tier = tier.lower()
+                    
+                    # Normalize legacy DB names to new taxonomy if they appear
+                    if tier == "pro_establishment":
+                        tier = "govt_aligned"
+                    elif tier == "institutional":
+                        tier = "mainstream"
+                    elif tier == "adversarial":
+                        tier = "watchdog"
+                        
                     if tier in tier_dist:
                         tier_dist[tier] += 1
-                    elif tier == "govt_aligned":
-                        tier_dist["pro_establishment"] += 1
-                    elif tier == "mainstream":
-                        tier_dist["institutional"] += 1
-                    elif tier == "watchdog":
-                        tier_dist["adversarial"] += 1
                         
-        scored = tier_dist["pro_establishment"] + tier_dist["institutional"] + tier_dist["adversarial"]
+        scored = tier_dist["govt_aligned"] + tier_dist["mainstream"] + tier_dist["watchdog"]
         
         if scored >= 8:
             stats = c.get("coverage_stats") or {}
@@ -539,8 +552,11 @@ def get_most_carried_clusters(category: str, limit: int = 6):
             c["outlet_count"] = len(unique_slugs)
             scored_clusters.append(c)
             
+    print(f"[DIAGNOSTICS] Stage C - Clusters computed: {total_computed}")
+    print(f"[DIAGNOSTICS] Stage D - Clusters surviving floor (>= 8): {len(scored_clusters)}")
+            
     # Sort by the derived scored count descending, then by age
-    scored_clusters.sort(key=lambda x: (x["scored_count"], x.get("first_seen_at", "")), reverse=True)
+    scored_clusters.sort(key=lambda x: (x.get("scored_count", 0), x.get("first_seen_at", "")), reverse=True)
     
     top_clusters = scored_clusters[:limit]
     
