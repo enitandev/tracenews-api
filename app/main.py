@@ -493,30 +493,79 @@ def get_most_carried_clusters(category: str, limit: int = 6):
             break
         offset += page_size
 
+    cluster_ids = [c["id"] for c in all_clusters]
+    cluster_stories = {}
+    
+    if cluster_ids:
+        # Fetch stories in batches of 100 to avoid URI length issues
+        batch_size = 100
+        for i in range(0, len(cluster_ids), batch_size):
+            batch_ids = cluster_ids[i:i + batch_size]
+            res = supabase.table("stories").select("cluster_id, outlet_id").in_("cluster_id", batch_ids).execute()
+            if res.data:
+                for s in res.data:
+                    cid = s.get("cluster_id")
+                    if cid not in cluster_stories:
+                        cluster_stories[cid] = []
+                    cluster_stories[cid].append(s)
+                    
+    outlets_map, behavioral_map = get_outlets_cache()
+
     scored_clusters = []
     for c in all_clusters:
         stats = c.get("coverage_stats") or {}
-        dist = stats.get("coverage_tier_distribution", {})
         
-        # Translate legacy keys to new ones on read
-        govt = dist.get("pro_establishment", dist.get("govt_aligned", 0))
-        mainstream = dist.get("institutional", dist.get("mainstream", 0))
-        watchdog = dist.get("adversarial", dist.get("watchdog", 0))
+        cid = c["id"]
+        stories = cluster_stories.get(cid, [])
         
-        scored = govt + mainstream + watchdog
+        # Calculate distinct outlet tier distribution
+        tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0, "blog": 0}
+        unique_outlet_ids = set()
+        
+        for s in stories:
+            oid = s.get("outlet_id")
+            if oid:
+                unique_outlet_ids.add(oid)
+                
+        for oid in unique_outlet_ids:
+            if oid not in outlets_map:
+                continue
+                
+            out = outlets_map[oid]
+            slug = out.get("slug")
+            behav = behavioral_map.get(slug) if slug else None
+            
+            tier = "unscored"
+            if out.get("credibility_tier") == "blog":
+                tier = "blog"
+            elif behav and behav.get("independence_score") is not None:
+                score = behav.get("independence_score")
+                if behav.get("promotional_alignment_flag") or score < 35:
+                    tier = "govt_aligned"
+                elif score < 60:
+                    tier = "mainstream"
+                else:
+                    tier = "watchdog"
+            else:
+                g_align = out.get("government_alignment")
+                if g_align == "pro_government":
+                    tier = "govt_aligned"
+                elif g_align == "opposition":
+                    tier = "watchdog"
+                elif g_align == "neutral":
+                    tier = "mainstream"
+                    
+            if tier in tier_dist:
+                tier_dist[tier] += 1
+                
+        scored = tier_dist["govt_aligned"] + tier_dist["mainstream"] + tier_dist["watchdog"]
         
         if scored >= 8:
-            # We map to the new keys so the frontend doesn't need to know about legacy keys
-            new_dist = {
-                "govt_aligned": govt,
-                "mainstream": mainstream,
-                "watchdog": watchdog,
-                "blog": dist.get("blog", 0)
-            }
-            stats["coverage_tier_distribution"] = new_dist
-            stats["total_coverage"] = sum(new_dist.values())
+            stats["coverage_tier_distribution"] = tier_dist
+            stats["total_coverage"] = sum(tier_dist.values())
             c["coverage_stats"] = stats
             c["scored_count"] = scored
+            c["outlet_count"] = len(unique_outlet_ids) # Inject true distinct count for frontend if needed
             scored_clusters.append(c)
             
     # Sort by the derived scored count descending, then by age
