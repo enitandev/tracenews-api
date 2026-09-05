@@ -483,7 +483,7 @@ def get_most_carried_clusters(category: str, limit: int = 6):
     while True:
         query = supabase.table("clusters").select(
             "id, slug, representative_title, category, coverage_stats, first_seen_at"
-        ).eq("category", category).gte("first_seen_at", thirty_days_str).order("first_seen_at", desc=True).range(offset, offset + page_size - 1)
+        ).eq("category", category).gte("first_seen_at", thirty_days_str).gte("outlet_count", 8).order("first_seen_at", desc=True).range(offset, offset + page_size - 1)
         
         result = query.execute()
         data = result.data or []
