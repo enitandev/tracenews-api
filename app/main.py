@@ -469,6 +469,63 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     
     return {"clusters": formatted, "count": len(enriched_clusters)}
 
+@app.get("/clusters/most-carried")
+def get_most_carried_clusters(category: str, limit: int = 6):
+    """Get the most widely carried clusters for a category (for the rail)."""
+    from datetime import datetime, timezone, timedelta
+    now = datetime.now(timezone.utc)
+    thirty_days_str = (now - timedelta(days=30)).isoformat()
+
+    all_clusters = []
+    page_size = 1000
+    offset = 0
+    
+    while True:
+        query = supabase.table("clusters").select(
+            "id, slug, representative_title, category, coverage_stats, first_seen_at"
+        ).eq("category", category).gte("first_seen_at", thirty_days_str).order("first_seen_at", desc=True).range(offset, offset + page_size - 1)
+        
+        result = query.execute()
+        data = result.data or []
+        all_clusters.extend(data)
+        
+        if len(data) < page_size:
+            break
+        offset += page_size
+
+    scored_clusters = []
+    for c in all_clusters:
+        stats = c.get("coverage_stats") or {}
+        dist = stats.get("coverage_tier_distribution", {})
+        
+        # Translate legacy keys to new ones on read
+        govt = dist.get("pro_establishment", dist.get("govt_aligned", 0))
+        mainstream = dist.get("institutional", dist.get("mainstream", 0))
+        watchdog = dist.get("adversarial", dist.get("watchdog", 0))
+        
+        scored = govt + mainstream + watchdog
+        
+        if scored >= 8:
+            # We map to the new keys so the frontend doesn't need to know about legacy keys
+            new_dist = {
+                "govt_aligned": govt,
+                "mainstream": mainstream,
+                "watchdog": watchdog,
+                "blog": dist.get("blog", 0)
+            }
+            stats["coverage_tier_distribution"] = new_dist
+            stats["total_coverage"] = sum(new_dist.values())
+            c["coverage_stats"] = stats
+            c["scored_count"] = scored
+            scored_clusters.append(c)
+            
+    # Sort by the derived scored count descending, then by age
+    scored_clusters.sort(key=lambda x: (x["scored_count"], x.get("first_seen_at", "")), reverse=True)
+    
+    top_clusters = scored_clusters[:limit]
+    
+    return {"clusters": top_clusters, "count": len(top_clusters)}
+
 @app.get("/clusters/by-slug/{slug}")
 def get_cluster_by_slug(slug: str):
     """Get full detailed analytics for a cluster and its stories by slug."""
