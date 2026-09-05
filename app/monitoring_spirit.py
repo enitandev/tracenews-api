@@ -1,6 +1,6 @@
-TIER_GOVT = "pro_establishment"
-TIER_MAINSTREAM = "institutional"  
-TIER_WATCHDOG = "adversarial"
+TIER_GOVT = "govt_aligned"
+TIER_MAINSTREAM = "mainstream"  
+TIER_WATCHDOG = "watchdog"
 
 from app.monitoring_spirit_strings import VERDICT_LINE
 
@@ -84,8 +84,14 @@ def has_persistence(
         if total == 0:
             continue
         
-        a_count = dist.get(tier_a, 0)
-        b_count = dist.get(tier_b, 0)
+        legacy_map = {
+            "govt_aligned": "pro_establishment",
+            "mainstream": "institutional",
+            "watchdog": "adversarial"
+        }
+        
+        a_count = dist.get(tier_a, dist.get(legacy_map.get(tier_a, tier_a), 0))
+        b_count = dist.get(tier_b, dist.get(legacy_map.get(tier_b, tier_b), 0))
         a_pct = a_count / total
         b_pct = b_count / total
         

@@ -130,21 +130,21 @@ def get_sourcing_info(
             if behav.get(
                 "promotional_alignment_flag"
             ) or score < 35:
-                tier = "pro_establishment"
+                tier = "govt_aligned"
             elif score < 60:
-                tier = "institutional"
+                tier = "mainstream"
             else:
-                tier = "adversarial"
+                tier = "watchdog"
         else:
             g_align = out.get(
                 "government_alignment"
             )
             if g_align == "pro_government":
-                tier = "pro_establishment"
+                tier = "govt_aligned"
             elif g_align == "opposition":
-                tier = "adversarial"
+                tier = "watchdog"
             elif g_align == "neutral":
-                tier = "institutional"
+                tier = "mainstream"
         
         if tier == tier_a:
             loud_tier_outlet_ids.add(oid)
@@ -260,7 +260,7 @@ def get_outlets_cache():
     return _OUTLETS_CACHE, _BEHAVIORAL_CACHE
 
 def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, behavioral_map):
-    tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0}
+    tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0}
     
     unique_outlet_ids = set()
     for s in stories:
@@ -282,19 +282,19 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
         elif behav and behav.get("independence_score") is not None:
             score = behav.get("independence_score")
             if behav.get("promotional_alignment_flag") or score < 35:
-                tier = "pro_establishment"
+                tier = "govt_aligned"
             elif score < 60:
-                tier = "institutional"
+                tier = "mainstream"
             else:
-                tier = "adversarial"
+                tier = "watchdog"
         else:
             g_align = out.get("government_alignment")
             if g_align == "pro_government":
-                tier = "pro_establishment"
+                tier = "govt_aligned"
             elif g_align == "opposition":
-                tier = "adversarial"
+                tier = "watchdog"
             elif g_align == "neutral":
-                tier = "institutional"
+                tier = "mainstream"
                 
         if tier != "unscored":
             if tier in tier_dist:
@@ -445,9 +445,9 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
             
             # Map API query to the internal tier name
             tier_mapping = {
-                "govt": "pro_establishment",
-                "mainstream": "institutional",
-                "watchdog": "adversarial"
+                "govt": "govt_aligned",
+                "mainstream": "mainstream",
+                "watchdog": "watchdog"
             }
             if loud_tier == tier_mapping.get(tier, tier):
                 filtered_clusters.append(c)
@@ -519,19 +519,19 @@ def get_cluster_by_slug(slug: str):
             elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
                 if behav.get("promotional_alignment_flag") or score < 35:
-                    s["outlet_coverage_tier"] = "pro_establishment"
+                    s["outlet_coverage_tier"] = "govt_aligned"
                 elif score < 60:
-                    s["outlet_coverage_tier"] = "institutional"
+                    s["outlet_coverage_tier"] = "mainstream"
                 else:
-                    s["outlet_coverage_tier"] = "adversarial"
+                    s["outlet_coverage_tier"] = "watchdog"
             else:
                 g_align = out.get("government_alignment")
                 if g_align == "pro_government":
-                    s["outlet_coverage_tier"] = "pro_establishment"
+                    s["outlet_coverage_tier"] = "govt_aligned"
                 elif g_align == "opposition":
-                    s["outlet_coverage_tier"] = "adversarial"
+                    s["outlet_coverage_tier"] = "watchdog"
                 elif g_align == "neutral":
-                    s["outlet_coverage_tier"] = "institutional"
+                    s["outlet_coverage_tier"] = "mainstream"
                 else:
                     s["outlet_coverage_tier"] = "unscored"
 
@@ -648,16 +648,16 @@ def get_cluster_deep_dive(id: str):
             elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
                 if behav.get("promotional_alignment_flag") or score < 35:
-                    tier = "pro_establishment"
+                    tier = "govt_aligned"
                 elif score < 60:
-                    tier = "institutional"
+                    tier = "mainstream"
                 else:
-                    tier = "adversarial"
+                    tier = "watchdog"
             else:
                 g_align = out.get("government_alignment")
-                if g_align == "pro_government": tier = "pro_establishment"
-                elif g_align == "opposition": tier = "adversarial"
-                elif g_align == "neutral": tier = "institutional"
+                if g_align == "pro_government": tier = "govt_aligned"
+                elif g_align == "opposition": tier = "watchdog"
+                elif g_align == "neutral": tier = "mainstream"
                 
             s["outlet_coverage_tier"] = tier
             
@@ -775,13 +775,13 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
     clusters = clusters_res.data or []
     
     # Compute bias breakdown
-    bias_breakdown = { "pro_establishment": 0, "institutional": 0, "adversarial": 0, "total": 0 }
+    bias_breakdown = { "govt_aligned": 0, "mainstream": 0, "watchdog": 0, "total": 0 }
     for c in clusters:
         stats = c.get("coverage_stats") or {}
         dist = stats.get("coverage_tier_distribution", {})
-        bias_breakdown["pro_establishment"] += dist.get("pro_establishment", 0)
-        bias_breakdown["institutional"] += dist.get("institutional", 0)
-        bias_breakdown["adversarial"] += dist.get("adversarial", 0)
+        bias_breakdown["govt_aligned"] += dist.get("pro_establishment", dist.get("govt_aligned", 0))
+        bias_breakdown["mainstream"] += dist.get("institutional", dist.get("mainstream", 0))
+        bias_breakdown["watchdog"] += dist.get("adversarial", dist.get("watchdog", 0))
         bias_breakdown["total"] += sum(dist.values())
         
     # Relevance sort
@@ -862,10 +862,10 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
             if out.get("credibility_tier") == "blog": tier = "blog"
             elif behav and behav.get("independence_score") is not None:
                 score = behav.get("independence_score")
-                tier = "pro_establishment" if (behav.get("promotional_alignment_flag") or score < 35) else "institutional" if score < 60 else "adversarial"
+                tier = "govt_aligned" if (behav.get("promotional_alignment_flag") or score < 35) else "mainstream" if score < 60 else "watchdog"
             else:
                 g_align = out.get("government_alignment")
-                tier = "pro_establishment" if g_align == "pro_government" else "adversarial" if g_align == "opposition" else "institutional" if g_align == "neutral" else "unscored"
+                tier = "govt_aligned" if g_align == "pro_government" else "watchdog" if g_align == "opposition" else "mainstream" if g_align == "neutral" else "unscored"
                 
             covered_most_by.append({"name": out.get("name"), "logo_url": out.get("logo_url"), "tier": tier})
     except Exception as e:
@@ -1073,9 +1073,9 @@ def get_politician(slug: str):
     ).execute()
     
     tier_dist = {
-        "pro_establishment": 0,
-        "institutional": 0,
-        "adversarial": 0
+        "govt_aligned": 0,
+        "mainstream": 0,
+        "watchdog": 0
     }
     seen_clusters = set()
     stories_with_dist = 0
@@ -1099,13 +1099,9 @@ def get_politician(slug: str):
         
         if dist:
             stories_with_dist += 1
-            for tier in [
-                "pro_establishment",
-                "institutional",
-                "adversarial"
-            ]:
-                tier_dist[tier] += \
-                    dist.get(tier, 0)
+            tier_dist["govt_aligned"] += dist.get("pro_establishment", dist.get("govt_aligned", 0))
+            tier_dist["mainstream"] += dist.get("institutional", dist.get("mainstream", 0))
+            tier_dist["watchdog"] += dist.get("adversarial", dist.get("watchdog", 0))
     
     return {
         "politician": politician,
