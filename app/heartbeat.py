@@ -3,6 +3,7 @@ import logging
 import smtplib
 from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
+import requests
 from app.db import supabase
 from dotenv import load_dotenv
 
@@ -58,6 +59,38 @@ def check_feed_heartbeat():
             logger.info(f"[heartbeat] Feed OK — last story {age_minutes:.0f} min ago")
     except Exception as e:
         send_alert("TraceNews ALERT: feed heartbeat check itself failed", str(e))
+
+
+def check_version_heartbeat():
+    try:
+        live_res = requests.get("https://uvicorn-appmain-production-79c6.up.railway.app/version", timeout=10)
+        if not live_res.ok:
+            send_alert("TraceNews ALERT: /version endpoint unreachable", f"Status {live_res.status_code}")
+            return
+            
+        live_sha = live_res.json().get("sha")
+        
+        if live_sha == "unknown":
+            send_alert("TraceNews ALERT: version SHA is unknown", "RAILWAY_GIT_COMMIT_SHA not injected at runtime.")
+            return
+            
+        github_url = "https://api.github.com/repos/enitandev/tracenews-api/commits/main"
+        gh_res = requests.get(github_url, timeout=10)
+        if not gh_res.ok:
+            logger.warning(f"Failed to fetch GitHub API to verify version: {gh_res.status_code}")
+            return
+            
+        latest_sha = gh_res.json().get("sha")
+        
+        if live_sha != latest_sha:
+            send_alert(
+                "TraceNews ALERT: deployment stale", 
+                f"Live process is running {live_sha}, but latest on main is {latest_sha}. The deploy may have crashed silently."
+            )
+        else:
+            logger.info(f"[heartbeat] Version OK — live is {live_sha}")
+    except Exception as e:
+        send_alert("TraceNews ALERT: version heartbeat check itself failed", str(e))
 
 
 def check_briefing_heartbeat():

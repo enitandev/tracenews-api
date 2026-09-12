@@ -1,7 +1,7 @@
 import os
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat
+from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat, check_version_heartbeat
 from app.sitemap_cache import run_sitemap_cache_job_sync
 from datetime import datetime, timezone
 
@@ -113,6 +113,15 @@ def start_scheduler():
         minutes=5,
         id="log_scheduler_alive",
         replace_existing=True,
+    )
+
+    scheduler.add_job(
+        check_version_heartbeat,
+        "interval",
+        minutes=15,
+        id="check_version_heartbeat",
+        replace_existing=True,
+        next_run_time=datetime.now(timezone.utc)
     )
 
     # Background Stories Sitemap Generation

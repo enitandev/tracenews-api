@@ -89,7 +89,11 @@ app.include_router(auth_router.router)
 app.include_router(reader.router)
 app.include_router(admin_overview.router)
 
-
+import os
+@app.get("/version")
+def get_version():
+    """Returns the git commit SHA of the running process."""
+    return {"sha": os.environ.get("RAILWAY_GIT_COMMIT_SHA", "unknown")}
 def get_sourcing_info(
     cluster_stories,
     outlets_map,
