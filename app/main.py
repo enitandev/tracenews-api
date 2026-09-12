@@ -625,8 +625,6 @@ def get_cluster_by_slug(slug: str):
             
             behav = behavioral_map.get(out.get("slug"))
             s["outlet_s2_score"] = behav.get("s2_score") if behav else None
-                else:
-                    s["outlet_coverage_tier"] = "unscored"
 
     # --- MONITORING SPIRIT VERDICT (LIVE ATOMIC COMPUTATION) ---
     try:
