@@ -1,11 +1,6 @@
-# Maintained by observation, not computed.
-# These outlets are known to block image hotlinking via Referrer or other checks.
+# This list is populated ONLY from outlets observed failing in a browser
+# AFTER referrerPolicy="no-referrer" is in effect. Never from inference.
 HOTLINK_BLOCKING_DOMAINS = [
-    "punchng.com",
-    "vanguardngr.com",
-    "thecable.ng",
-    "premiumtimesng.com",
-    "saharareporters.com"
 ]
 
 def is_image_allowed(url: str) -> bool:
