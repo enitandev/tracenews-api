@@ -42,7 +42,7 @@ async def list_current_verdicts(_: str = Depends(require_permission('monitoring_
         
         # Stories chunk
         s_res = supabase.table("stories").select(
-            "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
+            "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, is_blog, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
         ).in_("cluster_id", batch).execute()
         stories_data.extend(s_res.data or [])
         

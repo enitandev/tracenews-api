@@ -6,6 +6,7 @@ from app.main import (
 )
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
+from app.tier_utils import get_outlet_tier
 from app.monitoring_spirit import (
     resolve_verdict,
     is_significant,
@@ -74,34 +75,11 @@ def get_sourcing_info(
         
         # Same logic as 
         # compute_live_coverage_tier_distribution
-        tier = "unscored"
-        if out.get("credibility_tier") \
-                == "blog":
-            tier = "blog"
-        elif behav and behav.get(
-            "independence_score"
-        ) is not None:
-            score = behav.get(
-                "independence_score"
-            )
-            if behav.get(
-                "promotional_alignment_flag"
-            ) or score < 35:
-                tier = "pro_establishment"
-            elif score < 60:
-                tier = "institutional"
-            else:
-                tier = "adversarial"
-        else:
-            g_align = out.get(
-                "government_alignment"
-            )
-            if g_align == "pro_government":
-                tier = "pro_establishment"
-            elif g_align == "opposition":
-                tier = "adversarial"
-            elif g_align == "neutral":
-                tier = "institutional"
+        tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
+        # Map to old names for shadow runner
+        if tier == "govt_aligned": tier = "pro_establishment"
+        elif tier == "watchdog": tier = "adversarial"
+        elif tier == "mainstream": tier = "institutional"
         
         if tier == tier_a:
             loud_tier_outlet_ids.add(oid)
@@ -225,14 +203,14 @@ def run_shadow():
     }
     
     # DEBUG — print first 5 outlet 
-    # credibility_tier values to 
+    # government_alignment values to 
     # confirm actual casing
     for oid, out in list(
         outlets_map.items()
     )[:5]:
         print(
             f"outlet tier sample: "
-            f"{out.get('credibility_tier')}"
+            f"{out.get('government_alignment')}"
         )
     
     behav_res = supabase.table(

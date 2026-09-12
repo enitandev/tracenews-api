@@ -73,7 +73,7 @@ def select_daily_briefing_stories():
 
 def scrape_articles_for_cluster(cluster_id, cluster_slug):
     stories_res = supabase.table("stories")\
-        .select("id, url, title, summary, outlet_slug, outlets(name, credibility_tier)")\
+        .select("id, url, title, summary, outlet_slug, outlets(name, government_alignment, is_blog)")\
         .eq("cluster_id", cluster_id)\
         .not_.is_("url", "null")\
         .limit(20)\
@@ -95,7 +95,7 @@ def scrape_articles_for_cluster(cluster_id, cluster_slug):
         title = s.get("title")
         summary = s.get("summary") or ""
         outlet_name = s.get("outlets", {}).get("name") if s.get("outlets") else s.get("outlet_slug")
-        outlet_tier = s.get("outlets", {}).get("credibility_tier") if s.get("outlets") else "unscored"
+        outlet_tier = get_outlet_tier(s.get("outlets", {}).get("government_alignment"), s.get("outlets", {}).get("is_blog")) if s.get("outlets") else "unscored"
         
         text_content = ""
         scraped_full = False

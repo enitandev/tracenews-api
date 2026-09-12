@@ -109,14 +109,14 @@ def run_scoring(all_time: bool = False):
                 # Map region, ownership, credibility, gov_alignment
                 regions[outlet.get("geopolitical_lean") or "National"] += 1
                 ownership[outlet.get("ownership_type", "Independent")] += 1
-                credibility[outlet.get("credibility_tier", "Institutional")] += 1
+                # credibility_tier is dead; handled by tier mapping in main API
                 gov_alignment[outlet.get("government_alignment", "neutral")] += 1
 
                 # Calculate Coverage Tier
                 behav = behavioral_map.get(slug) if slug else None
                 tier = "unscored"
 
-                if outlet.get("credibility_tier") == "blog":
+                if outlet.get("is_blog"):
                     tier = "blog"
                 elif behav and behav.get("independence_score") is not None:
                     score = behav.get("independence_score")

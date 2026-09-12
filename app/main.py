@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from app.tier_utils import get_outlet_tier
 from pydantic import BaseModel
 import traceback
 import time
@@ -117,34 +118,7 @@ def get_sourcing_info(
         behav = behavioral_map.get(slug) \
             if slug else None
         
-        tier = "unscored"
-        if out.get("credibility_tier") \
-                == "blog":
-            tier = "blog"
-        elif behav and behav.get(
-            "independence_score"
-        ) is not None:
-            score = behav.get(
-                "independence_score"
-            )
-            if behav.get(
-                "promotional_alignment_flag"
-            ) or score < 35:
-                tier = "govt_aligned"
-            elif score < 60:
-                tier = "mainstream"
-            else:
-                tier = "watchdog"
-        else:
-            g_align = out.get(
-                "government_alignment"
-            )
-            if g_align == "pro_government":
-                tier = "govt_aligned"
-            elif g_align == "opposition":
-                tier = "watchdog"
-            elif g_align == "neutral":
-                tier = "mainstream"
+        tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
         
         if tier == tier_a:
             loud_tier_outlet_ids.add(oid)
@@ -250,7 +224,7 @@ def get_outlets_cache():
     global _OUTLETS_CACHE, _BEHAVIORAL_CACHE, _LAST_CACHE_UPDATE
     now = time.time()
     if now - _LAST_CACHE_UPDATE > CACHE_TTL or not _OUTLETS_CACHE:
-        out_res = supabase.table("outlets").select("id, slug, government_alignment, name, logo_url, credibility_tier, headquarters_city, geopolitical_lean").execute()
+        out_res = supabase.table("outlets").select("id, slug, government_alignment, name, logo_url, is_blog, headquarters_city, geopolitical_lean").execute()
         _OUTLETS_CACHE = {o["id"]: o for o in (out_res.data or [])}
         
         behav_res = supabase.table("outlet_behavioral_scores").select("*").execute()
@@ -276,25 +250,7 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
         slug = out.get("slug")
         behav = behavioral_map.get(slug) if slug else None
         
-        tier = "unscored"
-        if out.get("credibility_tier") == "blog":
-            tier = "blog"
-        elif behav and behav.get("independence_score") is not None:
-            score = behav.get("independence_score")
-            if behav.get("promotional_alignment_flag") or score < 35:
-                tier = "govt_aligned"
-            elif score < 60:
-                tier = "mainstream"
-            else:
-                tier = "watchdog"
-        else:
-            g_align = out.get("government_alignment")
-            if g_align == "pro_government":
-                tier = "govt_aligned"
-            elif g_align == "opposition":
-                tier = "watchdog"
-            elif g_align == "neutral":
-                tier = "mainstream"
+        tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
                 
         if tier != "unscored":
             if tier in tier_dist:
@@ -514,7 +470,7 @@ def get_most_carried_clusters(category: str, limit: int = 6):
     total_rows = 0
     for i in range(0, len(cluster_ids), batch_size):
         batch_ids = cluster_ids[i:i + batch_size]
-        res = supabase.table("stories").select("cluster_id, outlets!inner(slug, credibility_tier)").in_("cluster_id", batch_ids).execute()
+        res = supabase.table("stories").select("cluster_id, outlets!inner(slug, government_alignment, is_blog)").in_("cluster_id", batch_ids).execute()
         if res.data:
             total_rows += len(res.data)
             for s in res.data:
@@ -542,18 +498,7 @@ def get_most_carried_clusters(category: str, limit: int = 6):
                 slug = out.get("slug")
                 if slug and slug not in unique_slugs:
                     unique_slugs.add(slug)
-                    tier = out.get("credibility_tier")
-                    if tier:
-                        tier = tier.lower()
-                    
-                    # Normalize legacy DB names to new taxonomy if they appear
-                    if tier == "pro_establishment":
-                        tier = "govt_aligned"
-                    elif tier == "institutional":
-                        tier = "mainstream"
-                    elif tier == "adversarial":
-                        tier = "watchdog"
-                        
+                    tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
                     if tier in tier_dist:
                         tier_dist[tier] += 1
                         
@@ -599,7 +544,7 @@ def get_clusters_by_category(category: str, limit: int = 8):
     batch_size = 50
     for i in range(0, len(cluster_ids), batch_size):
         batch_ids = cluster_ids[i:i + batch_size]
-        res = supabase.table("stories").select("cluster_id, outlets!inner(slug, credibility_tier)").in_("cluster_id", batch_ids).execute()
+        res = supabase.table("stories").select("cluster_id, outlets!inner(slug, government_alignment, is_blog)").in_("cluster_id", batch_ids).execute()
         if res.data:
             for s in res.data:
                 cid = s.get("cluster_id")
@@ -621,15 +566,9 @@ def get_clusters_by_category(category: str, limit: int = 8):
                 slug = out.get("slug")
                 if slug and slug not in unique_slugs:
                     unique_slugs.add(slug)
-                    tier = out.get("credibility_tier")
+                    tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
                     if tier in tier_dist:
                         tier_dist[tier] += 1
-                    elif tier == "govt_aligned":
-                        tier_dist["pro_establishment"] += 1
-                    elif tier == "mainstream":
-                        tier_dist["institutional"] += 1
-                    elif tier == "watchdog":
-                        tier_dist["adversarial"] += 1
                         
         scored = tier_dist["pro_establishment"] + tier_dist["institutional"] + tier_dist["adversarial"]
         
@@ -653,7 +592,7 @@ def get_cluster_by_slug(slug: str):
     cluster = cluster_res.data[0]
         
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, is_blog, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
     ).eq("cluster_id", cluster["id"]).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
@@ -680,31 +619,15 @@ def get_cluster_by_slug(slug: str):
             out = s["outlets"]
             s["outlet_alignment"] = out.get("government_alignment")
             s["outlet_independence"] = out.get("independence_score")
-            s["outlet_tier"] = out.get("credibility_tier")
+            tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
+            s["outlet_tier"] = tier
+            s["outlet_coverage_tier"] = tier
             s["outlet_logo_url"] = out.get("logo_url")
             if out.get("name"):
                 s["outlet_name"] = out.get("name")
             
             behav = behavioral_map.get(out.get("slug"))
             s["outlet_s2_score"] = behav.get("s2_score") if behav else None
-            if out.get("credibility_tier") == "blog":
-                s["outlet_coverage_tier"] = "blog"
-            elif behav and behav.get("independence_score") is not None:
-                score = behav.get("independence_score")
-                if behav.get("promotional_alignment_flag") or score < 35:
-                    s["outlet_coverage_tier"] = "govt_aligned"
-                elif score < 60:
-                    s["outlet_coverage_tier"] = "mainstream"
-                else:
-                    s["outlet_coverage_tier"] = "watchdog"
-            else:
-                g_align = out.get("government_alignment")
-                if g_align == "pro_government":
-                    s["outlet_coverage_tier"] = "govt_aligned"
-                elif g_align == "opposition":
-                    s["outlet_coverage_tier"] = "watchdog"
-                elif g_align == "neutral":
-                    s["outlet_coverage_tier"] = "mainstream"
                 else:
                     s["outlet_coverage_tier"] = "unscored"
 
@@ -780,7 +703,7 @@ def get_cluster_deep_dive(id: str):
     cluster = cluster_res.data
     
     stories_res = supabase.table("stories").select(
-        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, credibility_tier, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
+        "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, is_blog, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
     ).eq("cluster_id", id).order("published_at", desc=False).execute()
     
     stories = stories_res.data or []
@@ -808,30 +731,14 @@ def get_cluster_deep_dive(id: str):
             slug = out.get("slug")
             s["outlet_alignment"] = out.get("government_alignment")
             s["outlet_independence"] = out.get("independence_score")
-            s["outlet_tier"] = out.get("credibility_tier")
+            tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
+            s["outlet_tier"] = tier
             s["outlet_logo_url"] = out.get("logo_url")
             if out.get("name"):
                 s["outlet_name"] = out.get("name")
             
             behav = behavioral_map.get(slug) if slug else None
             s["outlet_s2_score"] = behav.get("s2_score") if behav else None
-            tier = "unscored"
-            if out.get("credibility_tier") == "blog":
-                tier = "blog"
-            elif behav and behav.get("independence_score") is not None:
-                score = behav.get("independence_score")
-                if behav.get("promotional_alignment_flag") or score < 35:
-                    tier = "govt_aligned"
-                elif score < 60:
-                    tier = "mainstream"
-                else:
-                    tier = "watchdog"
-            else:
-                g_align = out.get("government_alignment")
-                if g_align == "pro_government": tier = "govt_aligned"
-                elif g_align == "opposition": tier = "watchdog"
-                elif g_align == "neutral": tier = "mainstream"
-                
             s["outlet_coverage_tier"] = tier
             
             # Carry forward all required outlet fields before deleting
@@ -996,7 +903,7 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
     target_ids = list(ms_ids | top_ids | paginated_ids)
     if target_ids:
         stories_res = supabase.table("stories").select(
-            "cluster_id, image_url, outlets(slug, name, logo_url, government_alignment, independence_score, credibility_tier)"
+            "cluster_id, image_url, outlets(slug, name, logo_url, government_alignment, independence_score, is_blog)"
         ).in_("cluster_id", target_ids).execute()
         stories_data = stories_res.data or []
         
@@ -1031,14 +938,7 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
             if not out: continue
             behav = behavioral_map.get(slug)
             
-            tier = "unscored"
-            if out.get("credibility_tier") == "blog": tier = "blog"
-            elif behav and behav.get("independence_score") is not None:
-                score = behav.get("independence_score")
-                tier = "govt_aligned" if (behav.get("promotional_alignment_flag") or score < 35) else "mainstream" if score < 60 else "watchdog"
-            else:
-                g_align = out.get("government_alignment")
-                tier = "govt_aligned" if g_align == "pro_government" else "watchdog" if g_align == "opposition" else "mainstream" if g_align == "neutral" else "unscored"
+            tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
                 
             covered_most_by.append({"name": out.get("name"), "logo_url": out.get("logo_url"), "tier": tier})
     except Exception as e:
@@ -1398,7 +1298,7 @@ def get_daily_briefing_story(slug: str):
     
     # Get stories with outlet data for Bias Distribution sidebar
     stories_res = supabase.table("stories")\
-        .select("id, title, url, outlet_slug, published_at, image_url, outlets(slug, name, logo_url, independence_score, credibility_tier, government_alignment)")\
+        .select("id, title, url, outlet_slug, published_at, image_url, outlets(slug, name, logo_url, independence_score, is_blog, government_alignment)")\
         .eq("cluster_id", row["cluster_id"])\
         .order("published_at")\
         .execute()
