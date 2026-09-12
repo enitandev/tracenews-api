@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from app.image_utils import get_cluster_image, is_image_allowed
 from app.tier_utils import get_outlet_tier
 from pydantic import BaseModel
 import traceback
@@ -342,11 +343,7 @@ def get_landing_clusters(limit: int = 40):
     formatted = []
     for c in clusters:
         # Get first valid image
-        image_url = None
-        for s in (c.get("stories") or []):
-            if s.get("image_url"):
-                image_url = s["image_url"]
-                break
+        image_url = get_cluster_image(c.get("stories"))
                 
         formatted.append({
             "id": c["id"],
@@ -429,11 +426,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     
     formatted = []
     for c in paginated:
-        image_url = None
-        for s in (c.get("stories") or []):
-            if s.get("image_url"):
-                image_url = s["image_url"]
-                break
+        image_url = get_cluster_image(c.get("stories"))
         
         c_dict = dict(c)
         c_dict["image_url"] = image_url
@@ -911,7 +904,8 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
         for s in stories_data:
             cid = s.get("cluster_id")
             if cid not in images_by_cluster and s.get("image_url"):
-                images_by_cluster[cid] = s["image_url"]
+                if is_image_allowed(s["image_url"]):
+                    images_by_cluster[cid] = s["image_url"]
                 
         # Attach images
         for c in ms_candidates + top_candidates + paginated_remaining:
@@ -1238,11 +1232,7 @@ def get_daily_briefing():
         cluster = clusters_map.get(row["cluster_id"], {})
         
         # Get first available image
-        image_url = None
-        for s in (cluster.get("stories") or []):
-            if s.get("image_url"):
-                image_url = s["image_url"]
-                break
+        image_url = get_cluster_image(cluster.get("stories"))
         
         stories.append({
             "position": row["position"],
@@ -1306,11 +1296,7 @@ def get_daily_briefing_story(slug: str):
     stories = stories_res.data or []
     
     # Get first available image
-    image_url = None
-    for s in stories:
-        if s.get("image_url"):
-            image_url = s["image_url"]
-            break
+    image_url = get_cluster_image(stories)
     
     # Get "More from Today's Briefing"
     other_rows_res = supabase.table("daily_briefings")\
@@ -1336,11 +1322,7 @@ def get_daily_briefing_story(slug: str):
         more_from_briefing = []
         for r in other_rows:
             oc = other_clusters_map.get(r["cluster_slug"], {})
-            img = None
-            for s in (oc.get("stories") or []):
-                if s.get("image_url"):
-                    img = s["image_url"]
-                    break
+            img = get_cluster_image(oc.get("stories"))
             more_from_briefing.append({
                 "cluster_slug": r["cluster_slug"],
                 "perspectives_title": r.get("perspectives_title"),
