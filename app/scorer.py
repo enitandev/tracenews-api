@@ -6,7 +6,7 @@ import httpx
 from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from app.db import supabase
-from app.classifier import classify_cluster_hybrid
+from app.classifier import classify_cluster
 
 logger = logging.getLogger(__name__)
 
@@ -71,11 +71,31 @@ def run_scoring(all_time: bool = False):
 
             # 1. Categorize if needed
             category = cluster.get("category")
-            if not category:
+            category_classified_at = cluster.get("category_classified_at")
+            if not category_classified_at:
                 combined_summary = " ".join([s.get("summary", "") for s in stories])
-                category = classify_cluster_hybrid(cluster.get("representative_title", ""), combined_summary)
-                # Update the cluster with the new category
-                safe_execute(supabase.table("clusters").update({"category": category}).eq("id", cluster["id"]))
+                result = classify_cluster(cluster.get("representative_title", ""), combined_summary)
+                category = result["category"]
+                confidence = result["confidence"]
+                
+                now = datetime.now(timezone.utc).isoformat()
+                
+                update_data = {
+                    "category": category,
+                    "category_confidence": confidence,
+                    "category_classified_at": now
+                }
+                
+                # Flag for staff console if confidence < 0.75
+                if confidence < 0.75:
+                    logger.warning(f"Low confidence classification for cluster {cluster['id']}: {category} ({confidence})")
+                    flags = cluster.get("monitoring_flags") or []
+                    if "low_confidence_category" not in flags:
+                        flags.append("low_confidence_category")
+                        update_data["monitoring_flags"] = flags
+                
+                # Update the cluster with the new category data
+                safe_execute(supabase.table("clusters").update(update_data).eq("id", cluster["id"]))
 
             # 2. Fetch Master Outlet data dynamically for these stories
             outlet_ids = list(set(s["outlet_id"] for s in stories if s.get("outlet_id")))

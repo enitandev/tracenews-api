@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 from app.db import supabase
 from openai import OpenAI
+from app.tier_utils import get_distinct_scored_count
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
@@ -217,7 +218,7 @@ def generate_briefing_for_story(briefing_row):
 
 STORY: {cluster['representative_title']}
 CATEGORY: {cluster['category']}
-TOTAL SOURCES: {cluster['outlet_count']}
+TOTAL SOURCES: {get_distinct_scored_count(cluster.get('coverage_stats', {})) or 'Sources unavailable'}
 
 COVERAGE FROM NIGERIAN NEWS OUTLETS:
 {article_context}
