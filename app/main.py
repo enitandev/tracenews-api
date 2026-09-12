@@ -402,7 +402,15 @@ def get_landing_clusters(limit: int = 40):
             "monitoring_flags": c.get("monitoring_flags") or [],
             "image_url": image_url
         })
-    return {"clusters": enrich_clusters_with_live_tiers(formatted), "count": len(formatted)}
+    enriched_clusters = enrich_clusters_with_live_tiers(formatted)
+    filtered = []
+    for c in enriched_clusters:
+        dist = c.get("coverage_stats", {}).get("coverage_tier_distribution", {})
+        scored = dist.get("govt_aligned", 0) + dist.get("mainstream", 0) + dist.get("watchdog", 0)
+        if scored >= 4:
+            filtered.append(c)
+            
+    return {"clusters": filtered, "count": len(filtered)}
 
 
 @app.get("/clusters/feed")
@@ -431,6 +439,14 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     clusters.sort(key=relevance_score, reverse=True)
     
     enriched_clusters = enrich_clusters_with_live_tiers(clusters)
+    
+    floor_filtered = []
+    for c in enriched_clusters:
+        dist = c.get("coverage_stats", {}).get("coverage_tier_distribution", {})
+        scored = dist.get("govt_aligned", 0) + dist.get("mainstream", 0) + dist.get("watchdog", 0)
+        if scored >= 4:
+            floor_filtered.append(c)
+    enriched_clusters = floor_filtered
     if tier:
         filtered_clusters = []
         for c in enriched_clusters:
