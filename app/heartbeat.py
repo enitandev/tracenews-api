@@ -99,17 +99,16 @@ def check_briefing_heartbeat():
         today = lagos_now.date().isoformat()
         res = (
             supabase.table("daily_briefings")
-            .select("id")
+            .select("id", count="exact")
             .eq("date", today)
-            .eq("generation_status", "complete")
-            .limit(1)
+            .eq("generation_status", "failed")
             .execute()
         )
-        if not res.data:
+        if res.count and res.count > 0:
             send_alert(
-                "TraceNews ALERT: daily briefing not complete",
-                f"No complete daily_briefings row found for {today} as of "
-                f"{lagos_now.strftime('%H:%M')} WAT. Expected by 06:30 WAT."
+                "TraceNews ALERT: daily briefing failed",
+                f"{res.count} daily_briefings rows failed for {today} as of "
+                f"{lagos_now.strftime('%H:%M')} WAT. They require manual intervention."
             )
         else:
             logger.info(f"[heartbeat] Briefing OK for {today}")

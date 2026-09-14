@@ -40,7 +40,7 @@ def safe_execute(query_builder, retries=3, delay=3):
 def run_scoring(all_time: bool = False):
     logger.info("Starting Monitoring Spirit Scoring Engine...")
     
-    query = supabase.table("clusters").select("id, outlet_count, category, representative_title")
+    query = supabase.table("clusters").select("id, outlet_count, category, representative_title, category_classified_at")
     if not all_time:
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
         query = query.gte("first_seen_at", cutoff)

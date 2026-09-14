@@ -7,7 +7,7 @@ from bs4 import BeautifulSoup
 from datetime import datetime, timezone, timedelta
 from app.db import supabase
 from openai import OpenAI
-from app.tier_utils import get_distinct_scored_count
+from app.tier_utils import get_distinct_scored_count, get_outlet_tier
 
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
