@@ -66,6 +66,9 @@ def run_sitemap_health_check():
 
 
 def start_scheduler():
+    logger.info("Scheduler is paused by admin kill-switch.")
+    return
+
     # NOTE: Batch jobs (fetch, cluster, score, framing, hydration, briefing)
     # have been moved to app/worker.py, run as a Railway Cron service every 20 min.
     # This scheduler only runs lightweight monitoring and sitemap jobs.
