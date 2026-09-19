@@ -84,7 +84,7 @@ def get_embedding(text: str) -> list[float] | None:
 def backfill_missing_embeddings():
     """Finds all stories without embeddings and generates them in batches."""
     logger.info("Checking for stories missing embeddings...")
-    res = supabase.table("stories").select("id, title").is_("embedding", "null").execute()
+    res = supabase.table("stories").select("id, title, summary").is_("embedding", "null").execute()
     stories = res.data or []
     if not stories:
         logger.info("No stories missing embeddings.")
@@ -93,9 +93,9 @@ def backfill_missing_embeddings():
     logger.info(f"Backfilling embeddings for {len(stories)} stories...")
     for i in range(0, len(stories), 100):
         batch = stories[i:i+100]
-        titles = [s["title"] for s in batch]
+        texts = [f"{s.get('title') or ''}\n\n{s.get('summary') or ''}".strip() for s in batch]
         try:
-            emb_res = openai_client.embeddings.create(input=titles, model="text-embedding-3-small")
+            emb_res = openai_client.embeddings.create(input=texts, model="text-embedding-3-small")
             for j, s in enumerate(batch):
                 supabase.table("stories").update({"embedding": emb_res.data[j].embedding}).eq("id", s["id"]).execute()
             logger.info(f"Backfilled batch of {len(batch)} embeddings.")
@@ -165,7 +165,8 @@ def run_clustering(all_time: bool = False) -> dict:
                         existing_first_seen = cluster_res.data[0]["first_seen_at"]
                         if is_earlier_story(story, existing_first_seen, story.get("fetched_at")):
                             # Update representative title and its embedding
-                            new_cluster_emb = get_embedding(story["title"])
+                            story_text = f"{story.get('title', '')}\n\n{story.get('summary', '')}".strip()
+                            new_cluster_emb = get_embedding(story_text)
                             update_payload = {
                                 "representative_title": story["title"],
                                 "first_seen_at": story["published_at"]
@@ -181,7 +182,8 @@ def run_clustering(all_time: bool = False) -> dict:
 
         if not cluster_id:
             # Create new cluster
-            cluster_emb = get_embedding(story["title"])
+            story_text = f"{story.get('title', '')}\n\n{story.get('summary', '')}".strip()
+            cluster_emb = get_embedding(story_text)
             if not cluster_emb:
                 logger.warning(f"Could not generate embedding for new cluster: {story['title']}")
                 continue
