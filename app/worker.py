@@ -90,9 +90,6 @@ def release_lock(supabase):
 
 
 def main():
-    logger.info("[worker] Worker is paused by admin kill-switch. Exiting.")
-    sys.exit(0)
-    
     start_time = datetime.now(timezone.utc)
     logger.info(f"[worker] Starting. PID={os.getpid()}, RSS={get_rss_mb():.1f}MB")
 

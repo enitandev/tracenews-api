@@ -95,12 +95,25 @@ def parse_feed(outlet: dict) -> list[dict]:
             feed_url_with_count = add_count_param(feed_url)
             
             try:
-                res = rss_client.get(
+                with rss_client.stream(
+                    "GET",
                     feed_url_with_count, 
                     headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-                )
-                res.raise_for_status()
-                feed_content = res.content
+                ) as res:
+                    res.raise_for_status()
+                    content_chunks = []
+                    total_size = 0
+                    aborted = False
+                    for chunk in res.iter_bytes():
+                        total_size += len(chunk)
+                        if total_size > 5 * 1024 * 1024:
+                            logger.error(f"ABORTED FETCH: Payload exceeded 5MB for outlet '{outlet['name']}' at URL {feed_url_with_count}")
+                            aborted = True
+                            break
+                        content_chunks.append(chunk)
+                    if aborted:
+                        continue
+                    feed_content = b"".join(content_chunks)
             except Exception as e:
                 logger.warning(f"Failed to fetch feed {feed_url_with_count} for {outlet['name']}: {e}")
                 continue
@@ -122,12 +135,25 @@ def parse_feed(outlet: dict) -> list[dict]:
                 logger.info(f"Using Google News fallback for {outlet['name']} ({domain})")
                 
                 try:
-                    fallback_res = rss_client.get(
+                    with rss_client.stream(
+                        "GET",
                         fallback_url,
                         headers={'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'}
-                    )
-                    fallback_res.raise_for_status()
-                    feed = feedparser.parse(fallback_res.content)
+                    ) as fallback_res:
+                        fallback_res.raise_for_status()
+                        fb_chunks = []
+                        fb_size = 0
+                        fb_aborted = False
+                        for chunk in fallback_res.iter_bytes():
+                            fb_size += len(chunk)
+                            if fb_size > 5 * 1024 * 1024:
+                                logger.error(f"ABORTED FETCH: Payload exceeded 5MB for outlet '{outlet['name']}' at fallback URL {fallback_url}")
+                                fb_aborted = True
+                                break
+                            fb_chunks.append(chunk)
+                        if fb_aborted:
+                            continue
+                        feed = feedparser.parse(b"".join(fb_chunks))
                 except Exception as e:
                     logger.warning(f"Failed to fetch fallback feed {fallback_url} for {outlet['name']}: {e}")
                     continue
