@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from app.db import supabase
 from app.classifier import classify_cluster
+from app.tier_utils import get_outlet_tier
 
 logger = logging.getLogger(__name__)
 
@@ -136,24 +137,7 @@ def run_scoring(all_time: bool = False):
                 behav = behavioral_map.get(slug) if slug else None
                 tier = "unscored"
 
-                if outlet.get("is_blog"):
-                    tier = "blog"
-                elif behav and behav.get("independence_score") is not None:
-                    score = behav.get("independence_score")
-                    if behav.get("promotional_alignment_flag") or score < 35:
-                        tier = "pro_establishment"
-                    elif score < 60:
-                        tier = "institutional"
-                    else:
-                        tier = "adversarial"
-                else:
-                    g_align = outlet.get("government_alignment")
-                    if g_align == "pro_government":
-                        tier = "pro_establishment"
-                    elif g_align == "opposition":
-                        tier = "adversarial"
-                    elif g_align == "neutral":
-                        tier = "institutional"
+                tier = get_outlet_tier(outlet.get("government_alignment"), outlet.get("is_blog"))
 
                 if tier != "unscored":
                     coverage_tier[tier] += 1
@@ -264,9 +248,9 @@ def run_scoring(all_time: bool = False):
                 
                 tier_delta = 0
                 for tier in [
-                  "pro_establishment",
-                  "institutional",
-                  "adversarial"
+                  "govt_aligned",
+                  "mainstream",
+                  "watchdog"
                 ]:
                   prev_share = (
                     prev_dist.get(tier, 0) /
