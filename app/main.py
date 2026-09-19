@@ -554,7 +554,7 @@ def get_clusters_by_category(category: str, limit: int = 8):
         cid = c["id"]
         stories = cluster_stories.get(cid, [])
         
-        tier_dist = {"pro_establishment": 0, "institutional": 0, "adversarial": 0, "blog": 0}
+        tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0, "blog": 0}
         unique_slugs = set()
         
         for s in stories:
@@ -567,7 +567,7 @@ def get_clusters_by_category(category: str, limit: int = 8):
                     if tier in tier_dist:
                         tier_dist[tier] += 1
                         
-        scored = tier_dist["pro_establishment"] + tier_dist["institutional"] + tier_dist["adversarial"]
+        scored = tier_dist["govt_aligned"] + tier_dist["mainstream"] + tier_dist["watchdog"]
         
         stats = c.get("coverage_stats") or {}
         stats["coverage_tier_distribution"] = tier_dist

@@ -83,9 +83,11 @@ def run_scoring(all_time: bool = False):
                 
                 update_data = {
                     "category": category,
-                    "category_confidence": confidence,
-                    "category_classified_at": now
+                    "category_confidence": confidence
                 }
+                
+                if confidence > 0.0:
+                    update_data["category_classified_at"] = now
                 
                 # Flag for staff console if confidence < 0.75
                 if confidence < 0.75:

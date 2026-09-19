@@ -1,6 +1,7 @@
 import os
 import json
 import logging
+import openai
 from openai import OpenAI
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,15 @@ def classify_cluster(title: str, summary: str) -> dict:
             
         return {"category": predicted_cat, "confidence": confidence}
         
+    except openai.RateLimitError as e:
+        logger.error(f"LLM Classification failed due to Rate Limit/Quota: {e}")
+        if "insufficient_quota" in str(e) or "credit_balance_exhausted" in str(e):
+            try:
+                from app.heartbeat import send_alert
+                send_alert("TraceNews ALERT: OpenAI Quota Exhausted", f"Classifier hit billing failure: {e}")
+            except Exception as alert_e:
+                logger.error(f"Failed to send quota alert: {alert_e}")
+        return {"category": "General", "confidence": 0.0}
     except Exception as e:
         logger.error(f"LLM Classification failed: {e}")
         return {"category": "General", "confidence": 0.0}
