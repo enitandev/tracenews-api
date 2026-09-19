@@ -364,7 +364,7 @@ def get_landing_clusters(limit: int = 40):
     for c in enriched_clusters:
         dist = c.get("coverage_stats", {}).get("coverage_tier_distribution", {})
         scored = dist.get("govt_aligned", 0) + dist.get("mainstream", 0) + dist.get("watchdog", 0)
-        if scored >= 4:
+        if scored >= 3:
             filtered.append(c)
             
     return {"clusters": filtered, "count": len(filtered)}
@@ -401,7 +401,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     for c in enriched_clusters:
         dist = c.get("coverage_stats", {}).get("coverage_tier_distribution", {})
         scored = dist.get("govt_aligned", 0) + dist.get("mainstream", 0) + dist.get("watchdog", 0)
-        if scored >= 4:
+        if scored >= 3:
             floor_filtered.append(c)
     enriched_clusters = floor_filtered
     if tier:
