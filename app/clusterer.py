@@ -47,28 +47,56 @@ def is_earlier_story(new_story: dict, existing_first_seen: str, new_story_fetche
     except Exception:
         return False
 
-def cleanup_old_clusters():
-    """Delete single-story clusters older than 24 hours."""
+CLEANUP_BATCH_SIZE = 50  # keeps in_() URLs short
+
+
+def _cleanup_cluster_batch(batch_ids):
+    """
+    Delete one batch of old single-story clusters. The stories must be
+    detached first (they reference the cluster); if the cluster delete still
+    fails, the stories are re-attached so a failure never leaves stories
+    without a cluster or clusters without their stories.
+    """
+    story_rows = (
+        supabase.table("stories").select("id, cluster_id").in_("cluster_id", batch_ids).execute()
+    ).data or []
+    supabase.table("stories").update({"cluster_id": None}).in_("cluster_id", batch_ids).execute()
     try:
-        from datetime import datetime, timedelta
-        cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+        supabase.table("cluster_scores").delete().in_("cluster_id", batch_ids).execute()
+        # A single-story cluster's coverage history can never feed a verdict;
+        # it goes with the cluster (its foreign key blocked the delete before).
+        supabase.table("coverage_snapshots").delete().in_("cluster_id", batch_ids).execute()
+        supabase.table("clusters").delete().in_("id", batch_ids).execute()
+    except Exception:
+        by_cluster = {}
+        for row in story_rows:
+            by_cluster.setdefault(row["cluster_id"], []).append(row["id"])
+        for cluster_id, story_ids in by_cluster.items():
+            supabase.table("stories").update({"cluster_id": cluster_id}).in_("id", story_ids).execute()
+        raise
+
+
+def cleanup_old_clusters():
+    """Delete single-story clusters older than 24 hours, batch by batch."""
+    from datetime import datetime, timedelta
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    try:
         res = supabase.table("clusters").select("id").lt("first_seen_at", cutoff).eq("outlet_count", 1).execute()
-        old_clusters = res.data or []
-        
-        if old_clusters:
-            ids = [c["id"] for c in old_clusters]
-            
-            # Process in batches to avoid URL length limits
-            batch_size = 50
-            for i in range(0, len(ids), batch_size):
-                batch_ids = ids[i:i+batch_size]
-                supabase.table("stories").update({"cluster_id": None}).in_("cluster_id", batch_ids).execute()
-                supabase.table("cluster_scores").delete().in_("cluster_id", batch_ids).execute()
-                supabase.table("clusters").delete().in_("id", batch_ids).execute()
-                
-            logger.info(f"Cleaned up {len(ids)} old single-story clusters.")
-    except Exception as e:
-        logger.error(f"Failed to cleanup old clusters: {e}")
+    except Exception:
+        logger.exception("Cleanup: could not list old single-story clusters")
+        return
+    ids = [c["id"] for c in (res.data or [])]
+    deleted = failed = 0
+    for i in range(0, len(ids), CLEANUP_BATCH_SIZE):
+        batch_ids = ids[i:i + CLEANUP_BATCH_SIZE]
+        try:
+            _cleanup_cluster_batch(batch_ids)
+            deleted += len(batch_ids)
+        except Exception:
+            failed += len(batch_ids)
+            logger.exception(f"Cleanup: batch of {len(batch_ids)} clusters not deleted; stories re-attached")
+    if ids:
+        logger.info(f"Cleaned up {deleted} old single-story clusters ({failed} left in place after errors).")
 
 def get_embedding(text: str) -> list[float] | None:
     try:
@@ -116,7 +144,7 @@ def run_clustering(all_time: bool = False) -> dict:
         print(f"Stories added to existing clusters: 0")
         print(f"===========================\n")
         
-        return {"stories_clustered": 0, "new_clusters": 0, "total_clusters": 0}
+        return {"stories_clustered": 0, "new_clusters": 0, "total_clusters": None}
 
     logger.info(f"{len(stories)} unclustered stories to process")
 
@@ -222,9 +250,15 @@ def run_clustering(all_time: bool = False) -> dict:
     # Run cleanup of old single-story clusters
     cleanup_old_clusters()
 
-    # Get total clusters for response
-    total_res = supabase.table("clusters").select("id", count="exact").execute()
-    total_clusters = total_res.count or 0
+    # Total clusters, for the run summary only. An exact count scans the
+    # whole table and has hit the statement timeout, which crashed the
+    # worker; the planner's estimate is enough, and a failure here must not
+    # stop the run.
+    try:
+        total_clusters = supabase.table("clusters").select("id", count="estimated").limit(1).execute().count
+    except Exception:
+        logger.exception("Could not estimate total clusters")
+        total_clusters = None
 
     logger.info(f"Clustering complete. {assigned} stories assigned, {created} new clusters.")
     
