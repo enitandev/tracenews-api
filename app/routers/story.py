@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from app.db import supabase
 from app.tier_utils import get_outlet_tier, is_republisher, normalize_tier_distribution
 from app.monitoring_spirit import resolve_verdict
+from app.summarizer import is_generation_failure
 from app.coverage import render_safe_verdict, get_sourcing_info, get_outlets_cache, compute_live_coverage_tier_distribution
 
 logger = logging.getLogger(__name__)
@@ -220,6 +221,12 @@ def get_cluster_summary(id: str):
             return {"status": "pending", "bullets": [], "message": UI["pending"]}
         
         summary = res.data[0]
+        # A correction supersedes the summary; never serve it while the
+        # replacement is generated.
+        if summary.get("superseded") is True:
+            return {"status": "pending", "bullets": [], "message": UI["pending"]}
+        if is_generation_failure(summary):
+            return {"status": "error", "bullets": [], "message": UI["error"]}
         if summary.get("published"):
             return {"status": "published", "bullets": summary.get("bullets", [])}
         

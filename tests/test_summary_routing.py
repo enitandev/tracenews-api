@@ -107,3 +107,76 @@ class TestServedSummary:
     def test_flagged_auto_summary_never_serves_bullets(self, monkeypatch):
         r = self._serve(monkeypatch, {"published": False, "gate": "auto", "bullets": ["x"], "flags": ["escalation: charged"]})
         assert r["bullets"] == [] and r["status"] == "withheld"
+
+
+class TestServedSummaryLifecycle(TestServedSummary):
+    def test_superseded_summary_is_not_served(self, monkeypatch):
+        r = self._serve(monkeypatch, {"published": True, "gate": "auto", "bullets": ["old"], "superseded": True})
+        assert r["status"] == "pending" and r["bullets"] == []
+
+    def test_generation_failure_row_reads_as_error(self, monkeypatch):
+        r = self._serve(monkeypatch, {"published": False, "gate": "review", "bullets": [], "flags": ["generation_failed: Timeout"]})
+        assert r["status"] == "error" and r["bullets"] == []
+
+
+FAIL = {"flags": ["generation_failed: RuntimeError"]}
+
+
+class TestSummaryRetryCap:
+    def needing(self, rows_by_cluster):
+        from app.worker import clusters_needing_summary
+        rows = [dict(r, cluster_id=cid) for cid, rs in rows_by_cluster.items() for r in rs]
+        return clusters_needing_summary(list(rows_by_cluster), rows)
+
+    def test_new_cluster_is_summarised(self):
+        assert self.needing({"a": []}) == ["a"]
+
+    def test_existing_good_summary_is_left_alone(self):
+        assert self.needing({"a": [{"flags": None}]}) == []
+
+    def test_superseded_summary_is_regenerated(self):
+        assert self.needing({"a": [{"superseded": True}]}) == ["a"]
+
+    def test_failures_are_retried_up_to_the_cap(self):
+        assert self.needing({"a": [FAIL]}) == ["a"]
+        assert self.needing({"a": [FAIL, FAIL]}) == ["a"]
+        assert self.needing({"a": [FAIL, FAIL, FAIL]}) == []
+
+    def test_failure_count_resets_after_a_correction(self):
+        # Newest first: one failure since the superseded summary.
+        assert self.needing({"a": [FAIL, {"superseded": True}, FAIL, FAIL, FAIL]}) == ["a"]
+
+
+def test_failed_generation_is_recorded_once(monkeypatch):
+    import app.summarizer as summarizer
+    inserts = []
+
+    class Q:
+        def __init__(self, name):
+            self.name = name
+            self.data = [{"title": "t", "summary": "s", "outlet_id": "o1"}, {"title": "t2", "summary": "s2", "outlet_id": "o2"}]
+
+        def insert(self, payload):
+            inserts.append((self.name, payload))
+            return self
+
+        def __getattr__(self, _):
+            return lambda *a, **k: self
+
+        def execute(self):
+            return self
+
+    class DB:
+        def table(self, name):
+            return Q(name)
+
+    def fail(**kwargs):
+        raise RuntimeError("model down")
+
+    monkeypatch.setattr(summarizer, "supabase", DB())
+    monkeypatch.setattr(summarizer.openai_client.chat.completions, "create", fail)
+    assert summarizer.generate_cluster_summary("c1") is None
+    assert len(inserts) == 1
+    table, row = inserts[0]
+    assert table == "cluster_summaries" and row["published"] is False and row["bullets"] == []
+    assert row["flags"] == ["generation_failed: RuntimeError"]
