@@ -51,3 +51,56 @@ def test_alerts_on_failed_rows(monkeypatch):
 def test_silent_when_every_row_complete(monkeypatch):
     sent = _run(monkeypatch, [{"position": i, "generation_status": "complete"} for i in range(1, 4)])
     assert sent == []
+
+
+def test_smtp_failure_logs_the_alert_and_does_not_raise(monkeypatch, caplog):
+    import logging
+    monkeypatch.setenv("SMTP_HOST", "smtp.example")
+    monkeypatch.setenv("SMTP_USER", "u")
+    monkeypatch.setenv("SMTP_PASS", "p")
+
+    def unreachable(*a, **k):
+        raise OSError(101, "Network is unreachable")
+
+    monkeypatch.setattr(hb.smtplib, "SMTP_SSL", unreachable)
+    with caplog.at_level(logging.ERROR, logger="app.heartbeat"):
+        hb.send_alert("TraceNews ALERT: test", "the body")
+    assert "ALERT COULD NOT SEND (SMTP delivery failed): TraceNews ALERT: test — the body" in caplog.text
+
+
+class _FlakyDB:
+    """Fails the first `failures` queries like a dropped connection, then answers."""
+    def __init__(self, failures, rows):
+        self.failures, self.rows = failures, rows
+
+    def table(self, _name):
+        db = self
+
+        class Q:
+            def __getattr__(self, _):
+                return lambda *a, **k: self
+
+            def execute(self):
+                if db.failures:
+                    db.failures -= 1
+                    raise RuntimeError("Server disconnected")
+                return type("R", (), {"data": db.rows})()
+        return Q()
+
+
+def _feed(monkeypatch, failures):
+    from datetime import datetime, timezone
+    sent = []
+    monkeypatch.setattr(hb, "supabase", _FlakyDB(failures, [{"created_at": datetime.now(timezone.utc).isoformat()}]))
+    monkeypatch.setattr(hb, "send_alert", lambda subject, body: sent.append(subject))
+    monkeypatch.setattr(hb.time, "sleep", lambda s: None)
+    hb.check_feed_heartbeat()
+    return sent
+
+
+def test_one_dropped_connection_is_retried_not_alerted(monkeypatch):
+    assert _feed(monkeypatch, failures=1) == []
+
+
+def test_repeated_failure_still_alerts(monkeypatch):
+    assert _feed(monkeypatch, failures=2) == ["TraceNews ALERT: feed heartbeat check itself failed"]
