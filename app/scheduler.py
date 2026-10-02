@@ -65,7 +65,49 @@ def run_sitemap_health_check():
             )
 
 
+# Variables Railway injects into every deployment. RAILWAY_GIT_COMMIT_SHA is
+# confirmed present in production (GET /version reports it).
+RAILWAY_MARKER_VARS = (
+    "RAILWAY_GIT_COMMIT_SHA",
+    "RAILWAY_ENVIRONMENT_ID",
+    "RAILWAY_ENVIRONMENT_NAME",
+    "RAILWAY_PROJECT_ID",
+    "RAILWAY_SERVICE_ID",
+)
+
+
+def scheduler_should_run(env=None):
+    """
+    The scheduler (heartbeats, alerts, sitemap cache) runs only in the
+    deployed web service. A copy of the API started locally would otherwise
+    run the same production heartbeats and send alerts from a laptop, which
+    is what produced the Sep 2026 alert emails.
+
+    SCHEDULER_ENABLED=1/0 overrides the detection either way.
+    Returns (should_run, reason).
+    """
+    env = os.environ if env is None else env
+    flag = env.get("SCHEDULER_ENABLED")
+    if flag is not None and flag.strip() != "":
+        return flag.strip().lower() in ("1", "true", "yes", "on"), "SCHEDULER_ENABLED"
+    for var in RAILWAY_MARKER_VARS:
+        if env.get(var):
+            return True, var
+    return False, "not running on Railway"
+
+
+def scheduler_running() -> bool:
+    return scheduler.running
+
+
 def start_scheduler():
+    should_run, reason = scheduler_should_run()
+    if not should_run:
+        logger.warning(
+            f"Scheduler NOT started ({reason}): no heartbeats, alerts or sitemap "
+            f"cache job in this process. Set SCHEDULER_ENABLED=1 to force it on."
+        )
+        return
     # NOTE: Batch jobs (fetch, cluster, score, framing, hydration, briefing)
     # have been moved to app/worker.py, run as a Railway Cron service every 20 min.
     # This scheduler only runs lightweight monitoring and sitemap jobs.
@@ -138,11 +180,12 @@ def start_scheduler():
 
     scheduler.start()
     logger.info(
-        "Scheduler started (web-only mode). "
+        f"Scheduler started (web-only mode, enabled by {reason}). "
         "Heartbeats every 30 min, sitemap every 30 min. "
         "Batch jobs run via separate worker cron service."
     )
 
 def stop_scheduler():
-    scheduler.shutdown()
+    if scheduler.running:
+        scheduler.shutdown()
 

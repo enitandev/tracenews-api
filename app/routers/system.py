@@ -2,6 +2,7 @@
 import logging
 from fastapi import APIRouter, BackgroundTasks, Depends
 from app.admin_auth import require_permission
+from app.scheduler import scheduler_running
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 
@@ -24,7 +25,7 @@ def root():
 
 @router.get("/health")
 def health():
-    return {"status": "healthy"}
+    return {"status": "healthy", "scheduler_running": scheduler_running()}
 
 
 # ── MANUAL TRIGGERS ─────────────────────────────────
