@@ -52,7 +52,7 @@ class TestPersistenceRail:
         for watch_pct, govt_pct, total \
                 in pattern:
             reads.append({
-                "tier_distribution": {
+                "coverage_tier_distribution": {
                     TIER_WATCHDOG: 
                         int(watch_pct * total),
                     TIER_GOVT: 
@@ -64,7 +64,7 @@ class TestPersistenceRail:
                             govt_pct * total
                         )
                 },
-                "total": total
+                "outlet_count": total
             })
         return reads
 
@@ -168,20 +168,20 @@ class TestDirectionAgnosticSymmetry:
     def test_watchdog_loud_govt_silent_reaches_dark(self):
         snapshot_reads = [
             {
-                "tier_distribution": {
+                "coverage_tier_distribution": {
                     TIER_WATCHDOG: 8,
                     TIER_GOVT: 0,
                     TIER_MAINSTREAM: 1
                 },
-                "total": 9
+                "outlet_count": 9
             },
             {
-                "tier_distribution": {
+                "coverage_tier_distribution": {
                     TIER_WATCHDOG: 7,
                     TIER_GOVT: 0,
                     TIER_MAINSTREAM: 1
                 },
-                "total": 8
+                "outlet_count": 8
             }
         ]
         sourcing_info = {
@@ -217,20 +217,20 @@ class TestDirectionAgnosticSymmetry:
         """
         snapshot_reads = [
             {
-                "tier_distribution": {
+                "coverage_tier_distribution": {
                     TIER_GOVT: 8,
                     TIER_WATCHDOG: 0,
                     TIER_MAINSTREAM: 1
                 },
-                "total": 9
+                "outlet_count": 9
             },
             {
-                "tier_distribution": {
+                "coverage_tier_distribution": {
                     TIER_GOVT: 7,
                     TIER_WATCHDOG: 0,
                     TIER_MAINSTREAM: 1
                 },
-                "total": 8
+                "outlet_count": 8
             }
         ]
         sourcing_info = {
@@ -262,16 +262,16 @@ class TestDirectionAgnosticSymmetry:
         say "government."
         """
         snapshot_reads = [
-            {"tier_distribution": {
+            {"coverage_tier_distribution": {
                 TIER_WATCHDOG: 8, 
                 TIER_GOVT: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 9},
-            {"tier_distribution": {
+            }, "outlet_count": 9},
+            {"coverage_tier_distribution": {
                 TIER_WATCHDOG: 7, 
                 TIER_GOVT: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 8}
+            }, "outlet_count": 8}
         ]
         sourcing_info = {
             "distinct_outlets_in_loud_tier": 8,
@@ -289,16 +289,16 @@ class TestDirectionAgnosticSymmetry:
             sourcing_info=sourcing_info
         )
         govt_loud_reads = [
-            {"tier_distribution": {
+            {"coverage_tier_distribution": {
                 TIER_GOVT: 8, 
                 TIER_WATCHDOG: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 9},
-            {"tier_distribution": {
+            }, "outlet_count": 9},
+            {"coverage_tier_distribution": {
                 TIER_GOVT: 7, 
                 TIER_WATCHDOG: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 8}
+            }, "outlet_count": 8}
         ]
         govt_loud = resolve_verdict(
             tier_distribution={
@@ -343,16 +343,16 @@ class TestDirectionAgnosticSymmetry:
             "has_original_reporting_outlet": True
         }
         snapshot_reads = [
-            {"tier_distribution": {
+            {"coverage_tier_distribution": {
                 TIER_WATCHDOG: 8, 
                 TIER_GOVT: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 9},
-            {"tier_distribution": {
+            }, "outlet_count": 9},
+            {"coverage_tier_distribution": {
                 TIER_WATCHDOG: 7, 
                 TIER_GOVT: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 8}
+            }, "outlet_count": 8}
         ]
         watchdog_result = resolve_verdict(
             tier_distribution={
@@ -369,16 +369,16 @@ class TestDirectionAgnosticSymmetry:
             == "mixed"
         
         govt_reads = [
-            {"tier_distribution": {
+            {"coverage_tier_distribution": {
                 TIER_GOVT: 8, 
                 TIER_WATCHDOG: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 9},
-            {"tier_distribution": {
+            }, "outlet_count": 9},
+            {"coverage_tier_distribution": {
                 TIER_GOVT: 7, 
                 TIER_WATCHDOG: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 8}
+            }, "outlet_count": 8}
         ]
         govt_result = resolve_verdict(
             tier_distribution={
@@ -475,16 +475,16 @@ class TestSportFalsePositiveGuard:
 
     def test_sport_silence_does_not_reach_dark(self):
         snapshot_reads = [
-            {"tier_distribution": {
+            {"coverage_tier_distribution": {
                 TIER_WATCHDOG: 8, 
                 TIER_GOVT: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 9},
-            {"tier_distribution": {
+            }, "outlet_count": 9},
+            {"coverage_tier_distribution": {
                 TIER_WATCHDOG: 7, 
                 TIER_GOVT: 0, 
                 TIER_MAINSTREAM: 1
-            }, "total": 8}
+            }, "outlet_count": 8}
         ]
         sourcing_info = {
             "distinct_outlets_in_loud_tier": 8,
@@ -510,3 +510,37 @@ class TestSportFalsePositiveGuard:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestPersistenceReadsStoredSnapshotRows:
+    """
+    Regression: has_persistence once read "tier_distribution"/"total",
+    which coverage_snapshots rows never carry, so it could never pass.
+    These reads are exactly what the endpoints select from the table.
+    """
+
+    def test_stored_rows_with_canonical_keys_pass(self):
+        reads = [
+            {"coverage_tier_distribution": {"watchdog": 8, "mainstream": 1},
+             "outlet_count": 9, "snapshot_at": "2026-10-02T10:00:00Z"},
+            {"coverage_tier_distribution": {"watchdog": 7, "mainstream": 1},
+             "outlet_count": 8, "snapshot_at": "2026-10-02T09:00:00Z"},
+        ]
+        assert has_persistence(reads, TIER_WATCHDOG, TIER_GOVT) == True
+
+    def test_stored_rows_with_legacy_keys_pass(self):
+        reads = [
+            {"coverage_tier_distribution": {"pro_establishment": 8, "institutional": 1},
+             "outlet_count": 9, "snapshot_at": "2026-10-02T10:00:00Z"},
+            {"coverage_tier_distribution": {"pro_establishment": 7, "institutional": 1, "adversarial": 0},
+             "outlet_count": 8, "snapshot_at": "2026-10-02T09:00:00Z"},
+        ]
+        assert has_persistence(reads, TIER_GOVT, TIER_WATCHDOG) == True
+
+    def test_unreadable_snapshot_ends_the_run(self):
+        reads = [
+            {"coverage_tier_distribution": {"watchdog": 8, "mainstream": 1}, "outlet_count": 9},
+            {"coverage_tier_distribution": None, "outlet_count": 8},
+            {"coverage_tier_distribution": {"watchdog": 7, "mainstream": 1}, "outlet_count": 8},
+        ]
+        assert has_persistence(reads, TIER_WATCHDOG, TIER_GOVT) == False
