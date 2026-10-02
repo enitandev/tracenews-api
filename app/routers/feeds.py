@@ -314,22 +314,13 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
         return cluster.get('outlet_count', 1) / (age_hours + 2)
     clusters.sort(key=relevance_score, reverse=True)
     
-    # Monitoring spirit candidates
-    monitoring_spirit = []
-    for c in clusters:
-        if c.get("outlet_count", 0) >= 3:
-            stats = c.get("coverage_stats") or {}
-            dist = stats.get("coverage_tier_distribution", {})
-            total = sum(dist.values())
-            if total > 0:
-                for k, v in dist.items():
-                    if v / total >= 0.8:
-                        monitoring_spirit.append(c)
-                        break
-    monitoring_spirit.sort(key=lambda x: x.get("outlet_count", 0), reverse=True)
-    ms_candidates = monitoring_spirit[:2]
-    ms_ids = {c["id"] for c in ms_candidates}
-    
+    # The one-tier "monitoring spirit" pick (any tier >= 80%, no significance,
+    # persistence or sourcing rails) is not selected any more: it was never
+    # rendered, but it removed those stories from the page's lists. The key
+    # stays in the response, empty, for compatibility.
+    ms_candidates = []
+    ms_ids = set()
+
     # Top stories candidates (fetch a few extra since we'll filter for images)
     candidates_by_outlet = sorted([c for c in clusters if c["id"] not in ms_ids], key=lambda x: x.get("outlet_count", 0), reverse=True)
     top_candidates = candidates_by_outlet[:6]
