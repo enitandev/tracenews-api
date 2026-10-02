@@ -12,34 +12,68 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-ALERT_TO = "enitan@tracenews.ng"          # CONFIRM this address before shipping
-ALERT_FROM = "enitanbello08@gmail.com"        # CONFIRM this address / domain is set up to send, not just receive
+# enitan@tracenews.ng is an ImprovMX alias forwarding to the owner's Gmail.
+ALERT_TO = os.environ.get("ALERT_TO", "enitan@tracenews.ng")
+# Resend sends from the verified tracenews.ng domain.
+ALERT_FROM = os.environ.get("ALERT_FROM", "TraceNews Alerts <alerts@tracenews.ng>")
+# SMTP fallback (local use only: Railway's Hobby plan blocks outbound SMTP).
+SMTP_FROM = os.environ.get("SMTP_FROM", "enitanbello08@gmail.com")
+
+RESEND_API_URL = "https://api.resend.com/emails"
+
+
+def _send_via_resend(api_key: str, subject: str, body: str) -> None:
+    res = requests.post(
+        RESEND_API_URL,
+        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+        json={"from": ALERT_FROM, "to": [ALERT_TO], "subject": subject, "text": body},
+        timeout=20,
+    )
+    if not res.ok:
+        raise RuntimeError(f"Resend returned {res.status_code}: {res.text[:300]}")
+
+
+def _send_via_smtp(smtp_host: str, smtp_user: str, smtp_pass: str, subject: str, body: str) -> None:
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = SMTP_FROM
+    msg["To"] = ALERT_TO
+    msg.set_content(body)
+    with smtplib.SMTP_SSL(smtp_host, 465, timeout=20) as s:
+        s.login(smtp_user, smtp_pass)
+        s.send_message(msg)
+
 
 def send_alert(subject: str, body: str):
-    """Minimal SMTP sender."""
+    """
+    Deliver an alert by email: Resend's HTTPS API when RESEND_API_KEY is set
+    (production), else SMTP when SMTP_* are set. A delivery that fails, or no
+    channel at all, logs the whole alert at ERROR; it never raises, so the
+    calling heartbeat keeps running.
+    """
+    resend_key = os.environ.get("RESEND_API_KEY")
     smtp_host = os.environ.get("SMTP_HOST")
     smtp_user = os.environ.get("SMTP_USER")
     smtp_pass = os.environ.get("SMTP_PASS")
-    if not all([smtp_host, smtp_user, smtp_pass]):
+
+    if resend_key:
+        channel = "Resend"
+        send = lambda: _send_via_resend(resend_key, subject, body)
+    elif all([smtp_host, smtp_user, smtp_pass]):
+        channel = "SMTP"
+        send = lambda: _send_via_smtp(smtp_host, smtp_user, smtp_pass, subject, body)
+    else:
         # Fail LOUD in logs even though the whole point is we can't rely on
         # someone reading logs — this is the fallback of last resort.
-        logger.error(f"[heartbeat] ALERT COULD NOT SEND (SMTP not configured): {subject} — {body}")
+        logger.error(f"[heartbeat] ALERT COULD NOT SEND (no email channel configured): {subject} — {body}")
         return
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = ALERT_FROM
-    msg["To"] = ALERT_TO
-    msg.set_content(body)
+
     try:
-        with smtplib.SMTP_SSL(smtp_host, 465, timeout=20) as s:
-            s.login(smtp_user, smtp_pass)
-            s.send_message(msg)
+        send()
     except Exception:
-        # Never let a delivery failure swallow the alert: the full alert goes
-        # to the logs, and the calling heartbeat keeps running.
-        logger.exception(f"[heartbeat] ALERT COULD NOT SEND (SMTP delivery failed): {subject} — {body}")
+        logger.exception(f"[heartbeat] ALERT COULD NOT SEND ({channel} delivery failed): {subject} — {body}")
         return
-    logger.info(f"[heartbeat] Alert sent: {subject}")
+    logger.info(f"[heartbeat] Alert sent via {channel}: {subject}")
 
 
 FEED_QUERY_ATTEMPTS = 2
@@ -164,3 +198,14 @@ def check_briefing_heartbeat():
     except Exception as e:
         logger.exception("[heartbeat] briefing heartbeat check failed")
         send_alert("TraceNews ALERT: briefing heartbeat check itself failed", str(e))
+
+
+if __name__ == "__main__":
+    # python -m app.heartbeat --test   sends one test alert through the
+    # configured channel (e.g. `railway run python -m app.heartbeat --test`).
+    import sys
+    logging.basicConfig(level=logging.INFO)
+    if "--test" in sys.argv:
+        send_alert("TraceNews test alert", "If you can read this, alert delivery works.")
+    else:
+        print("usage: python -m app.heartbeat --test")
