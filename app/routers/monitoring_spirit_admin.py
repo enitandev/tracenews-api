@@ -55,7 +55,7 @@ async def list_current_verdicts(_: str = Depends(require_permission('monitoring_
     overridden_ids = {o["cluster_id"] for o in overrides_data}
 
     outlets_map, behavioral_map = _get_outlets_cache()
-    from app.main import compute_live_coverage_tier_distribution, get_sourcing_info
+    from app.coverage import compute_live_coverage_tier_distribution, get_sourcing_info
     
     from collections import defaultdict
     stories_by_cluster = defaultdict(list)

@@ -1,4 +1,4 @@
-from app.main import render_safe_verdict
+from app.coverage import render_safe_verdict
 from app.tier_utils import is_republisher, normalize_tier_distribution
 
 
@@ -66,7 +66,7 @@ class _FakeSupabase:
 
 
 def _by_slug_with_verdict(monkeypatch, verdict_result, snapshots):
-    import app.main as main
+    import app.routers.story as main
     outlets = {
         "o1": {"id": "o1", "slug": "a", "government_alignment": "opposition", "is_blog": False},
         "o2": {"id": "o2", "slug": "b", "government_alignment": "opposition", "is_blog": False},
