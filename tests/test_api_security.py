@@ -41,3 +41,17 @@ def test_pipeline_triggers_reject_anonymous_callers(client, monkeypatch, path):
     r = client.post(path)
     assert r.status_code in (401, 403, 422)
     assert ran == []
+
+
+def test_invalid_token_is_401_not_500(client, monkeypatch):
+    import app.admin_auth as admin_auth
+    import app.routers.system as system
+    ran = []
+    monkeypatch.setattr(system, "run_fetch", lambda: ran.append("fetch") or {})
+
+    def raise_invalid(token):
+        raise ValueError("invalid JWT")
+
+    monkeypatch.setattr(admin_auth.supabase.auth, "get_user", raise_invalid)
+    r = client.post("/admin/fetch", headers={"Authorization": "Bearer junk"})
+    assert r.status_code == 401 and ran == []
