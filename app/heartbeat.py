@@ -1,6 +1,7 @@
 import os
 import logging
 import smtplib
+import time
 from email.message import EmailMessage
 from datetime import datetime, timezone, timedelta
 import requests
@@ -41,15 +42,36 @@ def send_alert(subject: str, body: str):
     logger.info(f"[heartbeat] Alert sent: {subject}")
 
 
+FEED_QUERY_ATTEMPTS = 2
+FEED_QUERY_RETRY_DELAY_S = 5
+
+
+def _latest_story_rows():
+    """
+    The newest story row. A dropped Supabase connection ('Server
+    disconnected') is retried once before it counts as a failure: those
+    blips were the cause of every 'feed heartbeat check itself failed'
+    alert in Sep 2026, not a stalled feed.
+    """
+    for attempt in range(1, FEED_QUERY_ATTEMPTS + 1):
+        try:
+            return (
+                supabase.table("stories")
+                .select("created_at")
+                .order("created_at", desc=True)
+                .limit(1)
+                .execute()
+            )
+        except Exception:
+            if attempt == FEED_QUERY_ATTEMPTS:
+                raise
+            logger.warning(f"[heartbeat] Feed query failed (attempt {attempt}), retrying", exc_info=True)
+            time.sleep(FEED_QUERY_RETRY_DELAY_S)
+
+
 def check_feed_heartbeat():
     try:
-        res = (
-            supabase.table("stories")
-            .select("created_at")
-            .order("created_at", desc=True)
-            .limit(1)
-            .execute()
-        )
+        res = _latest_story_rows()
         if not res.data:
             send_alert("TraceNews ALERT: no stories in database at all", "stories table is empty.")
             return
