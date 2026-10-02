@@ -16,7 +16,6 @@ from app.storySummaryStrings import (
     GATE_HUMAN_REVIEW,
     GATE_SUPPRESS_CLAIM,
     GATE_SENIOR_REVIEW,
-    GATE_DEFAULT,
     ESCALATION_TERMS,
     FORBIDDEN_COVERAGE_TERMS,
     PRINCIPAL_OFFICEHOLDERS
@@ -24,6 +23,76 @@ from app.storySummaryStrings import (
 
 logger = logging.getLogger("summarizer")
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+def evaluate_summary(bullets, articles_text: str) -> dict:
+    """
+    Decide whether generated bullets may publish. This is the legal-risk
+    routing for event summaries:
+
+    - escalation: a criminal-process term (charged, convicted, ...) in the
+      bullets that no source article used -> flagged
+    - forbidden coverage language (outlet, coverage, downplayed, ...) -> flagged
+    - fewer than 2 or more than 5 bullets -> flagged
+    - an adverse-context term (alleged, fraud, ...) routes the gate:
+        with a principal officeholder named -> senior_review
+        else with a public-record anchor (court, filed, ...) -> review
+        else -> suppress
+      no adverse term -> auto
+
+    Publishes only when the gate is auto AND nothing was flagged.
+    A bullet that is not text is flagged, never coerced into text.
+    """
+    if not isinstance(bullets, list):
+        bullets = [str(bullets)]
+
+    flags = []
+    non_text = [b for b in bullets if not isinstance(b, str)]
+    if non_text:
+        flags.append(f"bullet_type: {len(non_text)} non-text")
+    text_bullets = [b for b in bullets if isinstance(b, str)]
+
+    combined_bullets_lower = " ".join(text_bullets).lower()
+    combined_summaries_lower = articles_text.lower()
+
+    def mentions(term, text):
+        return re.search(r'\b' + re.escape(term.lower()) + r'\b', text) is not None
+
+    # a) Escalation check
+    for term in ESCALATION_TERMS:
+        if mentions(term, combined_bullets_lower) and not mentions(term, combined_summaries_lower):
+            flags.append(f"escalation: {term}")
+
+    # b) Coverage check
+    for term in FORBIDDEN_COVERAGE_TERMS:
+        if mentions(term, combined_bullets_lower):
+            flags.append(f"forbidden_coverage: {term}")
+
+    # c) Length check
+    if len(bullets) < 2 or len(bullets) > 5:
+        flags.append(f"bullet_count: {len(bullets)}")
+
+    # Gating
+    has_adverse = any(mentions(t, combined_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
+    has_anchor = any(mentions(t, combined_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
+    has_principal = any(mentions(t, combined_bullets_lower) for t in PRINCIPAL_OFFICEHOLDERS)
+
+    if has_adverse:
+        if has_principal:
+            gate = GATE_SENIOR_REVIEW
+        elif has_anchor:
+            gate = GATE_HUMAN_REVIEW
+        else:
+            gate = GATE_SUPPRESS_CLAIM
+    else:
+        gate = GATE_AUTO_PUBLISH
+
+    return {
+        "bullets": bullets,
+        "gate": gate,
+        "flags": flags,
+        "published": gate == GATE_AUTO_PUBLISH and len(flags) == 0,
+    }
+
 
 def generate_cluster_summary(cluster_id: str) -> dict:
     """Generate and store an event summary for a given cluster."""
@@ -54,48 +123,12 @@ def generate_cluster_summary(cluster_id: str) -> dict:
         logger.error(f"Failed to generate summary for {cluster_id}: {e}")
         return None
 
-    if not isinstance(bullets, list):
-        bullets = [str(bullets)]
+    evaluation = evaluate_summary(bullets, articles_text)
+    bullets = evaluation["bullets"]
+    gate = evaluation["gate"]
+    flags = evaluation["flags"]
+    is_published = evaluation["published"]
 
-    combined_bullets_lower = " ".join(bullets).lower()
-    combined_summaries_lower = articles_text.lower()
-    
-    # 3. Eval Check
-    flags = []
-    
-    # a) Escalation check
-    for term in ESCALATION_TERMS:
-        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower) and not re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_summaries_lower):
-            flags.append(f"escalation: {term}")
-            
-    # b) Coverage check
-    for term in FORBIDDEN_COVERAGE_TERMS:
-        if re.search(r'\b' + re.escape(term.lower()) + r'\b', combined_bullets_lower):
-            flags.append(f"forbidden_coverage: {term}")
-            
-    # c) Length check
-    if len(bullets) < 2 or len(bullets) > 5:
-        flags.append(f"bullet_count: {len(bullets)}")
-        
-    # 4. Gating Check
-    gate = GATE_DEFAULT
-    has_adverse = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
-    has_anchor = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
-    has_principal = any(re.search(r'\b' + re.escape(t.lower()) + r'\b', combined_bullets_lower) for t in PRINCIPAL_OFFICEHOLDERS)
-    
-    if has_adverse:
-        if has_principal:
-            gate = GATE_SENIOR_REVIEW
-        elif has_anchor:
-            gate = GATE_HUMAN_REVIEW
-        else:
-            gate = GATE_SUPPRESS_CLAIM
-    else:
-        gate = GATE_AUTO_PUBLISH
-
-    # 5. Store
-    is_published = (gate == GATE_AUTO_PUBLISH and len(flags) == 0)
-    
     insert_data = {
         "cluster_id": cluster_id,
         "bullets": bullets,

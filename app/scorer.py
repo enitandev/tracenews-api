@@ -82,7 +82,7 @@ def unverified_viral_flag(tier_counts: dict) -> dict | None:
 def run_scoring(all_time: bool = False):
     logger.info("Starting Monitoring Spirit Scoring Engine...")
     
-    query = supabase.table("clusters").select("id, outlet_count, category, representative_title, category_classified_at")
+    query = supabase.table("clusters").select("id, outlet_count, category, representative_title, category_classified_at, monitoring_flags")
     if not all_time:
         cutoff = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
         query = query.gte("first_seen_at", cutoff)
@@ -113,7 +113,7 @@ def run_scoring(all_time: bool = False):
             category = cluster.get("category")
             category_classified_at = cluster.get("category_classified_at")
             if not category_classified_at:
-                combined_summary = " ".join([s.get("summary", "") for s in stories])
+                combined_summary = " ".join([s.get("summary") or "" for s in stories])
                 result = classify_cluster(cluster.get("representative_title", ""), combined_summary)
                 category = result["category"]
                 confidence = result["confidence"]
@@ -125,10 +125,13 @@ def run_scoring(all_time: bool = False):
                     "category_confidence": confidence
                 }
                 
-                if confidence > 0.0:
+                # A failed call is retried next cycle; any answer, usable or not,
+                # is final — never re-ask the paid model the same question.
+                if not result.get("retry"):
                     update_data["category_classified_at"] = now
                 
-                # Flag for staff console if confidence < 0.75
+                # Flag for staff console if confidence < 0.75 (an unusable
+                # answer comes back as 0.0, so it is always flagged)
                 if confidence < 0.75:
                     logger.warning(f"Low confidence classification for cluster {cluster['id']}: {category} ({confidence})")
                     flags = cluster.get("monitoring_flags") or []

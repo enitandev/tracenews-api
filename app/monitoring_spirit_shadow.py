@@ -1,7 +1,7 @@
 import re
 from datetime import datetime, timezone
 from app.db import supabase
-from app.main import (
+from app.coverage import (
     compute_live_coverage_tier_distribution
 )
 from collections import Counter

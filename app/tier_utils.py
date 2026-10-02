@@ -36,8 +36,13 @@ def get_distinct_scored_count(coverage_stats: dict) -> int | None:
     dist = coverage_stats.get("coverage_tier_distribution")
     if not dist:
         return None
-        
-    return dist.get("govt_aligned", 0) + dist.get("mainstream", 0) + dist.get("watchdog", 0)
+
+    # Legacy keys are read, an unreadable distribution is unknown (None),
+    # never a count of zero.
+    dist = normalize_tier_distribution(dist)
+    if dist is None:
+        return None
+    return sum(dist.values())
 
 
 # Tiers shown on the three-tier coverage surfaces, in display order.

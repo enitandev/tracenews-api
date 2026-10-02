@@ -17,7 +17,15 @@ CATEGORIES = [
 def classify_cluster(title: str, summary: str) -> dict:
     """
     Classify a cluster into one of the predefined categories using an LLM.
-    Returns a dict with 'category' and 'confidence'.
+
+    Returns {"category", "confidence", "retry"}:
+    - a valid answer: the category and the model's confidence; retry False
+    - an unusable answer (category missing or not in CATEGORIES, confidence
+      not a number in [0, 1]): logged at ERROR, 'General' with confidence
+      0.0 so the scorer flags it for review; retry False, because asking
+      the same paid model the same question every cycle would repeat the
+      same answer
+    - a failed call: 'General' with confidence 0.0; retry True
     """
     try:
         response = openai_client.chat.completions.create(
@@ -31,23 +39,33 @@ def classify_cluster(title: str, summary: str) -> dict:
         )
         
         result = json.loads(response.choices[0].message.content)
-        predicted_cat = result.get('category', 'General')
-        confidence = result.get('confidence', 0.0)
-        
-        if predicted_cat not in CATEGORIES:
-            predicted_cat = 'General'
-            
-        return {"category": predicted_cat, "confidence": confidence}
-        
     except openai.RateLimitError as e:
         logger.error(f"LLM Classification failed due to Rate Limit/Quota: {e}")
         if "insufficient_quota" in str(e) or "credit_balance_exhausted" in str(e):
             try:
                 from app.heartbeat import send_alert
                 send_alert("TraceNews ALERT: OpenAI Quota Exhausted", f"Classifier hit billing failure: {e}")
-            except Exception as alert_e:
-                logger.error(f"Failed to send quota alert: {alert_e}")
-        return {"category": "General", "confidence": 0.0}
-    except Exception as e:
-        logger.error(f"LLM Classification failed: {e}")
-        return {"category": "General", "confidence": 0.0}
+            except Exception:
+                logger.exception("Failed to send quota alert")
+        return {"category": "General", "confidence": 0.0, "retry": True}
+    except Exception:
+        logger.exception("LLM Classification failed")
+        return {"category": "General", "confidence": 0.0, "retry": True}
+
+    return validate_classification(result, title)
+
+
+def validate_classification(result, title: str = "") -> dict:
+    """Checks a parsed model answer; never absorbs a bad value silently."""
+    predicted_cat = result.get("category") if isinstance(result, dict) else None
+    confidence = result.get("confidence") if isinstance(result, dict) else None
+
+    if predicted_cat not in CATEGORIES:
+        logger.error(f"Classifier returned unrecognised category {predicted_cat!r} for {title!r}; flagged for review")
+        return {"category": "General", "confidence": 0.0, "retry": False}
+
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0.0 <= confidence <= 1.0:
+        logger.error(f"Classifier returned invalid confidence {confidence!r} for {title!r}; flagged for review")
+        return {"category": predicted_cat, "confidence": 0.0, "retry": False}
+
+    return {"category": predicted_cat, "confidence": float(confidence), "retry": False}
