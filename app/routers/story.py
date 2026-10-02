@@ -6,7 +6,7 @@ from app.db import supabase
 from app.tier_utils import get_outlet_tier, is_republisher, normalize_tier_distribution
 from app.monitoring_spirit import resolve_verdict
 from app.summarizer import is_generation_failure
-from app.coverage import render_safe_verdict, get_sourcing_info, get_outlets_cache, compute_live_coverage_tier_distribution
+from app.coverage import strip_embeddings, render_safe_verdict, get_sourcing_info, get_outlets_cache, compute_live_coverage_tier_distribution
 
 logger = logging.getLogger(__name__)
 
@@ -132,7 +132,7 @@ def get_cluster_by_slug(slug: str):
         # Invariant 1: do not set monitoring_spirit_live
         logger.exception(f"Live verdict computation failed for cluster {cluster['id']}")
         
-    return {"cluster": cluster, "stories": stories}
+    return {"cluster": strip_embeddings(cluster), "stories": strip_embeddings(stories)}
 
 
 
@@ -190,8 +190,8 @@ def get_cluster_deep_dive(id: str):
         stories[0]["broke_story_first"] = True
     
     return {
-        "cluster": cluster,
-        "stories": stories
+        "cluster": strip_embeddings(cluster),
+        "stories": strip_embeddings(stories)
     }
 
 

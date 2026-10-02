@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from app.db import supabase
 from app.image_utils import get_cluster_image, is_image_allowed
 from app.tier_utils import get_outlet_tier, normalize_tier_distribution, count_outlet_tiers, card_distribution
-from app.coverage import get_outlets_cache, enrich_clusters_with_live_tiers
+from app.coverage import strip_embeddings, get_outlets_cache, enrich_clusters_with_live_tiers
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def get_stories(limit: int = 50, offset: int = 0):
     result = supabase.table("stories").select("*").order(
         "published_at", desc=True
     ).range(offset, offset + limit - 1).execute()
-    return {"stories": result.data, "count": len(result.data)}
+    return {"stories": strip_embeddings(result.data), "count": len(result.data)}
 
 
 @router.get("/stories/cluster/{cluster_id}")
@@ -29,8 +29,8 @@ def get_cluster_stories(cluster_id: str):
         "id", cluster_id
     ).single().execute()
     return {
-        "cluster": cluster.data,
-        "stories": stories.data,
+        "cluster": strip_embeddings(cluster.data),
+        "stories": strip_embeddings(stories.data),
         "outlet_count": len(stories.data),
     }
 
@@ -150,7 +150,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
         c_dict["image_url"] = image_url
         formatted.append(c_dict)
     
-    return {"clusters": formatted, "count": len(enriched_clusters)}
+    return {"clusters": strip_embeddings(formatted), "count": len(enriched_clusters)}
 
 @router.get("/clusters/most-carried")
 def get_most_carried_clusters(category: str, limit: int = 6):

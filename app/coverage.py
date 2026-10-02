@@ -163,3 +163,23 @@ def enrich_clusters_with_live_tiers(clusters):
         c["coverage_stats"]["churnalism_ratio"] = churnalism_ratio
         
     return clusters
+
+
+def strip_embeddings(rows):
+    """
+    Drop the stored embedding vectors from rows returned to clients (and from
+    rows nested one level down, e.g. a cluster's stories). Nothing client-side
+    reads them, and they were over 90% of the story-page payload.
+    """
+    for row in (rows if isinstance(rows, list) else [rows]):
+        if not isinstance(row, dict):
+            continue
+        row.pop("embedding", None)
+        for value in row.values():
+            if isinstance(value, list):
+                for nested in value:
+                    if isinstance(nested, dict):
+                        nested.pop("embedding", None)
+            elif isinstance(value, dict):
+                value.pop("embedding", None)
+    return rows
