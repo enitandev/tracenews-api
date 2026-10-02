@@ -89,6 +89,21 @@ def release_lock(supabase):
         logger.warning(f"[worker] Failed to release lock: {e}")
 
 
+def select_public_one_tier(verdicts):
+    """
+    Stories for the reader-facing "only one tier carried this" feed. These are
+    DARK verdicts, so the feed is empty unless DARK_ENABLED, and a verdict a
+    staff member has withdrawn via an override is never published.
+    """
+    from app.monitoring_spirit import DARK_ENABLED
+    if not DARK_ENABLED:
+        return []
+    return [
+        v for v in verdicts
+        if v.get("verdict") == "dark" and not v.get("has_active_override")
+    ][:5]
+
+
 def main():
     start_time = datetime.now(timezone.utc)
     logger.info(f"[worker] Starting. PID={os.getpid()}, RSS={get_rss_mb():.1f}MB")
@@ -209,7 +224,7 @@ def main():
             import asyncio
             loop = asyncio.get_event_loop()
             verdicts = loop.run_until_complete(list_current_verdicts("bypass"))
-            public_one_tier = [v for v in verdicts if v.get("verdict") == "dark"][:5]
+            public_one_tier = select_public_one_tier(verdicts)
             
             now_iso = datetime.now(timezone.utc).isoformat()
             # Cache the full verdicts for admin overview

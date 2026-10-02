@@ -12,7 +12,7 @@ from app.scheduler import start_scheduler, stop_scheduler
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 from app.db import supabase
-from app.monitoring_spirit import resolve_verdict
+from app.monitoring_spirit import resolve_verdict, DARK_ENABLED
 
 def render_safe_verdict(verdict_result: dict) -> dict:
     """
@@ -25,7 +25,7 @@ def render_safe_verdict(verdict_result: dict) -> dict:
     relabelled as another state — a CLEAR in its place would publish a false
     "covered widely" claim about the story.
     """
-    if verdict_result.get("verdict") == "dark":
+    if verdict_result.get("verdict") == "dark" and not DARK_ENABLED:
         return None
     return verdict_result
 

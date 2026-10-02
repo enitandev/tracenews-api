@@ -4,6 +4,11 @@ TIER_WATCHDOG = "watchdog"
 
 from app.monitoring_spirit_strings import VERDICT_LINE
 
+# DARK is computed but never published. Gate D closed "not met"; flipping
+# this requires a human-oversight tool first (a named person able to
+# withdraw a live verdict). Every reader-facing path checks this flag.
+DARK_ENABLED = False
+
 ACCOUNTABILITY_CATEGORIES = [
     "Politics", "Security", "Economy",
     "Judiciary", "Health", "Education"
