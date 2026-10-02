@@ -94,6 +94,33 @@ def evaluate_summary(bullets, articles_text: str) -> dict:
     }
 
 
+GENERATION_FAILED_FLAG = "generation_failed"
+MAX_GENERATION_ATTEMPTS = 3
+
+
+def record_generation_failure(cluster_id: str, error: Exception) -> None:
+    """
+    Store a failed attempt as an unpublished, bullet-less row so the worker
+    can count attempts and stop re-calling the paid model after
+    MAX_GENERATION_ATTEMPTS (see app.worker.clusters_needing_summary).
+    """
+    try:
+        supabase.table("cluster_summaries").insert({
+            "cluster_id": cluster_id,
+            "bullets": [],
+            "gate": GATE_HUMAN_REVIEW,
+            "published": False,
+            "flags": [f"{GENERATION_FAILED_FLAG}: {type(error).__name__}"],
+            "model": SUMMARY_MODEL,
+        }).execute()
+    except Exception:
+        logger.exception(f"Failed to record summary generation failure for {cluster_id}")
+
+
+def is_generation_failure(summary_row: dict) -> bool:
+    return any(str(f).startswith(GENERATION_FAILED_FLAG) for f in (summary_row.get("flags") or []))
+
+
 def generate_cluster_summary(cluster_id: str) -> dict:
     """Generate and store an event summary for a given cluster."""
     stories_res = supabase.table("stories").select("title, summary, outlet_id").eq("cluster_id", cluster_id).execute()
@@ -120,7 +147,8 @@ def generate_cluster_summary(cluster_id: str) -> dict:
         output = json.loads(content_str)
         bullets = output.get("bullets", [])
     except Exception as e:
-        logger.error(f"Failed to generate summary for {cluster_id}: {e}")
+        logger.exception(f"Failed to generate summary for {cluster_id}")
+        record_generation_failure(cluster_id, e)
         return None
 
     evaluation = evaluate_summary(bullets, articles_text)

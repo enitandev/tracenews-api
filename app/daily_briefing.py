@@ -12,6 +12,28 @@ from app.tier_utils import get_distinct_scored_count, get_outlet_tier
 logger = logging.getLogger(__name__)
 client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
+BRIEFING_MIN_DISTINCT_OUTLETS = 5
+BRIEFING_MAX_STORIES = 9
+
+
+def select_eligible_briefing_clusters(clusters):
+    """
+    Clusters covered by at least BRIEFING_MIN_DISTINCT_OUTLETS distinct scored
+    outlets and with an image, most widely covered first. A cluster whose
+    distinct count is unknown (no usable coverage_stats) is not eligible.
+    """
+    scored = []
+    for c in clusters:
+        distinct = get_distinct_scored_count(c.get("coverage_stats"))
+        if distinct is None or distinct < BRIEFING_MIN_DISTINCT_OUTLETS:
+            continue
+        if not any(s.get("image_url") for s in (c.get("stories") or [])):
+            continue
+        scored.append((distinct, c))
+    scored.sort(key=lambda pair: pair[0], reverse=True)
+    return [c for _, c in scored[:BRIEFING_MAX_STORIES]]
+
+
 def select_daily_briefing_stories():
     lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
     today = lagos_now.date()
@@ -22,21 +44,16 @@ def select_daily_briefing_stories():
 
     since = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     
+    # outlet_count counts article rows, so >= 5 is only a cheap necessary
+    # pre-filter; the floor itself is BRIEFING_MIN_DISTINCT_OUTLETS distinct
+    # scored outlets from coverage_stats.
     clusters_res = supabase.table("clusters")\
-        .select("id, slug, representative_title, outlet_count, category, stories(image_url)")\
+        .select("id, slug, representative_title, outlet_count, category, coverage_stats, stories(image_url)")\
         .gte("first_seen_at", since)\
-        .gte("outlet_count", 5)\
-        .order("outlet_count", desc=True)\
-        .limit(15)\
+        .gte("outlet_count", BRIEFING_MIN_DISTINCT_OUTLETS)\
         .execute()
 
-    eligible = []
-    for c in (clusters_res.data or []):
-        has_image = any(s.get("image_url") for s in (c.get("stories") or []))
-        if has_image:
-            eligible.append(c)
-        if len(eligible) == 9:
-            break
+    eligible = select_eligible_briefing_clusters(clusters_res.data or [])
 
     if len(eligible) < 3:
         logger.warning(f"[daily_briefing] Only {len(eligible)} eligible clusters found for {today}, skipping")

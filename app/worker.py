@@ -89,6 +89,39 @@ def release_lock(supabase):
         logger.warning(f"[worker] Failed to release lock: {e}")
 
 
+def clusters_needing_summary(recent_ids, summary_rows):
+    """
+    Clusters to (re)summarise, given their cluster_summaries rows newest first:
+    no summary yet, the latest one superseded by a correction, or the latest
+    a recorded generation failure with fewer than MAX_GENERATION_ATTEMPTS
+    consecutive failures. After that the paid model is not called again
+    until the summary is superseded.
+    """
+    from app.summarizer import is_generation_failure, MAX_GENERATION_ATTEMPTS
+    rows_by_cluster = {}
+    for row in summary_rows:
+        rows_by_cluster.setdefault(row["cluster_id"], []).append(row)
+
+    needed = []
+    for cid in recent_ids:
+        rows = rows_by_cluster.get(cid, [])
+        if not rows or rows[0].get("superseded") is True:
+            needed.append(cid)
+            continue
+        failures = 0
+        for row in rows:
+            if row.get("superseded") is True or not is_generation_failure(row):
+                break
+            failures += 1
+        if failures == 0:
+            continue
+        if failures < MAX_GENERATION_ATTEMPTS:
+            needed.append(cid)
+        elif failures == MAX_GENERATION_ATTEMPTS:
+            logger.error(f"[worker] Summary generation failed {failures} times for cluster {cid}; not retrying")
+    return needed
+
+
 def select_public_one_tier(verdicts):
     """
     Stories for the reader-facing "only one tier carried this" feed. These are
@@ -154,20 +187,9 @@ def main():
             if recent_ids:
                 # Fetch the most recent summary for each cluster. PostgREST doesn't easily do DISTINCT ON,
                 # but we can fetch all summaries for recent_ids and sort them locally to find the latest.
-                existing_summaries_res = supabase.table("cluster_summaries").select("cluster_id, superseded, generated_at").in_("cluster_id", recent_ids).order("generated_at", desc=True).execute()
-                
-                latest_summaries = {}
-                for s in (existing_summaries_res.data or []):
-                    if s["cluster_id"] not in latest_summaries:
-                        latest_summaries[s["cluster_id"]] = s
-                
-                missing_ids = []
-                for cid in recent_ids:
-                    if cid not in latest_summaries:
-                        missing_ids.append(cid)
-                    elif latest_summaries[cid].get("superseded") is True:
-                        missing_ids.append(cid)
-                
+                existing_summaries_res = supabase.table("cluster_summaries").select("cluster_id, superseded, generated_at, flags").in_("cluster_id", recent_ids).order("generated_at", desc=True).execute()
+                missing_ids = clusters_needing_summary(recent_ids, existing_summaries_res.data or [])
+
                 # Cap at 50 per run
                 to_summarise = missing_ids[:50]
                 skipped_count = len(recent_ids) - len(missing_ids)

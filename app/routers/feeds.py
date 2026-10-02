@@ -4,7 +4,7 @@ from fastapi import APIRouter
 from app.db import supabase
 from app.image_utils import get_cluster_image, is_image_allowed
 from app.tier_utils import get_outlet_tier, normalize_tier_distribution, count_outlet_tiers, card_distribution
-from app.coverage import get_outlets_cache, enrich_clusters_with_live_tiers
+from app.coverage import strip_embeddings, get_outlets_cache, enrich_clusters_with_live_tiers
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ def get_stories(limit: int = 50, offset: int = 0):
     result = supabase.table("stories").select("*").order(
         "published_at", desc=True
     ).range(offset, offset + limit - 1).execute()
-    return {"stories": result.data, "count": len(result.data)}
+    return {"stories": strip_embeddings(result.data), "count": len(result.data)}
 
 
 @router.get("/stories/cluster/{cluster_id}")
@@ -29,8 +29,8 @@ def get_cluster_stories(cluster_id: str):
         "id", cluster_id
     ).single().execute()
     return {
-        "cluster": cluster.data,
-        "stories": stories.data,
+        "cluster": strip_embeddings(cluster.data),
+        "stories": strip_embeddings(stories.data),
         "outlet_count": len(stories.data),
     }
 
@@ -150,7 +150,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
         c_dict["image_url"] = image_url
         formatted.append(c_dict)
     
-    return {"clusters": formatted, "count": len(enriched_clusters)}
+    return {"clusters": strip_embeddings(formatted), "count": len(enriched_clusters)}
 
 @router.get("/clusters/most-carried")
 def get_most_carried_clusters(category: str, limit: int = 6):
@@ -314,22 +314,13 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
         return cluster.get('outlet_count', 1) / (age_hours + 2)
     clusters.sort(key=relevance_score, reverse=True)
     
-    # Monitoring spirit candidates
-    monitoring_spirit = []
-    for c in clusters:
-        if c.get("outlet_count", 0) >= 3:
-            stats = c.get("coverage_stats") or {}
-            dist = stats.get("coverage_tier_distribution", {})
-            total = sum(dist.values())
-            if total > 0:
-                for k, v in dist.items():
-                    if v / total >= 0.8:
-                        monitoring_spirit.append(c)
-                        break
-    monitoring_spirit.sort(key=lambda x: x.get("outlet_count", 0), reverse=True)
-    ms_candidates = monitoring_spirit[:2]
-    ms_ids = {c["id"] for c in ms_candidates}
-    
+    # The one-tier "monitoring spirit" pick (any tier >= 80%, no significance,
+    # persistence or sourcing rails) is not selected any more: it was never
+    # rendered, but it removed those stories from the page's lists. The key
+    # stays in the response, empty, for compatibility.
+    ms_candidates = []
+    ms_ids = set()
+
     # Top stories candidates (fetch a few extra since we'll filter for images)
     candidates_by_outlet = sorted([c for c in clusters if c["id"] not in ms_ids], key=lambda x: x.get("outlet_count", 0), reverse=True)
     top_candidates = candidates_by_outlet[:6]

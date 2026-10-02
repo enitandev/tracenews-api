@@ -1,7 +1,7 @@
 """Service meta and manual pipeline triggers."""
 import logging
-import traceback
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks, Depends
+from app.admin_auth import require_permission
 from app.fetcher import run_fetch
 from app.clusterer import run_clustering
 
@@ -28,27 +28,29 @@ def health():
 
 
 # ── MANUAL TRIGGERS ─────────────────────────────────
+# These start paid pipeline work (embeddings) and run outside the worker's
+# overlap lock, so they require a staff role with platform_health write access.
+pipeline_admin = Depends(require_permission("platform_health", "edit"))
 
-@router.post("/admin/fetch")
+@router.post("/admin/fetch", dependencies=[pipeline_admin])
 def trigger_fetch():
     """Manually trigger an RSS fetch run."""
     try:
         result = run_fetch()
         return {"status": "ok", **result}
     except Exception as e:
-        logger.error(f"[trigger_fetch] manual fetch failed: {type(e).__name__}: {e}")
-        logger.error(traceback.format_exc())
-        return {"status": "error", "message": str(e), "traceback": traceback.format_exc()}
+        logger.exception("[trigger_fetch] manual fetch failed")
+        return {"status": "error", "message": f"{type(e).__name__}: {e}"}
 
 
-@router.post("/admin/cluster")
+@router.post("/admin/cluster", dependencies=[pipeline_admin])
 def trigger_cluster():
     """Manually trigger a clustering run."""
     result = run_clustering()
     return {"status": "ok", **result}
 
 
-@router.post("/admin/run")
+@router.post("/admin/run", dependencies=[pipeline_admin])
 def trigger_full_run():
     """Manually trigger fetch + cluster."""
     fetch = run_fetch()
@@ -56,10 +58,9 @@ def trigger_full_run():
     return {"status": "ok", "fetch": fetch, "cluster": cluster}
 
 
-from fastapi import BackgroundTasks
 from app.clusterer import run_full_recluster
 
-@router.post("/admin/recluster-all")
+@router.post("/admin/recluster-all", dependencies=[pipeline_admin])
 async def recluster_all(background_tasks: BackgroundTasks):
     """One-time recovery endpoint to recluster all stories in the background."""
     background_tasks.add_task(run_full_recluster)

@@ -4,7 +4,6 @@ Endpoints live in app/routers/; shared coverage/verdict helpers in
 app/coverage.py.
 """
 import logging
-import traceback
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
@@ -29,26 +28,32 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+ALLOWED_ORIGINS = [
+    "https://tracenews.ng",
+    "https://www.tracenews.ng",
+    "http://localhost:5173",
+]
+
+
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    logger.error(f"Global exception: {type(exc).__name__}: {exc}")
-    logger.error(traceback.format_exc())
-    return JSONResponse(
-        status_code=500,
-        content={"detail": "Internal Server Error", "traceback": traceback.format_exc()},
-        headers={
-            "Access-Control-Allow-Origin": request.headers.get("origin", "*"),
-            "Access-Control-Allow-Credentials": "true"
+    # Full detail goes to the logs only; the client gets a generic 500.
+    logger.exception(f"Unhandled exception on {request.method} {request.url.path}")
+    headers = {}
+    origin = request.headers.get("origin")
+    # Error responses bypass the CORS middleware, so mirror its policy here:
+    # allowed origins only, never an arbitrary caller with credentials.
+    if origin in ALLOWED_ORIGINS:
+        headers = {
+            "Access-Control-Allow-Origin": origin,
+            "Access-Control-Allow-Credentials": "true",
+            "Vary": "Origin",
         }
-    )
+    return JSONResponse(status_code=500, content={"detail": "Internal Server Error"}, headers=headers)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://tracenews.ng",
-        "https://www.tracenews.ng",
-        "http://localhost:5173",
-    ],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,7 +75,6 @@ app.include_router(admin_overview.router)
 
 app.include_router(auth_router.router)
 app.include_router(reader.router)
-app.include_router(admin_overview.router)
 
 app.include_router(system.router)
 app.include_router(feeds.router)
