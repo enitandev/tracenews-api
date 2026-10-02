@@ -212,8 +212,8 @@ def main():
                         f"[worker] Briefing position {row.get('position')}: "
                         f"{result.get('status', 'unknown')}"
                     )
-            except Exception as e:
-                logger.error(f"[worker] Daily briefing failed: {e}")
+            except Exception:
+                logger.exception("[worker] Daily briefing failed")
         else:
             logger.info("[worker] Skipping daily briefing (outside 05-07 UTC window).")
 

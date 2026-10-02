@@ -94,23 +94,45 @@ def check_version_heartbeat():
 
 
 def check_briefing_heartbeat():
+    """
+    Runs after the worker's briefing window (05:00-06:59 UTC) has closed.
+    Today's briefing is healthy only if rows exist and every one is
+    'complete'. Missing rows (selection skipped or never ran) and rows left
+    'pending' or 'generating' alert too — the worker retries only 'pending'
+    rows inside the window, so none of these recover on their own.
+    """
     try:
         lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
         today = lagos_now.date().isoformat()
         res = (
             supabase.table("daily_briefings")
-            .select("id", count="exact")
+            .select("position, generation_status")
             .eq("date", today)
-            .eq("generation_status", "failed")
             .execute()
         )
-        if res.count and res.count > 0:
+        rows = res.data or []
+        if not rows:
             send_alert(
-                "TraceNews ALERT: daily briefing failed",
-                f"{res.count} daily_briefings rows failed for {today} as of "
-                f"{lagos_now.strftime('%H:%M')} WAT. They require manual intervention."
+                "TraceNews ALERT: no daily briefing today",
+                f"No daily_briefings rows exist for {today} as of {lagos_now.strftime('%H:%M')} WAT. "
+                f"Selection was skipped (fewer than 3 eligible clusters) or the worker did not run "
+                f"in the 05:00-06:59 UTC window."
+            )
+            return
+        not_complete = [r for r in rows if r.get("generation_status") != "complete"]
+        if not_complete:
+            by_status = {}
+            for r in not_complete:
+                by_status.setdefault(r.get("generation_status"), []).append(r.get("position"))
+            detail = "; ".join(f"{status}: positions {sorted(p for p in positions if p is not None)}"
+                               for status, positions in by_status.items())
+            send_alert(
+                "TraceNews ALERT: daily briefing incomplete",
+                f"{len(not_complete)} of {len(rows)} daily_briefings rows for {today} are not complete "
+                f"as of {lagos_now.strftime('%H:%M')} WAT ({detail}). They require manual intervention."
             )
         else:
-            logger.info(f"[heartbeat] Briefing OK for {today}")
+            logger.info(f"[heartbeat] Briefing OK for {today}: {len(rows)} rows complete")
     except Exception as e:
+        logger.exception("[heartbeat] briefing heartbeat check failed")
         send_alert("TraceNews ALERT: briefing heartbeat check itself failed", str(e))
