@@ -29,6 +29,7 @@ Heartbeat alerts are emailed to `ALERT_TO` (default `enitan@tracenews.ng`, an Im
 - **SMTP fallback** (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) is used only when no Resend key is set. Railway's Hobby plan blocks outbound SMTP, so this works only locally.
 - If delivery fails, or no channel is configured, the full alert is logged at ERROR (`ALERT COULD NOT SEND`).
 - Send a test alert with `python -m app.heartbeat --test` (e.g. `railway run python -m app.heartbeat --test`).
+- Or from the Railway dashboard: set `ALERT_TEST_ON_START=1` on the web service; each start then sends one test alert. Remove the variable once it arrives.
 
 `railway.toml` sets `startCommand` for every service deployed from this repo. The worker service must override it with its own start command; otherwise it would boot the web app (and a second copy of the scheduler) instead of the pipeline.
 
