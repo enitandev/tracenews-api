@@ -10,6 +10,13 @@ from app.tier_utils import normalize_tier_distribution
 # withdraw a live verdict). Every reader-facing path checks this flag.
 DARK_ENABLED = False
 
+# MIXED is withheld on counsel's instruction (2 Oct 2026). Its "same copy"
+# claim rests on each outlet's 30-day originality score, not on a comparison
+# of this story's text, so it can name an outlet as running the same copy on
+# a story it reported itself. It returns only with per-story text comparison
+# and a new counsel clearance. Every reader-facing path checks this flag.
+MIXED_ENABLED = False
+
 ACCOUNTABILITY_CATEGORIES = [
     "Politics", "Security", "Economy",
     "Judiciary", "Health", "Education"

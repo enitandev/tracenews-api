@@ -7,7 +7,7 @@ import logging
 import time
 from app.db import supabase
 from app.tier_utils import get_outlet_tier, count_outlet_tiers, card_distribution, REPUBLISHER_S2_MAX
-from app.monitoring_spirit import DARK_ENABLED
+from app.monitoring_spirit import DARK_ENABLED, MIXED_ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +23,9 @@ def render_safe_verdict(verdict_result: dict) -> dict:
     "covered widely" claim about the story.
     """
     if verdict_result.get("verdict") == "dark" and not DARK_ENABLED:
+        return None
+    # MIXED is withheld the same way: see MIXED_ENABLED.
+    if verdict_result.get("verdict") == "mixed" and not MIXED_ENABLED:
         return None
     return verdict_result
 

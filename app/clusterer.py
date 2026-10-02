@@ -49,6 +49,13 @@ def is_earlier_story(new_story: dict, existing_first_seen: str, new_story_fetche
 
 CLEANUP_BATCH_SIZE = 50  # keeps in_() URLs short
 
+# Record hold (2 Oct 2026, on counsel's instruction): what the old
+# MonitoringSignals widget published between 1 Sep and 2 Oct must be preserved
+# and exported before any cluster, story link or coverage snapshot from that
+# period is deleted. While this is True, nothing here deletes clusters. Lift it
+# only once the export is confirmed in the file.
+RECORD_HOLD = True
+
 
 def _cleanup_cluster_batch(batch_ids):
     """
@@ -78,6 +85,9 @@ def _cleanup_cluster_batch(batch_ids):
 
 def cleanup_old_clusters():
     """Delete single-story clusters older than 24 hours, batch by batch."""
+    if RECORD_HOLD:
+        logger.warning("Cleanup skipped: RECORD_HOLD is on (old-widget record not yet exported).")
+        return
     from datetime import datetime, timedelta
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     try:
@@ -279,6 +289,9 @@ def run_clustering(all_time: bool = False) -> dict:
 
 def run_full_recluster():
     """Background task to run a full recluster."""
+    if RECORD_HOLD:
+        logger.error("Full recluster refused: RECORD_HOLD is on and it would wipe every cluster.")
+        return
     from app.scorer import run_scoring
     
     logger.info("--- STARTING FULL RECLUSTER BACKGROUND TASK ---")

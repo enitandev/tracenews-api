@@ -6,10 +6,12 @@ class TestRenderSafeVerdict:
     def test_dark_is_withheld_not_relabelled(self):
         assert render_safe_verdict({"verdict": "dark", "evidence": [{"type": "silence"}]}) is None
 
-    def test_clear_and_mixed_pass_through(self):
-        for state in ("clear", "mixed"):
-            payload = {"verdict": state, "evidence": []}
-            assert render_safe_verdict(payload) is payload
+    def test_clear_passes_through(self):
+        payload = {"verdict": "clear", "evidence": []}
+        assert render_safe_verdict(payload) is payload
+
+    def test_mixed_is_withheld_while_disabled(self):
+        assert render_safe_verdict({"verdict": "mixed", "evidence": [{"type": "churnalism"}]}) is None
 
 
 class TestNormalizeTierDistribution:
@@ -98,7 +100,7 @@ def test_payload_snapshots_are_normalised_and_unusable_rows_dropped(monkeypatch)
         {"snapshot_at": "2026-10-01T09:00:00Z", "coverage_tier_distribution": {"adversarial": 1}},
         {"snapshot_at": "2026-10-01T08:00:00Z", "coverage_tier_distribution": None},
     ]
-    res = _by_slug_with_verdict(monkeypatch, {"verdict": "mixed", "evidence": []}, snaps)
+    res = _by_slug_with_verdict(monkeypatch, {"verdict": "clear", "evidence": []}, snaps)
     live = res["cluster"]["monitoring_spirit_live"]
     assert [s["coverage_tier_distribution"] for s in live["snapshots"]] == [
         {"govt_aligned": 0, "mainstream": 0, "watchdog": 2},
