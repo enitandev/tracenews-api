@@ -107,3 +107,24 @@ def test_payload_snapshots_are_normalised_and_unusable_rows_dropped(monkeypatch)
     by_id = {s["id"]: s for s in res["stories"]}
     assert by_id["s1"]["outlet_republishes"] is True
     assert by_id["s2"]["outlet_republishes"] is None
+
+
+def test_public_one_tier_feed_is_empty_while_dark_disabled():
+    from app.worker import select_public_one_tier
+    verdicts = [
+        {"cluster_id": "a", "verdict": "dark", "evidence": [], "has_active_override": False},
+        {"cluster_id": "b", "verdict": "mixed", "evidence": [], "has_active_override": False},
+    ]
+    assert select_public_one_tier(verdicts) == []
+
+
+def test_public_one_tier_feed_excludes_withdrawn_verdicts_when_enabled(monkeypatch):
+    import app.monitoring_spirit as ms
+    from app.worker import select_public_one_tier
+    monkeypatch.setattr(ms, "DARK_ENABLED", True)
+    verdicts = [
+        {"cluster_id": "a", "verdict": "dark", "has_active_override": True},
+        {"cluster_id": "b", "verdict": "dark", "has_active_override": False},
+        {"cluster_id": "c", "verdict": "mixed", "has_active_override": False},
+    ]
+    assert [v["cluster_id"] for v in select_public_one_tier(verdicts)] == ["b"]

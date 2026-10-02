@@ -92,13 +92,14 @@ def start_scheduler():
         replace_existing=True,
     )
 
-    # Briefing heartbeat — checked once at 07:00 WAT (06:00 UTC), one hour
-    # after generation is supposed to complete at 06:30 WAT
+    # Briefing heartbeat — 07:05 UTC (08:05 WAT), after the worker's
+    # briefing window (05:00-06:59 UTC) has closed, so anything not
+    # complete by now will not complete without intervention.
     scheduler.add_job(
         check_briefing_heartbeat,
         "cron",
-        hour=6,
-        minute=0,
+        hour=7,
+        minute=5,
         id="check_briefing_heartbeat",
         replace_existing=True,
         max_instances=1,

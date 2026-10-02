@@ -3,6 +3,12 @@ TIER_MAINSTREAM = "mainstream"
 TIER_WATCHDOG = "watchdog"
 
 from app.monitoring_spirit_strings import VERDICT_LINE
+from app.tier_utils import normalize_tier_distribution
+
+# DARK is computed but never published. Gate D closed "not met"; flipping
+# this requires a human-oversight tool first (a named person able to
+# withdraw a live verdict). Every reader-facing path checks this flag.
+DARK_ENABLED = False
 
 ACCOUNTABILITY_CATEGORIES = [
     "Politics", "Security", "Economy",
@@ -64,36 +70,45 @@ def has_persistence(
     an implementation detail — it's what makes the 
     approved language honest.
     
-    snapshot_reads: list of dicts,
+    snapshot_reads: coverage_snapshots rows,
     most recent first:
     [{
-        "tier_distribution": {...},
-        "total": int,
-        "snapshot_at": str
+        "coverage_tier_distribution": {...},
+        "snapshot_at": str,
+        ...
     }, ...]
+
+    The share of each tier is taken over the
+    three card tiers in the snapshot's own
+    distribution (the same basis as the live
+    check). A snapshot whose distribution is
+    missing or unreadable cannot confirm the
+    imbalance, so it ends the run.
+
+    HISTORY: until Oct 2026 this function read
+    "tier_distribution" / "total", keys the
+    callers never supplied (rows carry
+    "coverage_tier_distribution" /
+    "outlet_count"). Every read had total 0 and
+    was skipped, so this rail could never pass
+    and DARK could not be produced by any caller.
     """
     if len(snapshot_reads) < 2:
         return False
     
     consecutive_matches = 0
     for read in snapshot_reads[:3]:
-        dist = read.get(
-            "tier_distribution", {}
+        dist = normalize_tier_distribution(
+            read.get("coverage_tier_distribution")
         )
-        total = read.get("total", 0)
+        if dist is None:
+            break
+        total = sum(dist.values())
         if total == 0:
             continue
         
-        legacy_map = {
-            "govt_aligned": "pro_establishment",
-            "mainstream": "institutional",
-            "watchdog": "adversarial"
-        }
-        
-        a_count = dist.get(tier_a, dist.get(legacy_map.get(tier_a, tier_a), 0))
-        b_count = dist.get(tier_b, dist.get(legacy_map.get(tier_b, tier_b), 0))
-        a_pct = a_count / total
-        b_pct = b_count / total
+        a_pct = dist[tier_a] / total
+        b_pct = dist[tier_b] / total
         
         if (a_pct >= loud_threshold and 
             b_pct <= silent_threshold):
