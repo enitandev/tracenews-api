@@ -1,7 +1,7 @@
 import os
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat, check_version_heartbeat
+from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat, check_version_heartbeat, send_alert
 from app.sitemap_cache import run_sitemap_cache_job_sync
 from datetime import datetime, timezone
 
@@ -184,6 +184,24 @@ def start_scheduler():
         "Heartbeats every 30 min, sitemap every 30 min. "
         "Batch jobs run via separate worker cron service."
     )
+
+    # One-off delivery check: set ALERT_TEST_ON_START=1 on the service, let it
+    # redeploy, confirm the email arrives, then remove the variable (it sends
+    # on every start while set). Runs as a job so startup is never delayed.
+    if os.environ.get("ALERT_TEST_ON_START", "").strip() == "1":
+        scheduler.add_job(
+            send_alert,
+            "date",
+            run_date=datetime.now(timezone.utc),
+            args=[
+                "TraceNews test alert",
+                "If you can read this, production alert delivery works. "
+                "Remove ALERT_TEST_ON_START from the service variables.",
+            ],
+            id="alert_test_on_start",
+            replace_existing=True,
+        )
+        logger.info("[heartbeat] ALERT_TEST_ON_START is set: sending a test alert")
 
 def stop_scheduler():
     if scheduler.running:
