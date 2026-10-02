@@ -29,9 +29,15 @@ def send_alert(subject: str, body: str):
     msg["From"] = ALERT_FROM
     msg["To"] = ALERT_TO
     msg.set_content(body)
-    with smtplib.SMTP_SSL(smtp_host, 465) as s:
-        s.login(smtp_user, smtp_pass)
-        s.send_message(msg)
+    try:
+        with smtplib.SMTP_SSL(smtp_host, 465, timeout=20) as s:
+            s.login(smtp_user, smtp_pass)
+            s.send_message(msg)
+    except Exception:
+        # Never let a delivery failure swallow the alert: the full alert goes
+        # to the logs, and the calling heartbeat keeps running.
+        logger.exception(f"[heartbeat] ALERT COULD NOT SEND (SMTP delivery failed): {subject} — {body}")
+        return
     logger.info(f"[heartbeat] Alert sent: {subject}")
 
 

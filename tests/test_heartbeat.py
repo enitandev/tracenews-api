@@ -51,3 +51,18 @@ def test_alerts_on_failed_rows(monkeypatch):
 def test_silent_when_every_row_complete(monkeypatch):
     sent = _run(monkeypatch, [{"position": i, "generation_status": "complete"} for i in range(1, 4)])
     assert sent == []
+
+
+def test_smtp_failure_logs_the_alert_and_does_not_raise(monkeypatch, caplog):
+    import logging
+    monkeypatch.setenv("SMTP_HOST", "smtp.example")
+    monkeypatch.setenv("SMTP_USER", "u")
+    monkeypatch.setenv("SMTP_PASS", "p")
+
+    def unreachable(*a, **k):
+        raise OSError(101, "Network is unreachable")
+
+    monkeypatch.setattr(hb.smtplib, "SMTP_SSL", unreachable)
+    with caplog.at_level(logging.ERROR, logger="app.heartbeat"):
+        hb.send_alert("TraceNews ALERT: test", "the body")
+    assert "ALERT COULD NOT SEND (SMTP delivery failed): TraceNews ALERT: test — the body" in caplog.text
