@@ -7,7 +7,7 @@ from collections import defaultdict
 from datetime import datetime, timezone, timedelta
 from app.db import supabase
 from app.classifier import classify_cluster
-from app.tier_utils import get_outlet_tier
+from app.tier_utils import count_outlet_tiers, card_distribution
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +36,47 @@ def safe_execute(query_builder, retries=3, delay=3):
                 time.sleep(delay)
             else:
                 raise
+
+
+MAJOR_REGIONS = ["North", "Southwest", "Southeast", "South-South"]
+
+
+def coverage_gap_flag(region_counts: dict, distinct_outlets: int) -> dict | None:
+    """
+    Some major regions carry the story and others do not. The message names
+    only the regions that are actually missing.
+    """
+    if distinct_outlets < 5:
+        return None
+    covered = [r for r in MAJOR_REGIONS if region_counts.get(r, 0) > 0]
+    missing = [r for r in MAJOR_REGIONS if region_counts.get(r, 0) == 0]
+    if not covered or not missing:
+        return None
+    named = missing[0] if len(missing) == 1 else ", ".join(missing[:-1]) + " or " + missing[-1]
+    return {
+        "type": "COVERAGE_GAP",
+        "severity": "high",
+        "message": f"No regional publications from the {named} have picked this story up.",
+        "icon": "eye-off",
+    }
+
+
+def unverified_viral_flag(tier_counts: dict) -> dict | None:
+    """
+    Carried by at least three distinct outlets, every one of them a blog
+    (tier from get_outlet_tier; credibility_tier is dead and never read).
+    """
+    if tier_counts["blog"] < 3:
+        return None
+    others = sum(v for k, v in tier_counts.items() if k != "blog")
+    if others > 0:
+        return None
+    return {
+        "type": "UNVERIFIED_VIRAL",
+        "severity": "critical",
+        "message": "Trending exclusively on unregulated/sensational blogs. No institutional verification.",
+        "icon": "alert-triangle",
+    }
 
 
 def run_scoring(all_time: bool = False):
@@ -67,8 +108,6 @@ def run_scoring(all_time: bool = False):
 
             if len(stories) == 0:
                 continue
-
-            total_stories = len(stories)
 
             # 1. Categorize if needed
             category = cluster.get("category")
@@ -112,88 +151,50 @@ def run_scoring(all_time: bool = False):
                 behav_res = safe_execute(supabase.table("outlet_behavioral_scores").select("*").in_("outlet_slug", outlet_slugs))
                 behavioral_map = {b["outlet_slug"]: b for b in (behav_res.data or [])}
 
-            # 3. Calculate Coverage Math Variables
+            # 3. Calculate Coverage Math Variables — one entry per distinct
+            # outlet, never per article row.
+            cluster_outlets = [outlets_map[oid] for oid in outlet_ids if oid in outlets_map]
+            tier_counts = count_outlet_tiers(cluster_outlets)
+            tier_dist = card_distribution(tier_counts)
+
+            # Missing values are left out, never defaulted (no "National",
+            # "Independent" or "neutral" stand-ins).
             regions = defaultdict(int)
-            credibility = defaultdict(int)
             ownership = defaultdict(int)
             gov_alignment = defaultdict(int)
-            coverage_tier = defaultdict(int)
-            total_independence = 0
-            valid_independence_count = 0
+            independence_scores = []
+            for outlet in cluster_outlets:
+                if outlet.get("geopolitical_lean"):
+                    regions[outlet["geopolitical_lean"]] += 1
+                if outlet.get("ownership_type"):
+                    ownership[outlet["ownership_type"]] += 1
+                if outlet.get("government_alignment"):
+                    gov_alignment[outlet["government_alignment"]] += 1
+                if outlet.get("independence_score") is not None:
+                    independence_scores.append(outlet["independence_score"])
 
-            for s in stories:
-                oid = s.get("outlet_id")
-                if not oid or oid not in outlets_map:
-                    continue
+            avg_independence = round(sum(independence_scores) / len(independence_scores)) if independence_scores else None
 
-                outlet = outlets_map[oid]
-                slug = outlet.get("slug")
-
-                # Map region, ownership, credibility, gov_alignment
-                regions[outlet.get("geopolitical_lean") or "National"] += 1
-                ownership[outlet.get("ownership_type", "Independent")] += 1
-                # credibility_tier is dead; handled by tier mapping in main API
-                gov_alignment[outlet.get("government_alignment", "neutral")] += 1
-
-                # Calculate Coverage Tier
-                behav = behavioral_map.get(slug) if slug else None
-                tier = "unscored"
-
-                tier = get_outlet_tier(outlet.get("government_alignment"), outlet.get("is_blog"))
-
-                if tier != "unscored":
-                    coverage_tier[tier] += 1
-
-                # Aggregate independence score (legacy)
-                ind_score = outlet.get("independence_score")
-                if ind_score is not None:
-                    total_independence += ind_score
-                    valid_independence_count += 1
-
-            avg_independence = round(total_independence / valid_independence_count) if valid_independence_count > 0 else 50
-
-            # Construct Coverage Stats JSON
-            tier_dist = dict(coverage_tier)
-            blog_count = tier_dist.pop("blog", 0)
+            # Construct Coverage Stats JSON. coverage_tier_distribution always
+            # carries all three card tiers, so a zero is written as 0.
             coverage_stats = {
                 "geopolitical_distribution": dict(regions),
                 "ownership_distribution": dict(ownership),
-                "credibility_distribution": dict(credibility),
                 "government_alignment_distribution": dict(gov_alignment),
                 "coverage_tier_distribution": tier_dist,
                 "total_coverage": sum(tier_dist.values()),
-                "blog_count": blog_count,
+                "blog_count": tier_counts["blog"],
                 "average_independence_score": avg_independence,
                 "primary_region": max(regions.items(), key=lambda x: x[1])[0] if regions else None
             }
 
-            # 4. Monitoring Spirit Rules Engine
-            monitoring_flags = []
-
-            # Rule 1: The Coverage Gap (Dead Angle)
-            if total_stories >= 5:
-                major_regions = ["North", "Southwest", "Southeast", "South-South"]
-                covered_regions = [r for r in major_regions if regions.get(r, 0) > 0]
-                missing_regions = [r for r in major_regions if regions.get(r, 0) == 0]
-
-                if covered_regions and missing_regions:
-                    monitoring_flags.append({
-                        "type": "COVERAGE_GAP",
-                        "severity": "high",
-                        "message": "This story is only being covered by national outlets. No regional publications from the North, Southwest, Southeast or South-South have picked it up.",
-                        "icon": "eye-off"
-                    })
-
-            # Rule 2: Unverified Viral (Gistlover Effect)
-            # If multiple stories exist but ALL are from 'Sensational/Gist' tier
-            if total_stories >= 3 and credibility.get("Institutional", 0) == 0:
-                monitoring_flags.append({
-                    "type": "UNVERIFIED_VIRAL",
-                    "severity": "critical",
-                    "message": "Trending exclusively on unregulated/sensational blogs. No institutional verification.",
-                    "icon": "alert-triangle"
-                })
-
+            # 4. Monitoring Spirit Rules Engine (computed, not persisted)
+            monitoring_flags = [
+                f for f in (
+                    coverage_gap_flag(regions, len(cluster_outlets)),
+                    unverified_viral_flag(tier_counts),
+                ) if f
+            ]
 
             # 5. Update the Clusters table
             safe_execute(supabase.table("clusters").update({"coverage_stats": coverage_stats}).eq("id", cluster["id"]))
@@ -310,10 +311,10 @@ def run_scoring(all_time: bool = False):
                     "absent_expected_slugs": []
                   })
                 )
-            except Exception as e:
-              logger.error(
+            except Exception:
+              logger.exception(
                 f"Snapshot insert failed for "
-                f"{cluster['id']}: {e}"
+                f"{cluster['id']}"
               )
             # --- end coverage snapshot ---
 
@@ -321,8 +322,8 @@ def run_scoring(all_time: bool = False):
 
 
 
-        except Exception as e:
-            logger.error(f"Skipping cluster {cluster['id']} due to error: {e}")
+        except Exception:
+            logger.exception(f"Skipping cluster {cluster['id']} due to error")
             continue
     print(f"Backfill complete: {total} clusters updated")
     logger.info(f"Coverage Math complete. {scored_count} clusters calculated.")
