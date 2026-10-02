@@ -91,3 +91,33 @@ def is_republisher(s2_score) -> bool | None:
     if s2_score >= ORIGINAL_S2_MIN:
         return False
     return None
+
+
+def count_outlet_tiers(outlets) -> dict:
+    """
+    Distinct-outlet tier counts. `outlets` is an iterable of outlet records
+    (each with "id" or "slug", "government_alignment", "is_blog"); an outlet
+    appearing more than once — one per article — is counted once.
+
+    Returns every card tier plus "blog" and "unscored", always all present,
+    so a zero is an explicit zero and never an absent key.
+    """
+    counts = {t: 0 for t in CARD_TIERS}
+    counts["blog"] = 0
+    counts["unscored"] = 0
+    seen = set()
+    for out in outlets:
+        key = out.get("id") or out.get("slug")
+        if not key:
+            logger.error(f"Outlet record without id or slug excluded from tier counts: {out!r}")
+            continue
+        if key in seen:
+            continue
+        seen.add(key)
+        counts[get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))] += 1
+    return counts
+
+
+def card_distribution(tier_counts: dict) -> dict:
+    """The three card tiers from count_outlet_tiers, all keys present."""
+    return {t: tier_counts[t] for t in CARD_TIERS}

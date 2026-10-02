@@ -97,8 +97,8 @@ async def list_current_verdicts(_: str = Depends(require_permission('monitoring_
                     
         snapshot_reads = snaps_by_cluster.get(cid, [])
         
-        coverage_stats = c.get("coverage_stats") or {}
-        total_outlets = coverage_stats.get("total_coverage", len(stories))
+        # Same basis as the tier counts: distinct outlets in the card tiers.
+        total_outlets = sum(live_dist.values())
         
         verdict = resolve_verdict(
             tier_distribution=live_dist,

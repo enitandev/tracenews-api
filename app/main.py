@@ -4,7 +4,10 @@ from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.image_utils import get_cluster_image, is_image_allowed
-from app.tier_utils import get_outlet_tier, is_republisher, normalize_tier_distribution, REPUBLISHER_S2_MAX
+from app.tier_utils import (
+    get_outlet_tier, is_republisher, normalize_tier_distribution, REPUBLISHER_S2_MAX,
+    count_outlet_tiers, card_distribution,
+)
 from pydantic import BaseModel
 import traceback
 import time
@@ -239,27 +242,16 @@ def get_outlets_cache():
     return _OUTLETS_CACHE, _BEHAVIORAL_CACHE
 
 def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, behavioral_map):
-    tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0}
-    
+    """Card-tier distribution over distinct outlets (blog/unscored excluded)."""
     unique_outlet_ids = set()
     for s in stories:
         oid = s.get("outlet_id")
         if oid:
             unique_outlet_ids.add(oid)
-            
-    for oid in unique_outlet_ids:
-        if oid not in outlets_map:
-            continue
-            
-        out = outlets_map[oid]
-        slug = out.get("slug")
-        behav = behavioral_map.get(slug) if slug else None
-        
-        tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
-                
-        if tier != "unscored":
-            if tier in tier_dist:
-                tier_dist[tier] += 1
+
+    tier_dist = card_distribution(count_outlet_tiers(
+        outlets_map[oid] for oid in unique_outlet_ids if oid in outlets_map
+    ))
             
     scored_s2 = []
     for oid in unique_outlet_ids:
@@ -486,25 +478,17 @@ def get_most_carried_clusters(category: str, limit: int = 6):
         stories = cluster_stories.get(cid, [])
         total_computed += 1
         
-        tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0, "blog": 0}
-        unique_slugs = set()
-        
-        for s in stories:
-            out = s.get("outlets")
-            if out:
-                slug = out.get("slug")
-                if slug and slug not in unique_slugs:
-                    unique_slugs.add(slug)
-                    tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
-                    if tier in tier_dist:
-                        tier_dist[tier] += 1
-                        
-        scored = tier_dist["govt_aligned"] + tier_dist["mainstream"] + tier_dist["watchdog"]
+        story_outlets = [s["outlets"] for s in stories if s.get("outlets")]
+        unique_slugs = {o.get("slug") for o in story_outlets if o.get("slug")}
+        tier_counts = count_outlet_tiers(story_outlets)
+        tier_dist = card_distribution(tier_counts)
+        scored = sum(tier_dist.values())
         
         if scored >= 8:
             stats = c.get("coverage_stats") or {}
             stats["coverage_tier_distribution"] = tier_dist
-            stats["total_coverage"] = sum(tier_dist.values())
+            stats["total_coverage"] = scored
+            stats["blog_count"] = tier_counts["blog"]
             c["coverage_stats"] = stats
             c["scored_count"] = scored
             c["outlet_count"] = len(unique_slugs)
@@ -554,24 +538,16 @@ def get_clusters_by_category(category: str, limit: int = 8):
         cid = c["id"]
         stories = cluster_stories.get(cid, [])
         
-        tier_dist = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0, "blog": 0}
-        unique_slugs = set()
-        
-        for s in stories:
-            out = s.get("outlets")
-            if out:
-                slug = out.get("slug")
-                if slug and slug not in unique_slugs:
-                    unique_slugs.add(slug)
-                    tier = get_outlet_tier(out.get("government_alignment"), out.get("is_blog"))
-                    if tier in tier_dist:
-                        tier_dist[tier] += 1
-                        
-        scored = tier_dist["govt_aligned"] + tier_dist["mainstream"] + tier_dist["watchdog"]
+        story_outlets = [s["outlets"] for s in stories if s.get("outlets")]
+        unique_slugs = {o.get("slug") for o in story_outlets if o.get("slug")}
+        tier_counts = count_outlet_tiers(story_outlets)
+        tier_dist = card_distribution(tier_counts)
+        scored = sum(tier_dist.values())
         
         stats = c.get("coverage_stats") or {}
         stats["coverage_tier_distribution"] = tier_dist
-        stats["total_coverage"] = sum(tier_dist.values())
+        stats["total_coverage"] = scored
+        stats["blog_count"] = tier_counts["blog"]
         c["coverage_stats"] = stats
         c["scored_count"] = scored
         c["outlet_count"] = len(unique_slugs)
@@ -865,10 +841,11 @@ def get_category_feed(category: str, limit: int = 30, offset: int = 0):
     bias_breakdown = { "govt_aligned": 0, "mainstream": 0, "watchdog": 0, "total": 0 }
     for c in clusters:
         stats = c.get("coverage_stats") or {}
-        dist = stats.get("coverage_tier_distribution", {})
-        bias_breakdown["govt_aligned"] += dist.get("pro_establishment", dist.get("govt_aligned", 0))
-        bias_breakdown["mainstream"] += dist.get("institutional", dist.get("mainstream", 0))
-        bias_breakdown["watchdog"] += dist.get("adversarial", dist.get("watchdog", 0))
+        dist = normalize_tier_distribution(stats.get("coverage_tier_distribution"))
+        if dist is None:
+            continue
+        for t in ("govt_aligned", "mainstream", "watchdog"):
+            bias_breakdown[t] += dist[t]
         bias_breakdown["total"] += sum(dist.values())
         
     # Relevance sort
