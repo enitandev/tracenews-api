@@ -19,6 +19,17 @@ There is one in-process scheduler (APScheduler, `app/scheduler.py`) and one cron
 
 **Worker service** (Railway cron, every 20 min, runs `app/worker.py` and exits): fetch → cluster → score → image hydration → event summaries → daily briefing (05:00–06:59 UTC only) → public feed cache. A `worker_locks` row prevents overlapping runs. The worker starts no scheduler.
 
+The scheduler starts only when the API runs on Railway (detected from Railway's injected variables such as `RAILWAY_GIT_COMMIT_SHA`). A copy started locally runs no heartbeats, alerts or sitemap job against production; set `SCHEDULER_ENABLED=1` to force it on (or `0` to force it off). `GET /health` reports `scheduler_running`.
+
+### Alerts
+
+Heartbeat alerts are emailed to `ALERT_TO` (default `enitan@tracenews.ng`, an ImprovMX alias):
+
+- **Production: Resend.** Set `RESEND_API_KEY` on the web service. Mail is sent from `ALERT_FROM` (default `TraceNews Alerts <alerts@tracenews.ng>`), so `tracenews.ng` must be verified in Resend.
+- **SMTP fallback** (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS`) is used only when no Resend key is set. Railway's Hobby plan blocks outbound SMTP, so this works only locally.
+- If delivery fails, or no channel is configured, the full alert is logged at ERROR (`ALERT COULD NOT SEND`).
+- Send a test alert with `python -m app.heartbeat --test` (e.g. `railway run python -m app.heartbeat --test`).
+
 `railway.toml` sets `startCommand` for every service deployed from this repo. The worker service must override it with its own start command; otherwise it would boot the web app (and a second copy of the scheduler) instead of the pipeline.
 
 ## Running Locally
