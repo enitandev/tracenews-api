@@ -132,14 +132,44 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
 
     return tier_dist, churnalism_ratio
 
+STORY_PAGE_SIZE = 1000   # PostgREST's default max rows per request
+CLUSTER_ID_BATCH = 50    # also keeps the in_() URL short
+
+
+def fetch_cluster_story_outlets(cluster_ids):
+    """
+    (id, cluster_id, outlet_id) for every story in the given clusters. A single
+    query is silently capped at STORY_PAGE_SIZE rows, which would undercount
+    the clusters at the end of a large pool, so ids are batched and each batch
+    is paged until a short page comes back.
+    """
+    rows = []
+    for i in range(0, len(cluster_ids), CLUSTER_ID_BATCH):
+        batch = cluster_ids[i:i + CLUSTER_ID_BATCH]
+        start = 0
+        while True:
+            page = (
+                supabase.table("stories")
+                .select("id, cluster_id, outlet_id")
+                .in_("cluster_id", batch)
+                .order("id")
+                .range(start, start + STORY_PAGE_SIZE - 1)
+                .execute()
+            ).data or []
+            rows.extend(page)
+            if len(page) < STORY_PAGE_SIZE:
+                break
+            start += STORY_PAGE_SIZE
+    return rows
+
+
 def enrich_clusters_with_live_tiers(clusters):
     if not clusters: return clusters
     
     outlets_map, behavioral_map = get_outlets_cache()
     cluster_ids = [c["id"] for c in clusters]
     
-    stories_res = supabase.table("stories").select("id, cluster_id, outlet_id").in_("cluster_id", cluster_ids).execute()
-    stories = stories_res.data or []
+    stories = fetch_cluster_story_outlets(cluster_ids)
     
     stories_by_cluster = {}
     for s in stories:
