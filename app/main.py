@@ -4,7 +4,7 @@ from fastapi import FastAPI, BackgroundTasks, Request
 from fastapi.responses import Response, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from app.image_utils import get_cluster_image, is_image_allowed
-from app.tier_utils import get_outlet_tier
+from app.tier_utils import get_outlet_tier, is_republisher, normalize_tier_distribution, REPUBLISHER_S2_MAX
 from pydantic import BaseModel
 import traceback
 import time
@@ -20,13 +20,13 @@ def render_safe_verdict(verdict_result: dict) -> dict:
     Gate_D_Closure_Record.md. This function is the single point where
     that restriction is enforced. Do not remove without a new Gate D
     passing.
+
+    Returns None for DARK: the verdict is withheld entirely. It must never be
+    relabelled as another state — a CLEAR in its place would publish a false
+    "covered widely" claim about the story.
     """
     if verdict_result.get("verdict") == "dark":
-        return {
-            "verdict": "clear",
-            "evidence": None,
-            "note": "withheld_pending_story_type_classification",
-        }
+        return None
     return verdict_result
 
 logging.basicConfig(level=logging.INFO)
@@ -278,7 +278,7 @@ def compute_live_coverage_tier_distribution(cluster_id, stories, outlets_map, be
 
     if len(scored_s2) >= 3:
         republished = sum(
-            1 for s in scored_s2 if s < 40
+            1 for s in scored_s2 if s < REPUBLISHER_S2_MAX
         )
         churnalism_ratio = round(
             republished / len(scored_s2), 3
@@ -625,6 +625,7 @@ def get_cluster_by_slug(slug: str):
             
             behav = behavioral_map.get(out.get("slug"))
             s["outlet_s2_score"] = behav.get("s2_score") if behav else None
+            s["outlet_republishes"] = is_republisher(s["outlet_s2_score"])
 
     # --- MONITORING SPIRIT VERDICT (LIVE ATOMIC COMPUTATION) ---
     try:
@@ -679,13 +680,23 @@ def get_cluster_by_slug(slug: str):
         
         # Attach to the response. If anything above failed, this won't execute,
         # guaranteeing Invariant 1 (withhold rather than render stale).
-        cluster["monitoring_spirit_live"] = render_safe_verdict(verdict_res)
-        cluster["monitoring_spirit_live"]["snapshots"] = snapshot_reads
+        safe_verdict = render_safe_verdict(verdict_res)
+        if safe_verdict is not None:
+            # Snapshot distributions are normalised to the canonical tier keys
+            # for display; unusable rows are dropped, never shown as zero.
+            display_snapshots = []
+            for snap in snapshot_reads:
+                dist = normalize_tier_distribution(snap.get("coverage_tier_distribution"))
+                if dist is None:
+                    logger.error(f"Dropping unusable coverage snapshot for cluster {cluster['id']} at {snap.get('snapshot_at')}")
+                    continue
+                display_snapshots.append({**snap, "coverage_tier_distribution": dist})
+            safe_verdict["snapshots"] = display_snapshots
+            cluster["monitoring_spirit_live"] = safe_verdict
         
-    except Exception as e:
-        logger.error(f"Live verdict computation failed for cluster {cluster['id']}: {e}")
+    except Exception:
         # Invariant 1: do not set monitoring_spirit_live
-        pass
+        logger.exception(f"Live verdict computation failed for cluster {cluster['id']}")
         
     return {"cluster": cluster, "stories": stories}
 
@@ -734,6 +745,7 @@ def get_cluster_deep_dive(id: str):
             
             behav = behavioral_map.get(slug) if slug else None
             s["outlet_s2_score"] = behav.get("s2_score") if behav else None
+            s["outlet_republishes"] = is_republisher(s["outlet_s2_score"])
             s["outlet_coverage_tier"] = tier
             
             # Carry forward all required outlet fields before deleting
