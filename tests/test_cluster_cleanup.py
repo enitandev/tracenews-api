@@ -1,4 +1,14 @@
+import pytest
+
 import app.clusterer as clusterer
+from app.coverage import render_safe_verdict
+
+
+@pytest.fixture(autouse=True)
+def _hold_off(request, monkeypatch):
+    # Cleanup tests exercise the delete path; the hold tests turn it back on.
+    if "hold" not in request.node.name:
+        monkeypatch.setattr(clusterer, "RECORD_HOLD", False)
 
 
 class _DB:
@@ -95,3 +105,24 @@ def test_total_count_timeout_does_not_crash_clustering(monkeypatch):
     monkeypatch.setattr(clusterer, "supabase", DB())
     result = clusterer.run_clustering()
     assert result["total_clusters"] is None and calls == ["cleanup"]
+
+
+def test_record_hold_skips_cleanup(monkeypatch):
+    monkeypatch.setattr(clusterer, "RECORD_HOLD", True)
+    db = _DB(["c1"], [{"id": "s1", "cluster_id": "c1"}])
+    monkeypatch.setattr(clusterer, "supabase", db)
+    clusterer.cleanup_old_clusters()
+    assert db.ops == []
+
+
+def test_record_hold_refuses_full_recluster(monkeypatch):
+    monkeypatch.setattr(clusterer, "RECORD_HOLD", True)
+    db = _DB([], [])
+    monkeypatch.setattr(clusterer, "supabase", db)
+    clusterer.run_full_recluster()
+    assert db.ops == []
+
+
+def test_mixed_is_withheld():
+    assert render_safe_verdict({"verdict": "mixed", "evidence": []}) is None
+    assert render_safe_verdict({"verdict": "clear"}) == {"verdict": "clear"}

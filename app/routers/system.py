@@ -1,6 +1,6 @@
 """Service meta and manual pipeline triggers."""
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from app.admin_auth import require_permission
 from app.scheduler import scheduler_running
 from app.fetcher import run_fetch
@@ -59,11 +59,13 @@ def trigger_full_run():
     return {"status": "ok", "fetch": fetch, "cluster": cluster}
 
 
-from app.clusterer import run_full_recluster
+from app.clusterer import run_full_recluster, RECORD_HOLD
 
 @router.post("/admin/recluster-all", dependencies=[pipeline_admin])
 async def recluster_all(background_tasks: BackgroundTasks):
     """One-time recovery endpoint to recluster all stories in the background."""
+    if RECORD_HOLD:
+        raise HTTPException(status_code=409, detail="Refused: a record hold is on and a full recluster would wipe every cluster.")
     background_tasks.add_task(run_full_recluster)
     return {"status": "started", "message": "Full recluster running in background. Check Railway logs."}
 
