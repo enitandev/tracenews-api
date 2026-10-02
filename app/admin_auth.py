@@ -1,12 +1,21 @@
+import logging
 import os
 from fastapi import Header, HTTPException, Depends
 from app.db import supabase
 from app.permissions import has_permission, is_staff_role
 
+logger = logging.getLogger(__name__)
+
 def require_permission(section: str, action: str = "view"):
     def dependency(authorization: str = Header(...)):
         token = authorization.replace("Bearer ", "")
-        user_res = supabase.auth.get_user(token)
+        try:
+            user_res = supabase.auth.get_user(token)
+        except Exception:
+            # The auth client raises on a malformed or expired token; that is
+            # a rejected session (401), not a server error.
+            logger.warning("Rejected staff request: session token could not be validated")
+            raise HTTPException(status_code=401, detail="Invalid or expired session")
         if not user_res or not user_res.user:
             raise HTTPException(status_code=401, detail="Invalid or expired session")
 
