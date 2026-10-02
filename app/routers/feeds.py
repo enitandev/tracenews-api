@@ -3,12 +3,28 @@ import logging
 from fastapi import APIRouter
 from app.db import supabase
 from app.image_utils import get_cluster_image, is_image_allowed
-from app.tier_utils import get_outlet_tier, normalize_tier_distribution, count_outlet_tiers, card_distribution
+from app.tier_utils import get_distinct_scored_count, get_outlet_tier, normalize_tier_distribution, count_outlet_tiers, card_distribution
 from app.coverage import strip_embeddings, get_outlets_cache, enrich_clusters_with_live_tiers
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# Homepage floor (landing + feed): a story must be carried by at least this
+# many distinct scored outlets. Raised from 2 to 3 in Oct 2026: on 72h of live
+# data, 3 still yields ~168 eligible clusters across a ~34h pool, about the
+# same as 2 did, while 4 would need ~49h of stories to fill the homepage.
+HOMEPAGE_MIN_SCORED_OUTLETS = 3
+# Newest clusters considered. Pre-filtered on outlet_count (article rows) >=
+# the floor: distinct outlets can never exceed article rows, so nothing that
+# could pass is excluded and the pool is not spent on stories that cannot.
+HOMEPAGE_POOL_SIZE = 200
+
+
+def passes_homepage_floor(cluster) -> bool:
+    """Distinct scored outlets (live distribution) meet the homepage floor."""
+    count = get_distinct_scored_count(cluster.get("coverage_stats"))
+    return count is not None and count >= HOMEPAGE_MIN_SCORED_OUTLETS
 
 @router.get("/stories")
 def get_stories(limit: int = 50, offset: int = 0):
@@ -40,7 +56,7 @@ def get_landing_clusters(limit: int = 40):
     """Get optimized clusters for the landing page scrolling feed."""
     result = supabase.table("clusters").select(
         "id, slug, representative_title, outlet_count, category, coverage_stats, monitoring_flags, first_seen_at, stories(image_url)"
-    ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(200).execute()
+    ).gte("outlet_count", HOMEPAGE_MIN_SCORED_OUTLETS).order("first_seen_at", desc=True).limit(HOMEPAGE_POOL_SIZE).execute()
     
     clusters = result.data or []
     from datetime import datetime, timezone, timedelta
@@ -55,7 +71,6 @@ def get_landing_clusters(limit: int = 40):
         return outlet_count / (age_hours + 2)
         
     clusters.sort(key=relevance_score, reverse=True)
-    clusters = clusters[:limit]
     
     # Format for frontend
     formatted = []
@@ -74,12 +89,9 @@ def get_landing_clusters(limit: int = 40):
             "image_url": image_url
         })
     enriched_clusters = enrich_clusters_with_live_tiers(formatted)
-    filtered = []
-    for c in enriched_clusters:
-        dist = c.get("coverage_stats", {}).get("coverage_tier_distribution", {})
-        scored = dist.get("govt_aligned", 0) + dist.get("mainstream", 0) + dist.get("watchdog", 0)
-        if scored >= 2:
-            filtered.append(c)
+    # Floor first, then cut to the page size, so a stricter floor does not
+    # shorten the page.
+    filtered = [c for c in enriched_clusters if passes_homepage_floor(c)][:limit]
             
     return {"clusters": filtered, "count": len(filtered)}
 
@@ -89,7 +101,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     """Get full clusters with scores for the main feed."""
     query = supabase.table("clusters").select(
         "*, cluster_scores(*), stories(image_url)"
-    ).gte("outlet_count", 2).order("first_seen_at", desc=True).limit(200)
+    ).gte("outlet_count", HOMEPAGE_MIN_SCORED_OUTLETS).order("first_seen_at", desc=True).limit(HOMEPAGE_POOL_SIZE)
     
     # If tier is requested, we can't filter at the SQL level easily because coverage_stats is JSON.
     # We will filter in Python below.
@@ -111,13 +123,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     
     enriched_clusters = enrich_clusters_with_live_tiers(clusters)
     
-    floor_filtered = []
-    for c in enriched_clusters:
-        dist = c.get("coverage_stats", {}).get("coverage_tier_distribution", {})
-        scored = dist.get("govt_aligned", 0) + dist.get("mainstream", 0) + dist.get("watchdog", 0)
-        if scored >= 2:
-            floor_filtered.append(c)
-    enriched_clusters = floor_filtered
+    enriched_clusters = [c for c in enriched_clusters if passes_homepage_floor(c)]
     if tier:
         filtered_clusters = []
         for c in enriched_clusters:
