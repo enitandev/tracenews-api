@@ -30,6 +30,23 @@ def _has(term, text):
     return re.search(r"(?<![\w-])" + re.escape(term) + r"(?![\w-])", text, re.IGNORECASE) is not None
 
 
+def quoted_and_attributed(quote, speaker, articles_text):
+    """Counsel's ruling of 3 Oct: a quote counts only if, in one source, the
+    words sit inside quotation marks and the named speaker is credited near
+    them (same passage). Finding the words alone is not enough: a reporter's
+    sentence is not a quote."""
+    q = _norm(quote)
+    surname = _norm(speaker).split()[-1] if speaker.strip() else ""
+    for block in re.split(r"\n\s*\n(?=Source \d+)", articles_text or ""):
+        text = _norm(block)
+        for m in re.finditer(r'"([^"]{3,})"', text):
+            if q and q in m.group(1):
+                window = text[max(0, m.start() - 250): m.end() + 250]
+                if surname and re.search(r"\b" + re.escape(surname) + r"\b", window):
+                    return True
+    return False
+
+
 def quote_line(q):
     """How a quote is shown: named speaker with role, the verb "said" only."""
     return f'{q["speaker"]}, {q["role"]}, {QUOTE_VERB}: "{q["quote"]}"'
@@ -54,6 +71,8 @@ def check_extras(raw, articles_text):
             dropped.append(f"quote without speaker, role or words: {quote[:60]}")
         elif _norm(quote) not in source:
             dropped.append(f"quote not found verbatim in the sources: {quote[:60]}")
+        elif not quoted_and_attributed(quote, speaker, articles_text):
+            dropped.append(f"quote not inside quotation marks attributed to {speaker} in a source: {quote[:60]}")
         elif len(kept["quotes"]) >= QUOTES_MAX:
             dropped.append(f"quote over the limit of {QUOTES_MAX}")
         else:

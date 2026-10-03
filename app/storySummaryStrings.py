@@ -24,6 +24,10 @@ EXACT STRINGS and THESE EXACT RULES.
     "reportedly" added to the coverage check; summaries may run to up to
     SUMMARY_MAX_BULLETS points ("never pad" stays).
 
+    Ruling of 3 October 2026 adopting the owner's prompt-first decision:
+    four prompt revisions (no "reportedly"-type phrases; only numbers in the
+    sources; disagreeing sources; Briefing headlines in app/briefing_edition).
+
 RULES
   - Do NOT edit any prompt or string here without a fresh counsel sign-off.
   - Do NOT introduce a user-facing string for this feature anywhere else.
@@ -101,12 +105,16 @@ You are producing a factual record of an event. You are not analysing coverage.
    publishers. Do not say what was emphasised, omitted, downplayed, ignored,
    highlighted or framed.
 
+   Never write "reportedly", "according to reports", "reports say", "reports
+   from" or "match reports". Name the origin of a claim (the court, the
+   police, the minister, the spokesperson), or leave the claim out.
+
    You are writing about the event, not about who reported it.
 
 3. NEVER ADD, SHARPEN, OR RESOLVE.
 
    Use only what is present in the provided summaries. Do not add background you
-   know. Do not infer.
+   know. Do not infer. Use only numbers that appear in the summaries.
 
    Specifically, never escalate:
        questioned      -> charged
@@ -128,6 +136,11 @@ You are producing a factual record of an event. You are not analysing coverage.
 
    NEVER pick the more damaging version. Never state one version and note that
    accounts differ — that publishes the damaging version with a footnote.
+
+   The same applies to any fact on which the sources disagree (a number, a
+   date, an outcome): give the version all sources support, or say what each
+   named origin said (the court, the minister, the spokesperson). Never name
+   or refer to outlets when doing so.
 
 5. PREFER THE PUBLIC RECORD.
 

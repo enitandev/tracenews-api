@@ -4,9 +4,14 @@ amended by counsel's review of the 3 Oct samples). Rules and strings live in
 app/briefingStrings.py.
 
 An edition is one row per selected story in briefing_editions. Rows are built
-whether or not the Briefing is public, so staff can review them. Each item is
-routed (assess_item) when it is read, from its current text: the cleaned
-source headline and the cleared summary, or an editor's rewrite of either.
+whether or not the Briefing is public, so staff can review them.
+
+Prompt-first (counsel's ruling of 3 Oct 2026 adopting the owner's decision):
+when an edition is built, auto_correct() fixes the headline, removes
+offending bullets, quotes and next steps, and corrects party descriptors,
+logging every correction with the actor "system". When an item is read,
+assess_item() routes it: one editor lane for accusations and proceedings
+about named people or organisations; everything else publishes.
 """
 import logging
 import re
@@ -14,17 +19,17 @@ import time as _time
 from datetime import datetime, time, timedelta, timezone
 
 from app.briefingStrings import (
-    COMMENTARY_PHRASES, COMMENTARY_STATEMENT_PATTERN, COURT_TERMS, EDITION_CUTOFF_HOUR_LAGOS,
-    EXAM_CONTEXT_TERMS, FORBIDDEN_TOKENS, HEADLINE_ATTRIBUTION_PATTERN, HEADLINE_BODY_TERMS,
-    HEADLINE_CASUALTY_TERMS, HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS, HEADLINE_TRAILING_PHRASES,
-    LANE_AUTO, LANE_LEFT_OUT, LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES,
-    MIN_DISTINCT_OUTLETS, PARTY_NAMES, POLITICAL_ATTACK_TERMS, POLITICAL_CONTEST_TERMS,
-    POLITICAL_ENDORSE_TERMS, POLITICAL_HEALTH_TERMS, POLITICAL_OFFICES, POLITICAL_REVIEW_LANE,
-    REPORTED_PHRASES, WINDOW_HOURS,
+    ACTOR_ROLE_WORDS, AUTHORITY_WORDS, CANDIDACY_WORDS, EDITION_CUTOFF_HOUR_LAGOS, EDITOR_LANE_TRIGGERS,
+    FORBIDDEN_TOKENS, HEADLINE_ATTRIBUTION_PATTERN, HEADLINE_BODY_TERMS, HEADLINE_CASUALTY_TERMS,
+    HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS, HEADLINE_TRAILING_PHRASES, LANE_AUTO, LANE_LEFT_OUT,
+    LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES, MIN_DISTINCT_OUTLETS,
+    PARTY_NAMES, SUSPENSION_TRIGGERS, WINDOW_HOURS,
 )
 from app import names
 from app.db import supabase
-from app.storySummaryStrings import ADVERSE_CONTEXT_TERMS, GATE_SUPPRESS_CLAIM
+from app.storySummaryStrings import (
+    ADVERSE_CONTEXT_TERMS, PRINCIPAL_OFFICEHOLDERS, SUMMARY_MIN_BULLETS,
+)
 from app.summarizer import cluster_articles_text, evaluate_summary, is_generation_failure
 from app.tier_utils import card_distribution, count_outlet_tiers, get_distinct_scored_count
 
@@ -136,7 +141,7 @@ def load_registry():
         return _registry["rows"]
     rows, start = [], 0
     while True:
-        page = supabase.table("politicians").select("full_name, common_name, publication_status") \
+        page = supabase.table("politicians").select("full_name, common_name, publication_status, party, current_position") \
             .range(start, start + 999).execute().data or []
         rows += page
         if len(page) < 1000:
@@ -149,127 +154,200 @@ def load_registry():
 def registry_matches(text, registry):
     out = []
     for r in registry:
-        names = {n.strip() for n in (r.get("full_name"), r.get("common_name")) if n and len(n.strip()) > 3}
-        if any(_has(n, text) for n in names):
+        names_ = {n.strip() for n in (r.get("full_name"), r.get("common_name")) if n and len(n.strip()) > 3}
+        if any(_has(n, text) for n in names_):
             out.append(r)
     return out
 
 
-def parties_in(text):
-    return [p for p in PARTY_NAMES if _has(p, text, case_sensitive=p.isupper())]
-
-
-def offices_in(text):
-    return [o for o in POLITICAL_OFFICES if _has(o, text)]
-
-
-# Capitalised runs; an initial such as "A." stays inside the run ("Peter A. Okebukola").
-_IGNORE = names.IGNORE
-_ORG = names.ORG
-_name_runs = names.name_runs
-_is_name_word = names.is_name_word
-
-
-def _registry_words(registry):
-    """First and last names from the registry (not middle words), so a
-    one-name reference to a registry person is recognised."""
-    words = set()
-    for r in registry:
-        for n in (r.get("full_name"), r.get("common_name")):
-            # "Emir of Kano", "Alaafin of Oyo": the place after "of" is a title, not a name.
-            n = re.split(r"\s+of\s+", n or "")[0]
-            parts = [w for w in n.split() if len(w) > 2 and _is_name_word(w)]
-            if parts:
-                words |= {parts[0], parts[-1]}
-    return words
-
-
-def surname_issues(title, bullets, registry):
-    """Names of people used alone with no earlier full name containing them
-    (item 3i). Body in order; a headline name must appear in full in the body."""
-    body = " ".join(b for b in bullets if isinstance(b, str))
-    runs = _name_runs(body)
-    known = _registry_words(registry)
-    known |= {ws[-1] for _, ws in runs if 2 <= len(ws) <= 4 and ws[-1] not in _ORG}
-    introduced, issues = set(), []
-    for _, words in runs:
-        if len(words) >= 2:
-            introduced |= set(words)
-        elif words[0] in known and words[0] not in introduced and words[0] not in issues:
-            issues.append(words[0])
-    for _, words in _name_runs(title or ""):
-        if len(words) == 1 and words[0] in known and words[0] not in introduced and words[0] not in issues:
-            issues.append(words[0])
-    return issues
-
-
-def names_a_person_or_party(text, registry):
-    if registry_matches(text, registry) or parties_in(text):
-        return True
-    return any(len(ws) >= 2 and ws[-1] not in _ORG for _, ws in _name_runs(text))
-
-
-def commentary_in(bullets):
-    text = " ".join(b for b in bullets if isinstance(b, str))
-    found = [p for p in COMMENTARY_PHRASES if _has(p, text)]
-    found += [m.group(0) for m in re.finditer(COMMENTARY_STATEMENT_PATTERN, text, re.IGNORECASE)]
-    return found
-
-
-_GATE_ORDER = {LANE_AUTO: 0, LANE_REVIEW: 1, LANE_SENIOR_REVIEW: 2, GATE_SUPPRESS_CLAIM: 3}
-
-
-def political_trigger(full, matches):
-    """Counsel's ruling of 3 Oct, item 2: a political figure or party together
-    with a trigger. Returns a reason, or None for a routine item."""
-    people = [m.get("common_name") or m.get("full_name") for m in matches]
-    parties = parties_in(full)
-    offices = offices_in(full)
-    if not (people or parties or offices):
-        return None
-    exam = any(_has(t, full, case_sensitive=t.isupper()) for t in EXAM_CONTEXT_TERMS)
-    found = [t for t in POLITICAL_CONTEST_TERMS
-             if _has(t, full) and not (exam and t in ("candidate", "candidates"))]
-    found += [t for t in POLITICAL_ENDORSE_TERMS if _has(t, full)]
-    party_count = len({p for p in parties if p.isupper()}) or (1 if parties else 0)
-    if len(set(people)) + party_count >= 2:
-        found += [t for t in POLITICAL_ATTACK_TERMS if _has(t, full)]
-    if people or any(_has(o, full) for o in ("president", "vice president", "governor", "senate president", "speaker")):
-        found += [t for t in POLITICAL_HEALTH_TERMS if _has(t, full)]
-    if not found:
-        return None
-    actors = list(dict.fromkeys(people + parties + offices))
-    return "political review lane: " + ", ".join(actors) + " — " + ", ".join(dict.fromkeys(found))
-
-
 def headline_issues(title, body):
-    """Counsel's ruling of 3 Oct, item 3: headline numbers or quantity words
-    the body does not support, and unattributed casualty claims."""
+    """A number or quantity word in the headline the body does not support, or
+    an unattributed casualty claim."""
     issues = []
     num = re.compile(r"\d+(?:[.,]\d+)*")
     body_nums = {n.replace(",", "") for n in num.findall(body)}
     missing = [n for n in num.findall(title) if n.replace(",", "") not in body_nums]
     if missing:
-        issues.append("headline number not in body: " + ", ".join(missing))
+        issues.append("number not in body: " + ", ".join(missing))
     words = [w for w in HEADLINE_QUANTITY_WORDS if _has(w, title) and not _has(w, body)]
     if words:
-        issues.append("headline quantity word not in body: " + ", ".join(words))
+        issues.append("quantity word not in body: " + ", ".join(words))
     if any(_has(t, title) for t in HEADLINE_CASUALTY_TERMS) and not re.search(HEADLINE_ATTRIBUTION_PATTERN, title, re.IGNORECASE):
-        issues.append("unattributed casualty claim in headline")
+        issues.append("unattributed casualty claim")
     return issues
 
 
+def headline_problems(title, body_parts):
+    """Every reason a cleaned headline cannot be used; empty if it can."""
+    if not title:
+        return ["empty after cleaning"]
+    body = " ".join(body_parts)
+    problems = []
+    token = has_forbidden_token([title])
+    if token:
+        problems.append(f"forbidden word: {token}")
+    conflict = headline_body_conflict(title, body_parts)
+    if conflict:
+        problems.append(f"term not in body: {conflict}")
+    return problems + headline_issues(title, body)
+
+
+# ═══ AUTOMATIC CORRECTIONS (at build; logged as "system") ════════════════════
+
+def _sentences(text):
+    return [x for x in re.split(r"(?<=[.!?])\s+", text or "") if x.strip()]
+
+
+def bullet_problem(bullet, articles_text):
+    """Why a single bullet must be removed, or None."""
+    token = has_forbidden_token([bullet])
+    if token:
+        return f"forbidden word: {token}"
+    ev = evaluate_summary([bullet, "-"], articles_text)
+    bad = [f for f in ev["flags"] if f.startswith(("forbidden_coverage", "escalation", "bullet_type"))]
+    return "; ".join(bad) or None
+
+
+def correct_descriptors(text, registry):
+    """A party or candidacy descriptor next to a registry person's name is
+    replaced from the registry, or dropped if the registry has none."""
+    notes = []
+    for r in registry:
+        for name in {n for n in (r.get("full_name"), r.get("common_name")) if n and len(n) > 3}:
+            # "Name, <descriptor>," — an appositive that mentions a party or candidacy.
+            pattern = re.compile(re.escape(name) + r",\s+([^,;.]{3,120}?)(?=[,;.])")
+            m = pattern.search(text)
+            if not m:
+                continue
+            desc = m.group(1)
+            if not (any(_has(p, desc, case_sensitive=p.isupper()) for p in PARTY_NAMES)
+                    or any(_has(w, desc) for w in CANDIDACY_WORDS)):
+                continue
+            party, position = (r.get("party") or "").strip(), (r.get("current_position") or "").strip()
+            registry_desc = ", ".join(x for x in (position, party) if x)
+            if registry_desc and registry_desc.lower() == desc.lower():
+                continue
+            if registry_desc:
+                text = text[:m.start(1)] + registry_desc + text[m.end(1):]
+                notes.append(f"descriptor for {name} replaced from the registry: '{desc}' -> '{registry_desc}'")
+            else:
+                # Drop ", <descriptor>" and the comma that closed the appositive.
+                tail = text[m.end(1):]
+                text = text[:m.start(1) - 2] + (tail[1:] if tail.startswith(",") else tail)
+                notes.append(f"descriptor for {name} dropped (none in the registry): '{desc}'")
+    return text, notes
+
+
+def auto_correct(headlines, bullets, extras, articles_text, registry):
+    """Apply every automatic correction. headlines: the story's source
+    headlines, representative one first. Returns (title, bullets, extras,
+    corrections, left_out_reason)."""
+    corrections = []
+    kept = []
+    for b in [b for b in bullets if isinstance(b, str)]:
+        problem = bullet_problem(b, articles_text)
+        if problem:
+            corrections.append(f"bullet removed ({problem}): {b[:80]}")
+            continue
+        b, notes = correct_descriptors(b, registry)
+        corrections += notes
+        kept.append(b)
+    extras = dict(extras or {})
+    for key in ("next", "background"):
+        fixed = []
+        for t in extras.get(key) or []:
+            problem = bullet_problem(t, articles_text)
+            if problem:
+                corrections.append(f"{key} removed ({problem}): {t[:80]}")
+                continue
+            t, notes = correct_descriptors(t, registry)
+            corrections += notes
+            fixed.append(t)
+        extras[key] = fixed
+    quotes = []
+    for q in extras.get("quotes") or []:
+        problem = bullet_problem(q.get("quote", ""), articles_text)
+        if problem:
+            corrections.append(f"quote removed ({problem}): {q.get('quote', '')[:80]}")
+        else:
+            quotes.append(q)
+    extras["quotes"] = quotes
+    if len(kept) < SUMMARY_MIN_BULLETS:
+        return None, kept, extras, corrections, "fewer than two points left after corrections"
+
+    body_parts = kept + [x for k in ("next", "background") for x in extras.get(k) or []]
+    title, first_problems = None, None
+    for i, raw in enumerate(h for h in headlines if h):
+        cleaned = clean_headline(raw)
+        problems = headline_problems(cleaned, body_parts)
+        if i == 0:
+            first_problems = problems
+        if not problems:
+            title = cleaned
+            if i > 0:
+                corrections.append(f"headline replaced ({'; '.join(first_problems)}): '{clean_headline(headlines[0])}' -> '{cleaned}'")
+            break
+    if title is None:
+        return None, kept, extras, corrections, "no source headline passes the headline checks"
+    return title, kept, extras, corrections, None
+
+
+# ═══ THE EDITOR LANE (at read) ═══════════════════════════════════════════════
+
+_AUTHORITY = set(AUTHORITY_WORDS)
+
+
+def _subjects(sentence, registry):
+    """Named people and organisations in a sentence that are not themselves
+    the authority acting, nor named only as a spokesperson, judge or lawyer."""
+    found = []
+    for r in registry_matches(sentence, registry):
+        found.append(r.get("common_name") or r.get("full_name"))
+    for name in names.person_names(sentence):
+        at = sentence.find(name.split()[0])
+        around = sentence[max(0, at - 45): at + len(name) + 45]
+        if any(role in around for role in ACTOR_ROLE_WORDS):
+            continue
+        found.append(name)
+    for org in names.organisation_names(sentence):
+        if not any(w in _AUTHORITY for w in org.split()):
+            found.append(org)
+    return list(dict.fromkeys(found))
+
+
+# Everyday phrases that contain a trigger word but are not a proceeding.
+_BENIGN = re.compile(r"\b(in charge( of)?|free of charge|charge d'affaires|chargé d'affaires|court of public opinion)\b", re.IGNORECASE)
+
+
+def lane_triggers(texts, registry):
+    """(reason, principal_named) for the editor lane, or (None, False)."""
+    reasons, principal = [], False
+    for text in texts:
+        for sentence in _sentences(_BENIGN.sub(" ", text)):
+            hits = [k for k, pat in EDITOR_LANE_TRIGGERS.items() if re.search(pat, sentence, re.IGNORECASE)]
+            susp = [k for k, pat in SUSPENSION_TRIGGERS.items() if re.search(pat, sentence, re.IGNORECASE)]
+            if not (hits or susp):
+                continue
+            subjects = _subjects(sentence, registry)
+            if susp:
+                subjects_people = [x for x in subjects if not names.organisation_names(x)]
+                if subjects_people:
+                    hits += susp
+            if hits and subjects:
+                reasons.append(f"{', '.join(dict.fromkeys(hits))} — {', '.join(subjects)}")
+                if any(_has(p, sentence) for p in PRINCIPAL_OFFICEHOLDERS):
+                    principal = True
+    return ("editor lane: " + "; ".join(dict.fromkeys(reasons)) if reasons else None), principal
+
+
 def assess_item(raw_title, bullets, articles_text, registry, extra_texts=()):
-    """Route one item from its current text (headline, What happened bullets,
-    and the fuller sections as extra_texts). Returns the cleaned title, the
-    lane (auto / review / senior_review / left_out) and every reason."""
+    """Route one item from its current text. Returns the title, the lane
+    (auto / review / senior_review / left_out) and every reason."""
     bullets = bullets if isinstance(bullets, list) else [bullets]
     title = clean_headline(raw_title)
     text_bullets = [b for b in bullets if isinstance(b, str)]
     extras = [t for t in extra_texts if isinstance(t, str) and t.strip()]
     body_parts = text_bullets + extras
-    body = " ".join(body_parts)
-    full = " ".join([title] + body_parts)
 
     def left_out(reason):
         return {"title": title, "lane": LANE_LEFT_OUT, "reasons": [reason]}
@@ -279,69 +357,47 @@ def assess_item(raw_title, bullets, articles_text, registry, extra_texts=()):
     token = has_forbidden_token([title] + body_parts)
     if token:
         return left_out(f"forbidden word: {token}")
-    conflict = headline_body_conflict(title, body_parts)
-    if conflict:
-        return left_out(f"headline term not in body: {conflict}")
-    ev = evaluate_summary(bullets, articles_text, title=title)
-    flags, gate = list(ev["flags"]), ev["gate"]
-    if extras:
-        # Adverse quotes and the other sections follow the same gate.
-        ev2 = evaluate_summary(extras, articles_text)
-        flags += [f for f in ev2["flags"] if not f.startswith("bullet_count")]
-        gate = max(gate, ev2["gate"], key=_GATE_ORDER.get)
-    if flags:
-        return left_out("cleared check flagged: " + "; ".join(flags))
-    if gate == GATE_SUPPRESS_CLAIM:
-        return left_out("cleared gate: suppress (adverse conduct claim with no public-record anchor)")
+    if len(text_bullets) < SUMMARY_MIN_BULLETS:
+        return left_out("fewer than two points")
+    remaining = [b for b in body_parts if bullet_problem(b, articles_text)]
+    if remaining:
+        return left_out("check failed after corrections: " + bullet_problem(remaining[0], articles_text))
 
-    lane, reasons = gate, []
-    if lane != LANE_AUTO:
-        reasons.append(f"cleared gate: {lane}")
-    matches = registry_matches(full, registry)
-    if POLITICAL_REVIEW_LANE:
-        political = political_trigger(full, matches)
-        if political:
-            reasons.append(political)
-        if any(_has(t, full) for t in COURT_TERMS) and (matches or names.person_names(full) or names.organisation_names(full)):
-            reasons.append("court or adjudication item naming a person or company")
-    reasons += headline_issues(title, body)
-    surnames = surname_issues(title, body_parts, registry)
-    if surnames:
-        reasons.append("named by one name only: " + ", ".join(surnames))
-    reported = [p for p in REPORTED_PHRASES if _has(p, full)]
-    if reported and names_a_person_or_party(full, registry):
-        reasons.append("reported speech without origin: " + ", ".join(reported))
-    commentary = commentary_in(body_parts)
-    if commentary:
-        reasons.append("commentary: " + ", ".join(commentary))
+    lane, reasons = LANE_AUTO, []
+    reason, principal = lane_triggers([title] + body_parts, registry)
+    if reason:
+        reasons.append(reason)
+        lane = LANE_SENIOR_REVIEW if principal else LANE_REVIEW
+    full = _BENIGN.sub(" ", " ".join([title] + body_parts))
     if any(_has(t, full) for t in ADVERSE_CONTEXT_TERMS):
-        protected = [m.get("common_name") or m.get("full_name") for m in matches
+        protected = [m.get("common_name") or m.get("full_name") for m in registry_matches(full, registry)
                      if m.get("publication_status") in PROTECTED_STATUSES]
         if protected:
             reasons.append("adverse item naming a held or private person: " + ", ".join(protected))
-    if lane == LANE_AUTO and reasons:
-        lane = LANE_REVIEW
+            lane = lane if lane == LANE_SENIOR_REVIEW else LANE_REVIEW
     return {"title": title, "lane": lane, "reasons": reasons}
 
 
 # ═══ SUMMARIES AND COUNTS ════════════════════════════════════════════════════
 
 def summary_usable(summary):
-    """A cleared summary exists that may be considered at all."""
+    """A summary the Briefing can correct and route: present, not superseded
+    by a correction, not a failed generation, with text."""
     if not summary or summary.get("superseded") or is_generation_failure(summary):
         return False
-    if summary.get("flags"):
-        return False
-    return summary.get("gate") in (LANE_AUTO,) + LANES_NEEDING_EDITOR
+    return bool([b for b in summary.get("bullets") or [] if isinstance(b, str)])
 
 
 def latest_summary(cluster_id):
-    """The summary the story page serves (app.summarizer.serving_summary): the
-    newest one that passed, unless a correction superseded the newest."""
-    from app.summarizer import serving_summary
-    res = supabase.table("cluster_summaries").select("*").eq("cluster_id", cluster_id) \
-        .order("generated_at", desc=True).limit(20).execute()
-    return serving_summary(res.data or [])
+    """The newest summary the Briefing works from. The Briefing applies its own
+    corrections and editor lane, so the story page's gate does not decide;
+    a correction still wins (a superseded newest row is never replaced by an
+    older one)."""
+    rows = supabase.table("cluster_summaries").select("*").eq("cluster_id", cluster_id) \
+        .order("generated_at", desc=True).limit(20).execute().data or []
+    if rows and rows[0].get("superseded"):
+        return rows[0]
+    return next((r for r in rows if not is_generation_failure(r) and r.get("bullets")), rows[0] if rows else None)
 
 
 def coverage_counts(cluster_id):
@@ -389,20 +445,23 @@ def make_extras(cluster_id):
 
 
 def build_edition(day=None, sample=False, with_extras=True):
-    """Select a day's stories and record them. Idempotent per day.
-    sample=True builds a staff-only sample edition for counsel.
-    with_extras generates the fuller sections (one model call per story)."""
+    """Select a day's stories, apply the automatic corrections and record them.
+    Idempotent per day. sample=True builds a staff-only sample edition for
+    counsel. with_extras generates the fuller sections (one model call per
+    story). Every correction is logged to briefing_edit_log as "system"."""
     day = day or lagos_today()
     if supabase.table("briefing_editions").select("id").eq("date", day.isoformat()).limit(1).execute().data:
         # One edition per date, real or sample (unique date + story).
         return {"status": "already_built", "date": day.isoformat()}
 
     start, end = edition_window(day)
-    rows, skipped = [], {}
+    registry = load_registry()
+    rows, logs, skipped = [], [], {}
+    now = datetime.now(timezone.utc).isoformat()
     for cluster in select_clusters(candidate_clusters(start, end)):
         summary = latest_summary(cluster["id"])
         if not summary_usable(summary):
-            skipped[cluster["slug"]] = "no usable summary (missing, flagged, suppressed or failed)"
+            skipped[cluster["slug"]] = "no usable summary (missing, superseded or failed)"
             continue
         row = {
             "date": day.isoformat(),
@@ -411,15 +470,35 @@ def build_edition(day=None, sample=False, with_extras=True):
             "summary_id": str(summary["id"]),
             "gate": summary.get("gate"),
             "coverage_counts": coverage_counts(cluster["id"]),
-            "counts_as_of": datetime.now(timezone.utc).isoformat(),
+            "counts_as_of": now,
             "is_sample": sample,
         }
         if with_extras:
             row.update(make_extras(cluster["id"]))
-            row["extras_generated_at"] = datetime.now(timezone.utc).isoformat()
+            row["extras_generated_at"] = now
+        headlines = [cluster.get("representative_title")] + [
+            a.get("title") for a in source_articles(cluster["id"]) if a.get("title") != cluster.get("representative_title")]
+        before = {"title": cluster.get("representative_title"), "bullets": summary.get("bullets"),
+                  "sections": row.get("extras")}
+        title, bullets, extras, corrections, out_reason = auto_correct(
+            headlines, summary.get("bullets") or [], row.get("extras"), cluster_articles_text(cluster["id"]), registry)
+        if corrections or out_reason:
+            row.update({"edited_title": title, "edited_bullets": bullets, "edited_extras": extras,
+                        "edited_by": "system", "edited_at": now})
+        if out_reason:
+            row.update({"left_out_by": "system", "left_out_reason": out_reason, "left_out_at": now})
+        logs.append((len(rows), before, {"title": title, "bullets": bullets, "sections": extras},
+                     corrections + ([f"left out: {out_reason}"] if out_reason else [])))
         rows.append(row)
     if rows:
-        supabase.table("briefing_editions").insert(rows).execute()
+        inserted = supabase.table("briefing_editions").insert(rows).execute().data or []
+        entries = [{
+            "edition_id": inserted[i]["id"], "date": day.isoformat(), "cluster_id": rows[i]["cluster_id"],
+            "is_sample": sample, "editor": "system", "action": "auto_correct",
+            "before": before, "after": after, "note": " | ".join(notes),
+        } for i, before, after, notes in logs if notes and i < len(inserted)]
+        if entries:
+            supabase.table("briefing_edit_log").insert(entries).execute()
     for slug, why in skipped.items():
         logger.info(f"[briefing] left out {slug}: {why}")
     return {"status": "built", "date": day.isoformat(), "items": len(rows), "left_out": len(skipped)}

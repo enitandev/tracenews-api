@@ -25,30 +25,31 @@ WHICH STORIES
     imbalance. Items that do not pass are left out, not replaced: a short
     edition is acceptable; the gate is never loosened to fill one.
 
-HOW AN ITEM IS ROUTED (checked on the item's current text, including any
-editor rewrite)
-  Left out:
-    - no usable cleared summary (missing, superseded, failed, flagged, suppressed)
-    - a FORBIDDEN_TOKENS word (whole words) in the headline or body
-    - the headline is empty after cleaning
-    - the headline carries a HEADLINE_BODY_TERMS term the body lacks
-    - the cleared gate, run over headline + body, flags it or suppresses it
-    - an editor left it out
-  Senior review: the cleared gate, run over headline + body, says senior_review.
-  Review (at least):
-    - the cleared gate says review
-    - POLITICAL_REVIEW_LANE: a registry name, a party or a political office
-    - SURNAME CHECK: a person referred to by one name with no earlier full name
-    - REPORTED_PHRASES in an item naming a person or party
-    - COMMENTARY_PHRASES / COMMENTARY_STATEMENT_PATTERN
-    - an adverse item naming an excluded, held or private registry person
-  Auto: none of the above.
-
-  auto publishes. review and senior_review publish only after a named editor
-  ticks every line of EDITOR_CHECKLIST and approves. An approval covers the
-  exact text approved: a rewrite, or a corrected summary, needs a fresh
-  approval. Every editor action (rewrite, leave out, restore, approve) is
-  written to briefing_edit_log.
+HOW AN ITEM IS ROUTED (counsel's ruling of 3 Oct 2026 adopting the owner's
+prompt-first decision; supersedes the earlier routing)
+  Automatic corrections when the edition is built, each written to
+  briefing_edit_log with the actor "system":
+    - Headline: the cleaned source headline if it passes HEADLINE checks,
+      otherwise another outlet's headline for the same story that passes;
+      none passes -> the item is left out of that edition.
+    - A bullet with a banned coverage word, a FORBIDDEN_TOKENS word or an
+      escalation the sources do not support is removed (the bullet only);
+      fewer than two bullets left -> the item is left out.
+    - Quotes not inside quotation marks in a source and attributed there to
+      the named speaker, and unattributed next steps, are removed.
+    - A party or candidacy descriptor on a registry person is replaced from
+      the registry; if the registry has none, the descriptor is dropped.
+  One editor lane:
+    - Review: an EDITOR_LANE_TRIGGERS word (allege, accuse, arrest, charge,
+      arraign, convict, sentence, indict, probe, investigate, sue, court)
+      about a named person or organisation, or a named person suspended or
+      dismissed; or an adverse item about a held or private registry person.
+      "corruption", "fraud", "bribery", "embezzle", "divert" alone never
+      trigger it; nor do harm words (kill, die, injure).
+    - Senior review: the same about a principal office-holder. Needs a second,
+      different named approver from SENIOR_SECOND_APPROVERS; without one the
+      item does not publish.
+  Everything else publishes automatically.
 
 Do NOT edit any string or rule here without counsel's sign-off.
 """
@@ -106,15 +107,7 @@ HEADLINE_BODY_TERMS = (
     ("arraigned", "arraignment", "arraign"),
 )
 
-# ═══ POLITICAL REVIEW LANE (item 2; narrowed by counsel's ruling, 3 Oct) ════
-# For the first 30 days after public launch an item is held for review only
-# when a political figure (registry person or political office) or a party
-# appears together with one of the POLITICAL_TRIGGERS below. Routine
-# announcements and ceremonial messages publish automatically. Court and
-# adjudication items about named persons or companies are held for review
-# (COURT_TERMS). At day 30 counsel receives the change log
-# (scripts/briefing_change_log.py). Ending the lane is counsel's decision.
-POLITICAL_REVIEW_LANE = True
+# ═══ PARTIES (descriptor correction) ═════════════════════════════════════════
 PARTY_NAMES = (
     "APC", "All Progressives Congress", "PDP", "Peoples Democratic Party",
     "LP", "Labour Party", "ADC", "African Democratic Congress", "NNPP",
@@ -124,61 +117,55 @@ PARTY_NAMES = (
     "NDC", "National Democratic Congress", "AA", "Action Alliance",
     "ZLP", "Zenith Labour Party", "Accord", "Accord Party", "APM", "BP", "NRM", "AAC",
 )
-POLITICAL_OFFICES = (
-    "president", "vice president", "vice-president", "presidency",
-    "governor", "deputy governor", "governorship",
-    "senator", "senate", "senate president", "deputy senate president",
-    "house of representatives", "reps", "speaker", "deputy speaker",
-    "lawmaker", "lawmakers", "legislator", "legislators", "national assembly",
-    "state assembly", "house of assembly",
-    "minister", "ministers", "minister of state", "commissioner", "commissioners",
-    "local government chairman", "lg chairman", "council chairman",
-    "party chairman", "national chairman", "campaign council", "campaign manager",
-    "candidate", "candidates", "candidacy", "running mate", "primaries", "primary election",
-    "presidential", "aspirant", "aspirants", "director-general of the campaign",
-)
+CANDIDACY_WORDS = ("candidate", "flagbearer", "flag bearer", "running mate", "aspirant", "presidential hopeful")
 
-# Triggers that hold a political item (counsel's ruling, 3 Oct, item 2).
-POLITICAL_CONTEST_TERMS = (
-    "candidacy", "candidate", "candidates", "campaign", "campaigns", "campaigning",
-    "primaries", "primary election", "running mate", "defect", "defects", "defected",
-    "defecting", "defection", "decamp", "decamped", "decamping",
+# ═══ THE EDITOR LANE (counsel's ruling, 3 Oct, items 3-5) ═══════════════════
+# Each trigger counts only in a sentence that names a person or an
+# organisation that is not itself the authority acting (police, court,
+# agency): "the police arrested Musa Bello" triggers; "the police are
+# investigating the abduction" does not.
+EDITOR_LANE_TRIGGERS = {
+    "allege": r"\balleg(e|es|ed|edly|ing|ation|ations)\b",
+    "accuse": r"\baccus(e|es|ed|ing|ation|ations)\b",
+    "arrest": r"\barrest(s|ed|ing)?\b",
+    "charge": r"\bcharg(e|es|ed|ing)\b",
+    "arraign": r"\barraign(s|ed|ing|ment)?\b",
+    "convict": r"\bconvict(s|ed|ing|ion|ions)?\b",
+    "sentence": r"\bsentenc(e|es|ed|ing)\b",
+    "indict": r"\bindict(s|ed|ing|ment|ments)?\b",
+    "probe": r"\bprob(e|es|ed|ing)\b",
+    "investigate": r"\binvestigat(e|es|ed|ing|ion|ions)\b",
+    "sue": r"\b(sue|sues|sued|suing|lawsuit|lawsuits)\b",
+    "court": r"\bcourts?\b",
+}
+# A named person suspended or dismissed.
+SUSPENSION_TRIGGERS = {
+    "suspend": r"\bsuspen(d|ds|ded|ding|sion)\b",
+    "dismiss": r"\bdismiss(es|ed|ing|al)?\b",
+}
+# Organisations that act (arrest, charge, try, investigate) rather than being
+# the subject. A sentence naming only these does not trigger the lane.
+AUTHORITY_WORDS = (
+    "Police", "Command", "Army", "Navy", "Force", "Court", "Courts", "Tribunal",
+    "Commission", "Agency", "Ministry", "Government", "Service", "Office",
+    "Department", "Directorate", "Corps", "Bureau", "Authority", "Board",
+    "Assembly", "Senate", "House", "Council", "Prison", "Correctional", "EFCC",
+    "ICPC", "NDLEA", "DSS", "NSCDC", "INEC", "Federal", "State", "Judiciary",
 )
-POLITICAL_ENDORSE_TERMS = (
-    "re-elect", "re-elected", "re-election", "reelect", "reelected", "reelection",
-    "endorse", "endorses", "endorsed", "endorsing", "endorsement",
+# Role words just before a name that make the person the actor, not the
+# subject ("police spokesperson Henry Okoye said two suspects were arrested").
+ACTOR_ROLE_WORDS = (
+    "spokesperson", "spokesman", "spokeswoman", "Justice", "Judge", "judge",
+    "Magistrate", "prosecutor", "counsel", "lawyer", "Commissioner of Police",
+    "Inspector-General", "Attorney-General", "Chairman of the EFCC",
+    "Public Relations Officer", "PRO", "Police Public Relations Officer", "PPRO",
+    "Director of Public Prosecutions", "Solicitor-General",
 )
-# One political actor accusing, condemning or criticising another (two or
-# more political actors in the item, plus one of these verbs).
-POLITICAL_ATTACK_TERMS = (
-    "accuse", "accuses", "accused", "accusing", "condemn", "condemns", "condemned",
-    "condemning", "criticise", "criticises", "criticised", "criticising", "criticize",
-    "criticizes", "criticized", "criticizing", "criticism", "slam", "slams", "slammed",
-    "attack", "attacks", "attacked", "fault", "faults", "faulted", "berate", "berated",
-    "tackle", "tackles", "tackled", "rebuke", "rebuked", "blast", "blasts", "blasted",
-    "fires back", "fired back", "lambast", "lambasted", "knocks", "knocked",
-)
-# The health of a named office-holder.
-POLITICAL_HEALTH_TERMS = (
-    "health", "healthy", "ill", "illness", "sick", "sickness", "ailment", "hospital",
-    "hospitalised", "hospitalized", "medical", "medical treatment", "unwell",
-)
-# "Candidates" in an exam context is not political.
-EXAM_CONTEXT_TERMS = (
-    "exam", "exams", "examination", "examinations", "WAEC", "NECO", "JAMB", "UTME",
-    "SSCE", "WASSCE", "NABTEB", "admission", "admissions", "results", "credits",
-)
-# Court and adjudication: an item using one of these and naming a person or
-# company is held for review for the first 30 days.
-COURT_TERMS = (
-    "court", "courts", "judge", "judges", "tribunal", "tribunals", "magistrate",
-    "court ruling", "ruled that", "judgment", "judgement", "verdict", "arraign", "arraigned",
-    "arraignment", "lawsuit", "suit", "adjourned the case", "adjourned the matter",
-    "adjourned the hearing", "adjourned the suit", "convicted", "acquitted",
-    "sentenced", "found guilty", "panel found", "commission found",
-)
+# Senior review: the lane triggers about one of these.
+# (PRINCIPAL_OFFICEHOLDERS in app/storySummaryStrings.py.)
+SENIOR_SECOND_APPROVERS = ("Enitan Bello",)   # counsel's ruling, 3 Oct, 4a
 
-# ═══ HEADLINE CHECKS (counsel's ruling, 3 Oct, item 3) — route to review ════
+# ═══ HEADLINE CHECKS — a headline that fails is replaced by another outlet's ═
 # A number or quantity word in the headline that the body does not support.
 HEADLINE_QUANTITY_WORDS = (
     "scores", "dozens", "hundreds", "thousands", "millions", "many", "several",
@@ -197,7 +184,7 @@ HEADLINE_ATTRIBUTION_PATTERN = (
     r"|[—–-]\s*[A-Z][\w .'’-]+$|^[A-Z][\w .'’-]{1,40}:\s"
 )
 
-# ═══ AUTOMATIC CHECKS (item 3) — each routes the item to review ═════════════
+# ═══ NAME DETECTION (used to tell whether a sentence names someone) ════════
 # (i) SURNAME CHECK: a name of a person (a registry name part, or the last
 #     word of a capitalised full name in the item) used alone before any full
 #     name containing it. Headline names must appear in full in the body.
@@ -244,28 +231,6 @@ SURNAME_CHECK_ORG_WORDS = (
     "Examination", "Examinations", "Council", "Games", "Championship",
     "Officer", "Area", "Battalion", "Brigade", "Division", "Theatre", "Headquarters",
     "Correctional", "Centre", "Prison", "Hospital", "Government",
-)
-
-# (ii) Reported-speech phrases, in an item naming a person or a party.
-REPORTED_PHRASES = (
-    "reportedly", "according to reports", "according to the reports",
-    "according to report", "according to the report",
-    "as stated in the report", "as stated in the reports", "it is reported",
-    "it was reported", "reports say", "reports said", "reports indicate",
-    "reports indicated", "reports from", "match reports",
-)
-
-# (iii) Commentary on what something means.
-COMMENTARY_PHRASES = (
-    "significant development", "marked a", "underscores", "highlights", "signals that",
-    "indicating", "reflecting", "suggesting",
-)
-# A bullet saying what a statement, decision or event "links" or "marks"
-# (counsel's wording). Plain uses such as "marking the 66th anniversary" or
-# "costs linked to security" are reporting, not commentary, and do not match.
-COMMENTARY_STATEMENT_PATTERN = (
-    r"\b(statement|remarks?|comments?|speech|address|decision|move|ruling|development|"
-    r"appointment|which|this|it)\s+(links|linked|marks|marked)\b"
 )
 
 # ═══ FULLER SECTIONS (counsel's ruling, 3 Oct, item 6) ══════════════════════

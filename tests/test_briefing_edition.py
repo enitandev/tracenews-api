@@ -43,128 +43,6 @@ def test_headline_cleaning(raw, clean):
     assert be.clean_headline(raw) == clean
 
 
-def test_headline_allegation_term_missing_from_body_leaves_item_out():
-    a = assess("Alleged forgery: Court fixes date for motion", ["The court fixed 12 October for the motion.", "Lawyers for both parties appeared."])
-    assert a["lane"] == "left_out" and "alleged" in a["reasons"][0]
-    ok = assess("Alleged forgery: Court fixes date", ["The court fixed a date in the alleged forgery case.", "Lawyers appeared."])
-    assert ok["lane"] != "left_out"
-
-
-def test_gate_runs_over_headline_and_body():
-    # Adverse term only in the headline, no anchor: the cleared gate suppresses.
-    assert assess("Minister accused of fraud")["lane"] == "left_out"
-    # Adverse term in the headline with a court anchor in the body: review.
-    a = assess("Fraud trial: judge adjourns case", ["The judge adjourned the fraud case to November.", "The court sat in Abuja."])
-    assert a["lane"] == "review"
-
-
-# Item 2: political review lane (narrowed by counsel's ruling, 3 Oct)
-@pytest.mark.parametrize("title,bullets", [
-    ("Governor opens new school", ["The governor opened a new school in Ibadan on Monday.", "Pupils attended."]),
-    ("NIPOST launches digital postcode", ["The Minister of Communications launched the postcode system.", "It covers all buildings."]),
-    ("Akpabio salutes Nigerians at 66", ["Senate President Godswill Akpabio congratulated Nigerians on the 66th anniversary.", "He urged unity."]),
-    ("NECO releases results", ["NECO said 804,948 candidates obtained five credits.", "The minister of education commended the council."]),
-])
-def test_routine_political_items_publish_automatically(title, bullets):
-    a = assess(title, bullets, registry=REG + [{"full_name": "Godswill Akpabio", "common_name": "Godswill Akpabio", "publication_status": "published"}])
-    assert a["lane"] == "auto", a["reasons"]
-
-
-@pytest.mark.parametrize("title,bullets,trigger", [
-    ("ADC names campaign council", ["Atiku Abubakar named the ADC campaign council on Thursday.", "The council has 40 members."], "campaign"),
-    ("Speaker urges re-election", ["Atiku Abubakar urged members of the ADC to re-elect the party leadership.", "Delegates met in Abuja."], "re-elect"),
-    ("Atiku tackles Tinubu", ["Atiku Abubakar criticised Bola Tinubu over the economy.", "He spoke in Yola."], "criticised"),
-    ("President returns", ["Bola Tinubu said he was healthy and ready to resume duties.", "He landed in Lagos."], "healthy"),
-])
-def test_political_items_with_a_trigger_are_held(title, bullets, trigger):
-    reg = REG + [{"full_name": "Bola Tinubu", "common_name": "Bola Tinubu", "publication_status": "published"}]
-    a = assess(title, bullets, registry=reg)
-    assert a["lane"] == "review"
-    assert any(r.startswith("political review lane") and trigger in r for r in a["reasons"]), a["reasons"]
-
-
-def test_ruled_out_and_ruling_party_are_not_court_items():
-    a = assess("President rules out subsidy", ["President Bola Tinubu ruled out a return to petrol subsidies.", "The ruling party backed him."])
-    assert not any(r.startswith("court or adjudication") for r in a["reasons"])
-
-
-def test_court_items_about_named_people_or_companies_are_held():
-    a = assess("Court fixes hearing date", ["The Federal High Court fixed October 13 for the hearing of Musa Bello's suit.", "Lawyers appeared."])
-    assert any(r.startswith("court or adjudication") for r in a["reasons"])
-    b = assess("Manchester City appeal", ["Manchester City will appeal the verdict of the independent commission.", "The club issued a statement."])
-    assert any(r.startswith("court or adjudication") for r in b["reasons"])
-
-
-# Item 3: headline checks
-@pytest.mark.parametrize("title,bullets,reason", [
-    ("Troops kill scores of terrorists in Adamawa",
-     ["Troops neutralised 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."],
-     "headline quantity word not in body: scores"),
-    ("Mutfwang pardons 134 prisoners",
-     ["Governor Caleb Mutfwang pardoned 130 inmates and commuted four death sentences.", "The governor's office announced it."],
-     "headline number not in body: 134"),
-    ("Gunmen kill 5 in Benue", ["Gunmen killed 5 villagers in Benue, the police said.", "Residents fled."],
-     "unattributed casualty claim in headline"),
-])
-def test_headline_checks_route_to_review(title, bullets, reason):
-    a = assess(title, bullets)
-    assert a["lane"] == "review" and reason in a["reasons"], a["reasons"]
-
-
-def test_attributed_casualty_headline_passes():
-    a = assess("Military says troops killed 16 terrorists in Adamawa",
-               ["Troops killed 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."])
-    assert a["lane"] == "auto", a["reasons"]
-
-
-def test_non_political_neutral_item_is_auto():
-    assert assess("Rail line approved")["lane"] == "auto"
-
-
-# Item 3: automatic checks
-def test_surname_alone_without_full_name_goes_to_review():
-    a = assess("Party names campaign team", ["The party announced its campaign team.", "Shaibu stated that the team would start work on Monday."])
-    assert "named by one name only: Shaibu" in a["reasons"]
-    ok = assess("Party names campaign team", ["Simon Bagaiya Shaibu, the party spokesman, announced the team.", "Shaibu said work starts on Monday."])
-    assert not any(r.startswith("named by one name only") for r in ok["reasons"])
-
-
-def test_headline_name_must_appear_in_full_in_the_body():
-    a = assess("Atiku names Akobundu campaign DG", ["Senator Augustine Akobundu was named Director-General.", "Akobundu will coordinate the campaign."])
-    assert "named by one name only: Atiku" in a["reasons"]
-
-
-def test_organisations_are_not_treated_as_surnames():
-    a = assess("Manchester City appeal ruling", ["Manchester City Football Club filed an appeal.", "City lawyers spoke to the panel."])
-    assert not any(r.startswith("named by one name only") for r in a["reasons"])
-
-
-def test_reported_speech_naming_a_person_goes_to_review():
-    a = assess("Rail line approved", ["Atiku Abubakar opposed the plan, according to reports.", "Construction starts in January."])
-    assert any(r.startswith("reported speech") for r in a["reasons"])
-
-
-@pytest.mark.parametrize("bullet", [
-    "Atiku Abubakar reportedly opposed the plan.",
-    "Guinea-Bissau won 3-0, according to match reports.",
-    "Reports from Ondo indicated partial compliance.",
-])
-def test_bare_reported_phrases_are_caught_by_the_coverage_check(bullet):
-    # Counsel, 3 Oct 2026: added to the coverage checks, so the item is left out.
-    a = assess("Rail line approved", [bullet, "Construction starts in January."])
-    assert a["lane"] == "left_out" and "forbidden_coverage" in a["reasons"][0]
-
-
-@pytest.mark.parametrize("bullet", [
-    "The arraignment marked a significant development.",
-    "The decision underscores the government's priorities.",
-    "The statement links the minister to the contract.",
-])
-def test_commentary_goes_to_review(bullet):
-    a = assess("Rail line approved", [bullet, "Construction starts in January."])
-    assert a["lane"] == "review" and any(r.startswith("commentary") for r in a["reasons"])
-
-
 # Item 5: forbidden words, whole words only
 def test_forbidden_words_are_whole_words_and_percent_is_allowed():
     assert be.has_forbidden_token(["The judge presides over the case."]) is None
@@ -276,9 +154,9 @@ def test_reader_items_carry_no_reviewer_fields_and_no_samples(monkeypatch):
 def test_held_item_publishes_only_with_a_valid_approval(monkeypatch):
     from datetime import date
     db = edition_db()
-    db.tables["cluster_summaries"][0]["bullets"] = ["APC officials met in Abuja to choose a presidential candidate.", "The meeting lasted two hours."]
+    db.tables["cluster_summaries"][0]["bullets"] = ["The police arrested Musa Bello, a contractor, in Abuja on Monday.", "He was released on bail."]
     monkeypatch.setattr(be, "supabase", db)
-    monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "APC officials met in Abuja to choose a presidential candidate.")
+    monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "The police arrested Musa Bello, a contractor, in Abuja. He was released on bail.")
     be._registry.update(at=0, rows=[])
     assert be.edition_items(date(2026, 10, 4)) == []
     db.tables["briefing_editions"][0].update(approved_by="Ada (editorial)", approved_summary_id="s1")
@@ -437,27 +315,6 @@ def test_staff_edition_dates_lists_each_date_once_with_counts(monkeypatch):
     assert out == {"dates": [{"date": "2026-10-04", "is_sample": False, "items": 2}]}
 
 
-# Owner's direction, 3 Oct: checks follow counsel's wording, not wider.
-@pytest.mark.parametrize("bullet", [
-    "Governors pardoned inmates, marking the 66th Independence anniversary.",
-    "The company recorded receivables largely linked to energy security costs.",
-    "Officials marked the day with a parade.",
-])
-def test_plain_reporting_is_not_commentary(bullet):
-    a = assess("Rail line approved", [bullet, "Construction starts in January."])
-    assert not any(r.startswith("commentary") for r in a["reasons"])
-
-
-@pytest.mark.parametrize("bullets", [
-    ["NECO released the 2026 SSCE results on Thursday.", "Candidates in Kano led the results."],
-    ["Five men were held for wearing 'Tinubu Must Go' T-shirts, the police said.", "They were remanded."],
-    ["Nigeria leads the region, according to Prof. Peter A. Okebukola, the committee chairman.", "Rankings rose."],
-])
-def test_acronyms_initials_and_common_nouns_are_not_surnames(bullets):
-    a = assess("Results released", bullets)
-    assert not any(r.startswith("named by one name only") for r in a["reasons"])
-
-
 # Counsel's ruling, 3 Oct, item 5: party checks, second approver, no duplicates
 def test_party_live_needs_source_and_time_for_each_descriptor(monkeypatch):
     from fastapi import HTTPException
@@ -512,11 +369,11 @@ def test_senior_item_publishes_only_with_both_approvals():
 def test_section_rewrite_rejects_a_quote_not_in_the_sources(monkeypatch):
     from fastapi import HTTPException
     br, db, updates = editor_setup(monkeypatch)
-    monkeypatch.setattr(br, "cluster_articles_text", lambda cid: 'Source 1\nSummary: The minister said "work starts in January".')
+    monkeypatch.setattr(br, "cluster_articles_text", lambda cid: 'Source 1\nSummary: Minister Ada Obi said "work starts in January".')
     with pytest.raises(HTTPException) as e:
         br.rewrite_item("e1", br.Rewrite(sections={"quotes": [{"speaker": "Ada Obi", "role": "Minister", "quote": "work starts soon"}]}),
                         authorization="Bearer t")
-    assert e.value.status_code == 422 and "verbatim" in e.value.detail
+    assert e.value.status_code == 422 and "Not saved" in e.value.detail
     br.rewrite_item("e1", br.Rewrite(sections={"quotes": [{"speaker": "Ada Obi", "role": "Minister", "quote": "work starts in January"}]}),
                     authorization="Bearer t")
     assert updates[-1]["edited_extras"]["quotes"][0]["quote"] == "work starts in January"
@@ -568,19 +425,103 @@ def test_sections_follow_the_gate_and_reach_readers_without_reviewer_fields(monk
     assert "extras_dropped" not in item
 
 
-# Places, titles and initials are not one-name references.
+
+
+# ═══ Counsel's ruling adopting the owner's prompt-first decision (3 Oct) ═══
+
+# The single editor lane
 @pytest.mark.parametrize("bullets", [
-    ["Kano State recorded the highest number of candidates, NECO said.", "Oyo and Sokoto followed."],
-    ["Guinea-Bissau beat Nigeria 3-0 in Bissau.", "Guinea-Bissau lead Group L."],
-    ["President Bola Tinubu honoured Chief MKO Abiola in Lagos.", "Abiola won the 1993 election."],
+    ["Peter Obi said he would reinstate the subsidy after curbing corruption.", "He spoke in Lagos."],
+    ["Gunmen abducted 20 corps members in Imo, the police said.", "The Imo State Police Command said it was investigating the abduction."],
+    ["Troops killed 16 terrorists in Adamawa, according to the military.", "Three soldiers died."],
+    ["The ADC named Atiku Abubakar its presidential candidate.", "The party's campaign council has 40 members."],
+    ["Police spokesperson Henry Okoye said two suspects were arrested.", "Investigations continue."],
 ])
-def test_places_and_initials_are_not_flagged_as_one_name(bullets):
-    reg = REG + [{"full_name": "Aminu Ado Bayero", "common_name": "Emir of Kano", "publication_status": "pending_review"},
-                 {"full_name": "Lamidi Adeyemi", "common_name": "Alaafin of Oyo", "publication_status": "pending_review"}]
-    a = assess("Results and messages", bullets, registry=reg)
-    assert not any(r.startswith("named by one name only") for r in a["reasons"]), a["reasons"]
+def test_routine_items_and_unnamed_proceedings_publish(bullets):
+    a = assess("Story", bullets)
+    assert a["lane"] == "auto", a["reasons"]
 
 
-def test_a_legislature_adjourning_is_not_a_court_item():
-    a = assess("House extends budget", ["The House of Representatives adjourned plenary after passing the bill.", "Speaker Tajudeen Abbas presided."])
-    assert not any(r.startswith("court or adjudication") for r in a["reasons"])
+@pytest.mark.parametrize("bullets,term", [
+    (["The police arrested Musa Bello, a contractor, in Abuja.", "He was released on bail."], "arrest"),
+    (["The EFCC charged Musa Bello with fraud before a court in Abuja.", "He pleaded not guilty."], "charge"),
+    (["Manchester City Football Club was charged by the Premier League.", "The club denied wrongdoing."], "charge"),
+    (["The council suspended Musa Bello, its treasurer, on Monday.", "He has not commented."], "suspend"),
+])
+def test_accusations_and_proceedings_about_named_subjects_go_to_the_editor(bullets, term):
+    a = assess("Story", bullets)
+    assert a["lane"] == "review" and term in a["reasons"][0], a["reasons"]
+
+
+def test_a_principal_office_holder_makes_it_senior_review():
+    a = assess("Suit", ["Atiku Abubakar sued President Bola Tinubu at the Federal High Court.", "The hearing is on Monday."],
+               registry=REG + [{"full_name": "Bola Tinubu", "common_name": "Bola Tinubu", "publication_status": "published"}])
+    assert a["lane"] == "senior_review"
+
+
+# Automatic corrections at build
+def test_a_failing_headline_is_replaced_by_another_outlets_headline():
+    title, bullets, extras, notes, out = be.auto_correct(
+        ["BREAKING: Troops kill scores of terrorists in Adamawa", "Military says troops killed 16 terrorists in Adamawa"],
+        ["Troops killed 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."], {}, "x", REG)
+    assert title == "Military says troops killed 16 terrorists in Adamawa" and out is None
+    assert notes and notes[0].startswith("headline replaced")
+
+
+def test_no_passing_headline_leaves_the_item_out():
+    src = "Governor Caleb Mutfwang pardoned 130 inmates and commuted four death sentences."
+    title, _, _, _, out = be.auto_correct(["Mutfwang pardons 134 prisoners"],
+                                          ["Governor Caleb Mutfwang pardoned 130 inmates.", "Four death sentences were commuted."], {}, src, REG)
+    assert title is None and out == "no source headline passes the headline checks"
+
+
+def test_a_bullet_with_a_coverage_word_is_removed_not_the_item():
+    title, bullets, _, notes, out = be.auto_correct(
+        ["Workers begin warning strike"],
+        ["Workers began a three-day warning strike on Friday.", "Federal workers reportedly joined in Niger State.",
+         "The union cited the minimum wage."], {}, "Workers began a three-day warning strike. The union cited the minimum wage.", REG)
+    assert out is None and len(bullets) == 2 and any("reportedly" in n for n in notes)
+
+
+def test_fewer_than_two_points_after_corrections_leaves_the_item_out():
+    _, _, _, _, out = be.auto_correct(["Strike"], ["Workers reportedly joined.", "Reports from Ondo indicated compliance."], {}, "x", REG)
+    assert out == "fewer than two points left after corrections"
+
+
+def test_party_descriptor_is_replaced_from_the_registry_or_dropped():
+    reg = [{"full_name": "Atiku Abubakar", "common_name": "Atiku Abubakar", "publication_status": "published",
+            "party": "ADC", "current_position": "Presidential candidate"},
+           {"full_name": "Peter Obi", "common_name": "Peter Obi", "publication_status": "published", "party": None, "current_position": None}]
+    text, notes = be.correct_descriptors("Atiku Abubakar, PDP presidential candidate, spoke in Yola.", reg)
+    assert text == "Atiku Abubakar, Presidential candidate, ADC, spoke in Yola." and "replaced" in notes[0]
+    text, notes = be.correct_descriptors("Peter Obi, the NDC candidate, spoke in Onitsha.", reg)
+    assert text == "Peter Obi spoke in Onitsha." and "dropped" in notes[0]
+    text, notes = be.correct_descriptors("Atiku Abubakar, a former vice president, spoke in Yola.", reg)
+    assert notes == []
+
+
+def test_a_reporters_sentence_is_not_a_quote():
+    from app.briefing_extras import check_extras
+    src = ('Source 1\nSummary: The Special Criminal Court, presided over by Justice Terry Aigbona, handed down the sentence '
+           'after a judgment that lasted more than three hours. "Justice has been served," Attorney-General Roland Otaru said.')
+    kept, dropped = check_extras({"quotes": [
+        {"speaker": "Terry Aigbona", "role": "Judge", "quote": "The Special Criminal Court, presided over by Justice Terry Aigbona, handed down the sentence"},
+        {"speaker": "Roland Otaru", "role": "Attorney-General of Edo State", "quote": "Justice has been served,"}]}, src)
+    assert [q["speaker"] for q in kept["quotes"]] == ["Roland Otaru"]
+    assert "quotation marks" in dropped[0]
+
+
+def test_only_the_named_second_approver_can_give_the_second_approval(monkeypatch):
+    from fastapi import HTTPException
+    br, db, updates = editor_setup(monkeypatch, lane="senior_review", actor="Kunle Ade (editorial)")
+    approved_row(db)
+    with pytest.raises(HTTPException) as e:
+        br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
+    assert e.value.status_code == 403 and "Enitan Bello" in e.value.detail
+
+
+def test_everyday_charge_phrases_and_roles_after_a_name_do_not_trigger_the_lane():
+    a = assess("Refinery", ["Aliko Dangote, who is in charge of the group, opened the refinery.", "Entry was free of charge."])
+    assert a["lane"] == "auto", a["reasons"]
+    b = assess("Abduction", ["Henry Okoye, Police Public Relations Officer, said two suspects were arrested.", "Search continues."])
+    assert b["lane"] == "auto", b["reasons"]
