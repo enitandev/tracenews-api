@@ -61,10 +61,30 @@ class TestFlags:
         assert "forbidden_coverage: outlets" in r["flags"] and "forbidden_coverage: downplayed" in r["flags"]
         assert r["published"] is False
 
-    def test_bullet_count_outside_two_to_five_blocks_publication(self):
+    def test_bullet_count_outside_two_to_eight_blocks_publication(self):
+        # Counsel, 3 Oct 2026: up to 8 points.
         assert "bullet_count: 1" in evaluate(["Only one."])["flags"]
-        assert "bullet_count: 6" in evaluate([f"Point {i}." for i in range(6)])["flags"]
+        assert not any(f.startswith("bullet_count") for f in evaluate([f"Point {i}." for i in range(8)])["flags"])
+        assert "bullet_count: 9" in evaluate([f"Point {i}." for i in range(9)])["flags"]
         assert evaluate(["Only one."])["published"] is False
+
+    # Counsel, 3 Oct 2026: harm events are split from conduct.
+    def test_harm_event_alone_with_no_named_person_publishes(self):
+        r = evaluate(["Troops killed 16 insurgents in Adamawa, according to a military statement.",
+                      "Three soldiers died in the attacks, the army said."])
+        assert r["gate"] == "auto" and r["published"] is True
+
+    def test_harm_event_never_suppresses(self):
+        r = evaluate(["A flood killed 12 people in Mokwa.", "Rescue work continued."])
+        assert r["gate"] != "suppress"
+
+    def test_harm_event_naming_a_person_goes_to_review(self):
+        r = evaluate(["Gunmen killed Musa Bello, a farmer, in Kaduna, the police said.", "Residents fled."])
+        assert r["gate"] == "review"
+
+    def test_harm_event_with_a_conduct_term_keeps_the_conduct_treatment(self):
+        r = evaluate(["Soldiers killed 4 people; the army alleged the protesters were armed.", "Residents fled."])
+        assert r["gate"] == "suppress"
 
     def test_non_text_bullet_is_flagged_not_coerced(self):
         r = evaluate([{"text": "The Senate met."}, "The vote passed."])

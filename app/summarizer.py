@@ -10,8 +10,11 @@ from app.storySummaryStrings import (
     SUMMARY_MAX_TOKENS,
     SUMMARY_SYSTEM_PROMPT,
     SUMMARY_USER_PROMPT,
-    ADVERSE_CONTEXT_TERMS,
+    CONDUCT_TERMS,
+    HARM_EVENT_TERMS,
     PUBLIC_RECORD_ANCHORS,
+    SUMMARY_MAX_BULLETS,
+    SUMMARY_MIN_BULLETS,
     GATE_AUTO_PUBLISH,
     GATE_HUMAN_REVIEW,
     GATE_SUPPRESS_CLAIM,
@@ -24,6 +27,18 @@ from app.storySummaryStrings import (
 logger = logging.getLogger("summarizer")
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
+def harm_names_a_person(texts) -> bool:
+    """A named person in the same sentence as a harm-event term: the person
+    may be its subject or alleged cause, so a human reads it."""
+    from app.names import person_names
+    for text in texts:
+        for sentence in re.split(r"(?<=[.!?])\s+", text):
+            low = sentence.lower()
+            if any(re.search(r"\b" + re.escape(t) + r"\b", low) for t in HARM_EVENT_TERMS) and person_names(sentence):
+                return True
+    return False
+
+
 def evaluate_summary(bullets, articles_text: str, title: str = None) -> dict:
     """
     Decide whether generated bullets may publish. This is the legal-risk
@@ -32,11 +47,14 @@ def evaluate_summary(bullets, articles_text: str, title: str = None) -> dict:
     - escalation: a criminal-process term (charged, convicted, ...) in the
       bullets that no source article used -> flagged
     - forbidden coverage language (outlet, coverage, downplayed, ...) -> flagged
-    - fewer than 2 or more than 5 bullets -> flagged
-    - an adverse-context term (alleged, fraud, ...) routes the gate:
+    - fewer than SUMMARY_MIN_BULLETS or more than SUMMARY_MAX_BULLETS -> flagged
+    - a CONDUCT term (alleged, fraud, arrested, ...) routes the gate:
         with a principal officeholder named -> senior_review
         else with a public-record anchor (court, filed, ...) -> review
         else -> suppress
+    - a HARM_EVENT term (killed, died, injured, ...) with no CONDUCT term
+      never suppresses (counsel, 3 Oct 2026): review if a named person is in
+      the same sentence as the harm (its subject or alleged cause), else auto
       no adverse term -> auto
 
     Publishes only when the gate is auto AND nothing was flagged.
@@ -72,21 +90,24 @@ def evaluate_summary(bullets, articles_text: str, title: str = None) -> dict:
             flags.append(f"forbidden_coverage: {term}")
 
     # c) Length check
-    if len(bullets) < 2 or len(bullets) > 5:
+    if len(bullets) < SUMMARY_MIN_BULLETS or len(bullets) > SUMMARY_MAX_BULLETS:
         flags.append(f"bullet_count: {len(bullets)}")
 
     # Gating
-    has_adverse = any(mentions(t, combined_bullets_lower) for t in ADVERSE_CONTEXT_TERMS)
+    has_conduct = any(mentions(t, combined_bullets_lower) for t in CONDUCT_TERMS)
+    has_harm = any(mentions(t, combined_bullets_lower) for t in HARM_EVENT_TERMS)
     has_anchor = any(mentions(t, combined_bullets_lower) for t in PUBLIC_RECORD_ANCHORS)
     has_principal = any(mentions(t, combined_bullets_lower) for t in PRINCIPAL_OFFICEHOLDERS)
 
-    if has_adverse:
+    if has_conduct:
         if has_principal:
             gate = GATE_SENIOR_REVIEW
         elif has_anchor:
             gate = GATE_HUMAN_REVIEW
         else:
             gate = GATE_SUPPRESS_CLAIM
+    elif has_harm:
+        gate = GATE_HUMAN_REVIEW if harm_names_a_person(([title] if isinstance(title, str) else []) + text_bullets) else GATE_AUTO_PUBLISH
     else:
         gate = GATE_AUTO_PUBLISH
 

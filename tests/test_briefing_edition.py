@@ -58,12 +58,63 @@ def test_gate_runs_over_headline_and_body():
     assert a["lane"] == "review"
 
 
-# Item 2: political review lane
-@pytest.mark.parametrize("title", ["Atiku Abubakar visits Kano", "APC holds rally in Ibadan", "Governor opens new school"])
-def test_political_items_are_never_auto(title):
-    a = assess(title, ["Atiku Abubakar visited Kano on Tuesday." if "Atiku" in title else "The event took place on Tuesday.", "Residents attended."])
+# Item 2: political review lane (narrowed by counsel's ruling, 3 Oct)
+@pytest.mark.parametrize("title,bullets", [
+    ("Governor opens new school", ["The governor opened a new school in Ibadan on Monday.", "Pupils attended."]),
+    ("NIPOST launches digital postcode", ["The Minister of Communications launched the postcode system.", "It covers all buildings."]),
+    ("Akpabio salutes Nigerians at 66", ["Senate President Godswill Akpabio congratulated Nigerians on the 66th anniversary.", "He urged unity."]),
+    ("NECO releases results", ["NECO said 804,948 candidates obtained five credits.", "The minister of education commended the council."]),
+])
+def test_routine_political_items_publish_automatically(title, bullets):
+    a = assess(title, bullets, registry=REG + [{"full_name": "Godswill Akpabio", "common_name": "Godswill Akpabio", "publication_status": "published"}])
+    assert a["lane"] == "auto", a["reasons"]
+
+
+@pytest.mark.parametrize("title,bullets,trigger", [
+    ("ADC names campaign council", ["Atiku Abubakar named the ADC campaign council on Thursday.", "The council has 40 members."], "campaign"),
+    ("Speaker urges re-election", ["Atiku Abubakar urged members of the ADC to re-elect the party leadership.", "Delegates met in Abuja."], "re-elect"),
+    ("Atiku tackles Tinubu", ["Atiku Abubakar criticised Bola Tinubu over the economy.", "He spoke in Yola."], "criticised"),
+    ("President returns", ["Bola Tinubu said he was healthy and ready to resume duties.", "He landed in Lagos."], "healthy"),
+])
+def test_political_items_with_a_trigger_are_held(title, bullets, trigger):
+    reg = REG + [{"full_name": "Bola Tinubu", "common_name": "Bola Tinubu", "publication_status": "published"}]
+    a = assess(title, bullets, registry=reg)
     assert a["lane"] == "review"
-    assert any(r.startswith("political review lane") for r in a["reasons"])
+    assert any(r.startswith("political review lane") and trigger in r for r in a["reasons"]), a["reasons"]
+
+
+def test_ruled_out_and_ruling_party_are_not_court_items():
+    a = assess("President rules out subsidy", ["President Bola Tinubu ruled out a return to petrol subsidies.", "The ruling party backed him."])
+    assert not any(r.startswith("court or adjudication") for r in a["reasons"])
+
+
+def test_court_items_about_named_people_or_companies_are_held():
+    a = assess("Court fixes hearing date", ["The Federal High Court fixed October 13 for the hearing of Musa Bello's suit.", "Lawyers appeared."])
+    assert any(r.startswith("court or adjudication") for r in a["reasons"])
+    b = assess("Manchester City appeal", ["Manchester City will appeal the verdict of the independent commission.", "The club issued a statement."])
+    assert any(r.startswith("court or adjudication") for r in b["reasons"])
+
+
+# Item 3: headline checks
+@pytest.mark.parametrize("title,bullets,reason", [
+    ("Troops kill scores of terrorists in Adamawa",
+     ["Troops neutralised 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."],
+     "headline quantity word not in body: scores"),
+    ("Mutfwang pardons 134 prisoners",
+     ["Governor Caleb Mutfwang pardoned 130 inmates and commuted four death sentences.", "The governor's office announced it."],
+     "headline number not in body: 134"),
+    ("Gunmen kill 5 in Benue", ["Gunmen killed 5 villagers in Benue, the police said.", "Residents fled."],
+     "unattributed casualty claim in headline"),
+])
+def test_headline_checks_route_to_review(title, bullets, reason):
+    a = assess(title, bullets)
+    assert a["lane"] == "review" and reason in a["reasons"], a["reasons"]
+
+
+def test_attributed_casualty_headline_passes():
+    a = assess("Military says troops killed 16 terrorists in Adamawa",
+               ["Troops killed 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."])
+    assert a["lane"] == "auto", a["reasons"]
 
 
 def test_non_political_neutral_item_is_auto():
@@ -89,8 +140,19 @@ def test_organisations_are_not_treated_as_surnames():
 
 
 def test_reported_speech_naming_a_person_goes_to_review():
-    a = assess("Rail line approved", ["Atiku Abubakar reportedly opposed the plan.", "Construction starts in January."])
+    a = assess("Rail line approved", ["Atiku Abubakar opposed the plan, according to reports.", "Construction starts in January."])
     assert any(r.startswith("reported speech") for r in a["reasons"])
+
+
+@pytest.mark.parametrize("bullet", [
+    "Atiku Abubakar reportedly opposed the plan.",
+    "Guinea-Bissau won 3-0, according to match reports.",
+    "Reports from Ondo indicated partial compliance.",
+])
+def test_bare_reported_phrases_are_caught_by_the_coverage_check(bullet):
+    # Counsel, 3 Oct 2026: added to the coverage checks, so the item is left out.
+    a = assess("Rail line approved", [bullet, "Construction starts in January."])
+    assert a["lane"] == "left_out" and "forbidden_coverage" in a["reasons"][0]
 
 
 @pytest.mark.parametrize("bullet", [
@@ -214,9 +276,9 @@ def test_reader_items_carry_no_reviewer_fields_and_no_samples(monkeypatch):
 def test_held_item_publishes_only_with_a_valid_approval(monkeypatch):
     from datetime import date
     db = edition_db()
-    db.tables["cluster_summaries"][0]["bullets"] = ["APC officials met in Abuja on Monday.", "The meeting lasted two hours."]
+    db.tables["cluster_summaries"][0]["bullets"] = ["APC officials met in Abuja to choose a presidential candidate.", "The meeting lasted two hours."]
     monkeypatch.setattr(be, "supabase", db)
-    monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "APC officials met in Abuja.")
+    monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "APC officials met in Abuja to choose a presidential candidate.")
     be._registry.update(at=0, rows=[])
     assert be.edition_items(date(2026, 10, 4)) == []
     db.tables["briefing_editions"][0].update(approved_by="Ada (editorial)", approved_summary_id="s1")

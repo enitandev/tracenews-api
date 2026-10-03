@@ -106,10 +106,13 @@ HEADLINE_BODY_TERMS = (
     ("arraigned", "arraignment", "arraign"),
 )
 
-# ═══ POLITICAL REVIEW LANE (item 2) ═════════════════════════════════════════
-# For the first 30 days after public launch every item naming a person in the
-# politician registry, a party or a political office is review at minimum,
-# never auto. At day 30 counsel receives the change log
+# ═══ POLITICAL REVIEW LANE (item 2; narrowed by counsel's ruling, 3 Oct) ════
+# For the first 30 days after public launch an item is held for review only
+# when a political figure (registry person or political office) or a party
+# appears together with one of the POLITICAL_TRIGGERS below. Routine
+# announcements and ceremonial messages publish automatically. Court and
+# adjudication items about named persons or companies are held for review
+# (COURT_TERMS). At day 30 counsel receives the change log
 # (scripts/briefing_change_log.py). Ending the lane is counsel's decision.
 POLITICAL_REVIEW_LANE = True
 PARTY_NAMES = (
@@ -133,6 +136,64 @@ POLITICAL_OFFICES = (
     "party chairman", "national chairman", "campaign council", "campaign manager",
     "candidate", "candidates", "candidacy", "running mate", "primaries", "primary election",
     "presidential", "aspirant", "aspirants", "director-general of the campaign",
+)
+
+# Triggers that hold a political item (counsel's ruling, 3 Oct, item 2).
+POLITICAL_CONTEST_TERMS = (
+    "candidacy", "candidate", "candidates", "campaign", "campaigns", "campaigning",
+    "primaries", "primary election", "running mate", "defect", "defects", "defected",
+    "defecting", "defection", "decamp", "decamped", "decamping",
+)
+POLITICAL_ENDORSE_TERMS = (
+    "re-elect", "re-elected", "re-election", "reelect", "reelected", "reelection",
+    "endorse", "endorses", "endorsed", "endorsing", "endorsement",
+)
+# One political actor accusing, condemning or criticising another (two or
+# more political actors in the item, plus one of these verbs).
+POLITICAL_ATTACK_TERMS = (
+    "accuse", "accuses", "accused", "accusing", "condemn", "condemns", "condemned",
+    "condemning", "criticise", "criticises", "criticised", "criticising", "criticize",
+    "criticizes", "criticized", "criticizing", "criticism", "slam", "slams", "slammed",
+    "attack", "attacks", "attacked", "fault", "faults", "faulted", "berate", "berated",
+    "tackle", "tackles", "tackled", "rebuke", "rebuked", "blast", "blasts", "blasted",
+    "fires back", "fired back", "lambast", "lambasted", "knocks", "knocked",
+)
+# The health of a named office-holder.
+POLITICAL_HEALTH_TERMS = (
+    "health", "healthy", "ill", "illness", "sick", "sickness", "ailment", "hospital",
+    "hospitalised", "hospitalized", "medical", "medical treatment", "unwell",
+)
+# "Candidates" in an exam context is not political.
+EXAM_CONTEXT_TERMS = (
+    "exam", "exams", "examination", "examinations", "WAEC", "NECO", "JAMB", "UTME",
+    "SSCE", "WASSCE", "NABTEB", "admission", "admissions", "results", "credits",
+)
+# Court and adjudication: an item using one of these and naming a person or
+# company is held for review for the first 30 days.
+COURT_TERMS = (
+    "court", "courts", "judge", "judges", "tribunal", "tribunals", "magistrate",
+    "court ruling", "ruled that", "judgment", "judgement", "verdict", "arraign", "arraigned",
+    "arraignment", "lawsuit", "suit", "adjourned", "convicted", "acquitted",
+    "sentenced", "found guilty", "panel found", "commission found",
+)
+
+# ═══ HEADLINE CHECKS (counsel's ruling, 3 Oct, item 3) — route to review ════
+# A number or quantity word in the headline that the body does not support.
+HEADLINE_QUANTITY_WORDS = (
+    "scores", "dozens", "hundreds", "thousands", "millions", "many", "several",
+    "numerous", "countless", "mass",
+)
+# A flat killing or casualty claim in the headline with no attribution.
+HEADLINE_CASUALTY_TERMS = (
+    "kill", "kills", "killed", "die", "dies", "died", "dead", "death", "deaths",
+    "casualties", "massacre", "massacred", "slaughter", "slaughtered", "slain",
+    "neutralise", "neutralised", "neutralize", "neutralized",
+)
+# Any of these in the headline counts as attribution ("Military says...",
+# "... — Police", "Police: ...").
+HEADLINE_ATTRIBUTION_PATTERN = (
+    r"\b(says?|said|claims?|claimed|according to|confirms?|confirmed|announces?|announced|reports?)\b"
+    r"|[—–-]\s*[A-Z][\w .'’-]+$|^[A-Z][\w .'’-]{1,40}:\s"
 )
 
 # ═══ AUTOMATIC CHECKS (item 3) — each routes the item to review ═════════════
@@ -172,6 +233,8 @@ SURNAME_CHECK_ORG_WORDS = (
     "Network", "Movement", "Front", "Alliance", "Coalition", "Committee",
     "Institute", "Polytechnic", "College", "Academy", "Prize", "Awards", "Cup",
     "Examination", "Examinations", "Council", "Games", "Championship",
+    "Officer", "Area", "Battalion", "Brigade", "Division", "Theatre", "Headquarters",
+    "Correctional", "Centre", "Prison", "Hospital", "Government",
 )
 
 # (ii) Reported-speech phrases, in an item naming a person or a party.
@@ -180,11 +243,13 @@ REPORTED_PHRASES = (
     "according to report", "according to the report",
     "as stated in the report", "as stated in the reports", "it is reported",
     "it was reported", "reports say", "reports said", "reports indicate",
+    "reports indicated", "reports from", "match reports",
 )
 
 # (iii) Commentary on what something means.
 COMMENTARY_PHRASES = (
     "significant development", "marked a", "underscores", "highlights", "signals that",
+    "indicating", "reflecting", "suggesting",
 )
 # A bullet saying what a statement, decision or event "links" or "marks"
 # (counsel's wording). Plain uses such as "marking the 66th anniversary" or
@@ -202,7 +267,7 @@ EDITOR_CHECKLIST = (
     ("conduct_origin", "Every claim about conduct has an origin (court, agency, named person)."),
     ("no_reportedly", "No \"reportedly\" or \"according to reports\" without an origin."),
     ("headline", "The headline matches the body and has no prefix words."),
-    ("party_live", "Every candidacy or party descriptor was checked live today."),
+    ("party_live", "Every candidacy or party descriptor was checked live today (source and time entered for each below)."),
     ("no_commentary", "No commentary words."),
     ("no_protected_adverse", "No held or private person appears in an adverse context."),
 )

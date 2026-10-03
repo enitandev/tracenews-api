@@ -14,12 +14,15 @@ import time as _time
 from datetime import datetime, time, timedelta, timezone
 
 from app.briefingStrings import (
-    COMMENTARY_PHRASES, COMMENTARY_STATEMENT_PATTERN, EDITION_CUTOFF_HOUR_LAGOS, FORBIDDEN_TOKENS,
-    HEADLINE_BODY_TERMS, HEADLINE_PREFIXES, HEADLINE_TRAILING_PHRASES, LANE_AUTO,
-    LANE_LEFT_OUT, LANE_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES,
-    MIN_DISTINCT_OUTLETS, PARTY_NAMES, POLITICAL_OFFICES, POLITICAL_REVIEW_LANE,
-    REPORTED_PHRASES, SURNAME_CHECK_IGNORE, SURNAME_CHECK_ORG_WORDS, WINDOW_HOURS,
+    COMMENTARY_PHRASES, COMMENTARY_STATEMENT_PATTERN, COURT_TERMS, EDITION_CUTOFF_HOUR_LAGOS,
+    EXAM_CONTEXT_TERMS, FORBIDDEN_TOKENS, HEADLINE_ATTRIBUTION_PATTERN, HEADLINE_BODY_TERMS,
+    HEADLINE_CASUALTY_TERMS, HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS, HEADLINE_TRAILING_PHRASES,
+    LANE_AUTO, LANE_LEFT_OUT, LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES,
+    MIN_DISTINCT_OUTLETS, PARTY_NAMES, POLITICAL_ATTACK_TERMS, POLITICAL_CONTEST_TERMS,
+    POLITICAL_ENDORSE_TERMS, POLITICAL_HEALTH_TERMS, POLITICAL_OFFICES, POLITICAL_REVIEW_LANE,
+    REPORTED_PHRASES, WINDOW_HOURS,
 )
+from app import names
 from app.db import supabase
 from app.storySummaryStrings import ADVERSE_CONTEXT_TERMS, GATE_SUPPRESS_CLAIM
 from app.summarizer import cluster_articles_text, evaluate_summary, is_generation_failure
@@ -161,34 +164,10 @@ def offices_in(text):
 
 
 # Capitalised runs; an initial such as "A." stays inside the run ("Peter A. Okebukola").
-_CAP_RUN = re.compile(r"[A-Z][\w'’\-]*\.?(?:\s+[A-Z][\w'’\-]*\.?)*")
-_IGNORE = set(SURNAME_CHECK_IGNORE)
-_ORG = set(SURNAME_CHECK_ORG_WORDS)
-
-
-def _name_runs(text):
-    """Capitalised runs of words, each as (position, [name words]) with title
-    words dropped and possessives stripped."""
-    runs = []
-    for m in _CAP_RUN.finditer(text):
-        words = [re.sub(r"(['’]s|['’])$", "", w.rstrip(".")) for w in m.group(0).split()]
-        words = [w for w in words if _is_name_word(w)]
-        if words:
-            runs.append((m.start(), words))
-    return runs
-
-
-def _is_name_word(w):
-    """A word that can be part of a person's name: not a title or common
-    capitalised word, not an acronym (SSCE, ADC), not an initial, no digits,
-    and not a hyphenated common noun ("T-shirts")."""
-    if not w or w in _IGNORE or len(w) < 2:
-        return False
-    if w.isupper() or any(ch.isdigit() for ch in w):
-        return False
-    if "-" in w and any(part[:1].islower() for part in w.split("-")[1:]):
-        return False
-    return True
+_IGNORE = names.IGNORE
+_ORG = names.ORG
+_name_runs = names.name_runs
+_is_name_word = names.is_name_word
 
 
 def _registry_words(registry):
@@ -235,46 +214,102 @@ def commentary_in(bullets):
     return found
 
 
-def assess_item(raw_title, bullets, articles_text, registry):
-    """Route one item from its current text. Returns the cleaned title, the
+_GATE_ORDER = {LANE_AUTO: 0, LANE_REVIEW: 1, LANE_SENIOR_REVIEW: 2, GATE_SUPPRESS_CLAIM: 3}
+
+
+def political_trigger(full, matches):
+    """Counsel's ruling of 3 Oct, item 2: a political figure or party together
+    with a trigger. Returns a reason, or None for a routine item."""
+    people = [m.get("common_name") or m.get("full_name") for m in matches]
+    parties = parties_in(full)
+    offices = offices_in(full)
+    if not (people or parties or offices):
+        return None
+    exam = any(_has(t, full, case_sensitive=t.isupper()) for t in EXAM_CONTEXT_TERMS)
+    found = [t for t in POLITICAL_CONTEST_TERMS
+             if _has(t, full) and not (exam and t in ("candidate", "candidates"))]
+    found += [t for t in POLITICAL_ENDORSE_TERMS if _has(t, full)]
+    party_count = len({p for p in parties if p.isupper()}) or (1 if parties else 0)
+    if len(set(people)) + party_count >= 2:
+        found += [t for t in POLITICAL_ATTACK_TERMS if _has(t, full)]
+    if people or any(_has(o, full) for o in ("president", "vice president", "governor", "senate president", "speaker")):
+        found += [t for t in POLITICAL_HEALTH_TERMS if _has(t, full)]
+    if not found:
+        return None
+    actors = list(dict.fromkeys(people + parties + offices))
+    return "political review lane: " + ", ".join(actors) + " — " + ", ".join(dict.fromkeys(found))
+
+
+def headline_issues(title, body):
+    """Counsel's ruling of 3 Oct, item 3: headline numbers or quantity words
+    the body does not support, and unattributed casualty claims."""
+    issues = []
+    num = re.compile(r"\d+(?:[.,]\d+)*")
+    body_nums = {n.replace(",", "") for n in num.findall(body)}
+    missing = [n for n in num.findall(title) if n.replace(",", "") not in body_nums]
+    if missing:
+        issues.append("headline number not in body: " + ", ".join(missing))
+    words = [w for w in HEADLINE_QUANTITY_WORDS if _has(w, title) and not _has(w, body)]
+    if words:
+        issues.append("headline quantity word not in body: " + ", ".join(words))
+    if any(_has(t, title) for t in HEADLINE_CASUALTY_TERMS) and not re.search(HEADLINE_ATTRIBUTION_PATTERN, title, re.IGNORECASE):
+        issues.append("unattributed casualty claim in headline")
+    return issues
+
+
+def assess_item(raw_title, bullets, articles_text, registry, extra_texts=()):
+    """Route one item from its current text (headline, What happened bullets,
+    and the fuller sections as extra_texts). Returns the cleaned title, the
     lane (auto / review / senior_review / left_out) and every reason."""
     bullets = bullets if isinstance(bullets, list) else [bullets]
     title = clean_headline(raw_title)
     text_bullets = [b for b in bullets if isinstance(b, str)]
-    full = " ".join([title] + text_bullets)
+    extras = [t for t in extra_texts if isinstance(t, str) and t.strip()]
+    body_parts = text_bullets + extras
+    body = " ".join(body_parts)
+    full = " ".join([title] + body_parts)
 
     def left_out(reason):
         return {"title": title, "lane": LANE_LEFT_OUT, "reasons": [reason]}
 
     if not title:
         return left_out("headline empty after cleaning")
-    token = has_forbidden_token([title] + text_bullets)
+    token = has_forbidden_token([title] + body_parts)
     if token:
         return left_out(f"forbidden word: {token}")
-    conflict = headline_body_conflict(title, text_bullets)
+    conflict = headline_body_conflict(title, body_parts)
     if conflict:
         return left_out(f"headline term not in body: {conflict}")
     ev = evaluate_summary(bullets, articles_text, title=title)
-    if ev["flags"]:
-        return left_out("cleared check flagged: " + "; ".join(ev["flags"]))
-    if ev["gate"] == GATE_SUPPRESS_CLAIM:
-        return left_out("cleared gate: suppress (adverse claim with no public-record anchor)")
+    flags, gate = list(ev["flags"]), ev["gate"]
+    if extras:
+        # Adverse quotes and the other sections follow the same gate.
+        ev2 = evaluate_summary(extras, articles_text)
+        flags += [f for f in ev2["flags"] if not f.startswith("bullet_count")]
+        gate = max(gate, ev2["gate"], key=_GATE_ORDER.get)
+    if flags:
+        return left_out("cleared check flagged: " + "; ".join(flags))
+    if gate == GATE_SUPPRESS_CLAIM:
+        return left_out("cleared gate: suppress (adverse conduct claim with no public-record anchor)")
 
-    lane, reasons = ev["gate"], []
+    lane, reasons = gate, []
     if lane != LANE_AUTO:
         reasons.append(f"cleared gate: {lane}")
     matches = registry_matches(full, registry)
     if POLITICAL_REVIEW_LANE:
-        political = [m.get("common_name") or m.get("full_name") for m in matches] + parties_in(full) + offices_in(full)
+        political = political_trigger(full, matches)
         if political:
-            reasons.append("political review lane: " + ", ".join(dict.fromkeys(political)))
-    surnames = surname_issues(title, text_bullets, registry)
+            reasons.append(political)
+        if any(_has(t, full) for t in COURT_TERMS) and (matches or names.person_names(full) or names.organisation_names(full)):
+            reasons.append("court or adjudication item naming a person or company")
+    reasons += headline_issues(title, body)
+    surnames = surname_issues(title, body_parts, registry)
     if surnames:
         reasons.append("named by one name only: " + ", ".join(surnames))
     reported = [p for p in REPORTED_PHRASES if _has(p, full)]
     if reported and names_a_person_or_party(full, registry):
         reasons.append("reported speech without origin: " + ", ".join(reported))
-    commentary = commentary_in(text_bullets)
+    commentary = commentary_in(body_parts)
     if commentary:
         reasons.append("commentary: " + ", ".join(commentary))
     if any(_has(t, full) for t in ADVERSE_CONTEXT_TERMS):
