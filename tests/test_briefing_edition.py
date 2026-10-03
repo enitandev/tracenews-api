@@ -488,16 +488,27 @@ def test_fewer_than_two_points_after_corrections_leaves_the_item_out():
     assert out == "fewer than two points left after corrections"
 
 
-def test_party_descriptor_is_replaced_from_the_registry_or_dropped():
+def test_only_a_conflicting_party_is_corrected_from_the_registry():
     reg = [{"full_name": "Atiku Abubakar", "common_name": "Atiku Abubakar", "publication_status": "published",
-            "party": "ADC", "current_position": "Presidential candidate"},
+            "party": "ADC", "current_position": "Former"},
+           {"full_name": "Nyesom Ezenwo Wike", "common_name": "Nyesom Wike", "publication_status": "published",
+            "party": "PDP", "current_position": "Minister of FCT"},
            {"full_name": "Peter Obi", "common_name": "Peter Obi", "publication_status": "published", "party": None, "current_position": None}]
+    # The party is swapped; the rest of the descriptor stays; the vague position is never inserted.
     text, notes = be.correct_descriptors("Atiku Abubakar, PDP presidential candidate, spoke in Yola.", reg)
-    assert text == "Atiku Abubakar, Presidential candidate, ADC, spoke in Yola." and "replaced" in notes[0]
+    assert text == "Atiku Abubakar, ADC presidential candidate, spoke in Yola." and "corrected" in notes[0]
+    text, _ = be.correct_descriptors("Atiku Abubakar, the Peoples Democratic Party flagbearer, spoke.", reg)
+    assert text == "Atiku Abubakar, the ADC flagbearer, spoke."
+    # Same party (full name or abbreviation): unchanged.
+    for s in ("Atiku Abubakar, the ADC presidential candidate, spoke.",
+              "Atiku Abubakar, the African Democratic Congress candidate, spoke.",
+              "Nyesom Wike, a PDP chieftain, spoke.",
+              "Atiku Abubakar, the presidential candidate, spoke.",
+              "Atiku Abubakar, a former vice president, spoke in Yola."):
+        assert be.correct_descriptors(s, reg) == (s, [])
+    # No party in the registry: the descriptor is dropped.
     text, notes = be.correct_descriptors("Peter Obi, the NDC candidate, spoke in Onitsha.", reg)
     assert text == "Peter Obi spoke in Onitsha." and "dropped" in notes[0]
-    text, notes = be.correct_descriptors("Atiku Abubakar, a former vice president, spoke in Yola.", reg)
-    assert notes == []
 
 
 def test_a_reporters_sentence_is_not_a_quote():

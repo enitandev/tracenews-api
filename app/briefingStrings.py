@@ -117,6 +117,15 @@ PARTY_NAMES = (
     "NDC", "National Democratic Congress", "AA", "Action Alliance",
     "ZLP", "Zenith Labour Party", "Accord", "Accord Party", "APM", "BP", "NRM", "AAC",
 )
+# Full name -> abbreviation, so "Peoples Democratic Party" and "PDP" count as the same party.
+PARTY_ALIASES = {
+    "All Progressives Congress": "APC", "Peoples Democratic Party": "PDP", "Labour Party": "LP",
+    "African Democratic Congress": "ADC", "New Nigeria Peoples Party": "NNPP",
+    "All Progressives Grand Alliance": "APGA", "Social Democratic Party": "SDP",
+    "Young Progressives Party": "YPP", "Action Democratic Party": "ADP",
+    "Peoples Redemption Party": "PRP", "National Democratic Congress": "NDC",
+    "Action Alliance": "AA", "Zenith Labour Party": "ZLP", "Accord Party": "Accord",
+}
 CANDIDACY_WORDS = ("candidate", "flagbearer", "flag bearer", "running mate", "aspirant", "presidential hopeful")
 
 # ═══ THE EDITOR LANE (counsel's ruling, 3 Oct, items 3-5) ═══════════════════
