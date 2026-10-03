@@ -15,9 +15,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from app.admin_auth import get_actor_name, require_permission
-from app.briefing_edition import edition_items, first_approval_valid, has_forbidden_token, item_lane, lagos_today
+from app.briefing_edition import (
+    clean_headline, edition_items, first_approval_valid, has_forbidden_token, headline_problems, item_lane, lagos_today,
+)
 from app.briefing_extras import check_extras, section_texts
-from app.briefingStrings import EDITOR_CHECKLIST, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, UI
+from app.briefingStrings import EDITOR_CHECKLIST, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, SENIOR_SECOND_APPROVERS, UI
 from app.storySummaryStrings import SUMMARY_MAX_BULLETS
 from app.summarizer import cluster_articles_text
 from app.db import supabase
@@ -156,6 +158,10 @@ def rewrite_item(item_id: str, body: Rewrite, authorization: str = Header(...),
     token = has_forbidden_token([title or ""] + (bullets or []) + section_text)
     if token:
         raise HTTPException(status_code=422, detail=f"The rewrite contains a forbidden word: {token}")
+    if title:
+        problems = headline_problems(clean_headline(title), (bullets or []) + section_text)
+        if problems:
+            raise HTTPException(status_code=422, detail="The headline does not pass the headline checks: " + "; ".join(problems))
     before = {"title": row.get("edited_title"), "bullets": row.get("edited_bullets"), "sections": row.get("edited_extras")}
     after = {"title": title or None, "bullets": bullets or None, "sections": sections or None}
     if before == after:
@@ -243,6 +249,8 @@ def approve_item(item_id: str, body: Approval, authorization: str = Header(...),
             raise HTTPException(status_code=409, detail=f"Already approved by {row['approved_by']} and {row['second_approved_by']}.")
         if editor == row["approved_by"]:
             raise HTTPException(status_code=409, detail="Senior review needs a second approver who is not the first editor.")
+        if editor.split(" (")[0] not in SENIOR_SECOND_APPROVERS:
+            raise HTTPException(status_code=403, detail="The second approval for senior-review items is given by: " + ", ".join(SENIOR_SECOND_APPROVERS) + ".")
         _log(row, editor, "approve_second", None, approved_text, body.note)
         supabase.table("briefing_editions").update({
             "second_approved_by": editor, "second_approved_at": _now(),
