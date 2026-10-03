@@ -80,16 +80,40 @@ def coverage_counts(cluster_id):
     return card_distribution(count_outlet_tiers(outlets))
 
 
+CANDIDATE_POOL = 500
+IMAGE_LOOKUP_CHUNK = 100
+
+
+def candidate_clusters(start, end):
+    """Stories first seen in [start, end) with enough rows to qualify, each with
+    the image URLs of its articles under "stories" (the shape select_clusters
+    reads). Two plain queries: embedding stories in the cluster query times out
+    on wider date ranges."""
+    clusters = supabase.table("clusters").select(
+        "id, slug, representative_title, category, first_seen_at, coverage_stats"
+    ).gte("first_seen_at", start.isoformat()).lt("first_seen_at", end.isoformat()) \
+        .gte("outlet_count", MIN_DISTINCT_OUTLETS) \
+        .order("first_seen_at", desc=True).limit(CANDIDATE_POOL).execute().data or []
+    images = {}
+    ids = [c["id"] for c in clusters]
+    for i in range(0, len(ids), IMAGE_LOOKUP_CHUNK):
+        rows = supabase.table("stories").select("cluster_id, image_url") \
+            .in_("cluster_id", ids[i:i + IMAGE_LOOKUP_CHUNK]).not_.is_("image_url", "null").execute().data or []
+        for r in rows:
+            images.setdefault(r["cluster_id"], []).append({"image_url": r["image_url"]})
+    for c in clusters:
+        c["stories"] = images.get(c["id"], [])
+    return clusters
+
+
 def build_edition(day=None):
     """Select today's stories and record them. Idempotent per day."""
     day = day or lagos_today()
     if supabase.table("briefing_editions").select("id").eq("date", day.isoformat()).limit(1).execute().data:
         return {"status": "already_built", "date": day.isoformat()}
 
-    since = (datetime.now(timezone.utc) - timedelta(hours=WINDOW_HOURS)).isoformat()
-    clusters = supabase.table("clusters").select(
-        "id, slug, representative_title, first_seen_at, coverage_stats, stories(image_url)"
-    ).gte("first_seen_at", since).gte("outlet_count", MIN_DISTINCT_OUTLETS).execute().data or []
+    end = datetime.now(timezone.utc)
+    clusters = candidate_clusters(end - timedelta(hours=WINDOW_HOURS), end)
 
     rows, skipped = [], {}
     for cluster in select_clusters(clusters):

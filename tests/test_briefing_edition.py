@@ -74,3 +74,53 @@ def test_summary_model_receives_no_outlet_identifier(monkeypatch):
     articles = sent["messages"][1]["content"].split("covering this story:")[1].split("Write ")[0]
     assert articles.strip().splitlines()[0] == "Source 1"
     assert "Source 2" in articles and "Source:" not in articles and "outlet" not in articles.lower()
+
+
+def test_candidate_clusters_attaches_images_without_embedding_stories(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    calls = []
+
+    class Q:
+        def __init__(self, table):
+            self.table, self.filters = table, {}
+
+        def select(self, cols):
+            calls.append((self.table, cols))
+            return self
+
+        def in_(self, col, vals):
+            self.filters["in"] = list(vals)
+            return self
+
+        @property
+        def not_(self):
+            return self
+
+        def is_(self, *a):
+            return self
+
+        def gte(self, *a):
+            return self
+
+        def lt(self, *a):
+            return self
+
+        def order(self, *a, **k):
+            return self
+
+        def limit(self, *a):
+            return self
+
+        def execute(self):
+            if self.table == "clusters":
+                data = [{"id": "c1", "slug": "a"}, {"id": "c2", "slug": "b"}]
+            else:
+                data = [{"cluster_id": cid, "image_url": "x.jpg"} for cid in self.filters["in"] if cid == "c1"]
+            return type("R", (), {"data": data})()
+
+    monkeypatch.setattr(be, "supabase", type("DB", (), {"table": lambda self, t: Q(t)})())
+    end = datetime.now(timezone.utc)
+    out = {c["id"]: c for c in be.candidate_clusters(end - timedelta(hours=24), end)}
+    assert out["c1"]["stories"] == [{"image_url": "x.jpg"}]
+    assert out["c2"]["stories"] == []
+    assert all("stories(" not in cols for _, cols in calls)
