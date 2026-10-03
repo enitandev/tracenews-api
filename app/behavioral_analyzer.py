@@ -4,6 +4,7 @@ import time
 import random
 import logging
 import html
+import hashlib
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -12,6 +13,12 @@ from app.db import supabase
 
 logger = logging.getLogger(__name__)
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+# Sampling rules (published on the methodology page; counsel, 3 Oct 2026).
+SAMPLE_WINDOW_DAYS = 30
+SAMPLE_CAP = 150
+MIN_ELIGIBLE_STORIES = 30  # fewer judged stories than this: the outlet is not scored
+MODEL = "gpt-4.1-mini"
 
 FEDERAL_GOVT_OUTLETS = ['nta', 'nan', 'voice-of-nigeria', 'radio-nigeria']
 STATE_GOVT_OUTLETS = ['the-tide', 'kogi-reports', 'lagos-television-ltv']
@@ -230,10 +237,14 @@ def with_retry(func, max_retries=5, delay=5):
             logger.warning(f"Network error: {e}. Retrying {attempt+1}/{max_retries} in {delay}s...")
             time.sleep(delay)
 
+PROMPT_VERSION = hashlib.sha256(
+    "\n".join([PROMPT_COMBINED, PROMPT_S5_HEADLINES, PROMPT_CLUSTER_CLASS]).encode()
+).hexdigest()[:12]
+
 def ask_llm(prompt_template, content):
     def _call():
         res = openai_client.chat.completions.create(
-            model="gpt-4.1-mini",
+            model=MODEL,
             messages=[{"role": "user", "content": prompt_template.replace("{article_text}", content).replace("{headlines_list}", content).replace("{headline}", content)}],
             response_format={"type": "json_object"},
             temperature=0.0
@@ -255,56 +266,32 @@ def get_story_embedding(story_id):
     return None
 
 def fetch_sample(outlet_id):
-    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
-    
-    # Paginated fetch for all stories
-    all_stories = []
-    page_size = 100
-    offset = 0
+    """
+    Up to SAMPLE_CAP stories from the last SAMPLE_WINDOW_DAYS, chosen at
+    random. Fewer than MIN_ELIGIBLE_STORIES in the window: no sample, and the
+    outlet is not scored.
+    """
+    cutoff_date = (datetime.now(timezone.utc) - timedelta(days=SAMPLE_WINDOW_DAYS)).isoformat()
+    stories, offset, page_size = [], 0, 100
     while True:
         res = with_retry(lambda: supabase.table("stories")\
-            .select("id, title, summary, cluster_id, published_at")\
-            .eq("outlet_id", outlet_id)\
-            .neq("source_type", "fact_check")\
-            .range(offset, offset + page_size - 1)\
-            .execute())
-        
-        batch = res.data or []
-        all_stories.extend(batch)
-        if len(batch) < page_size:
-            break
-        offset += page_size
-        
-    total = len(all_stories)
-    if total < 50:
-        return all_stories, "Insufficient Data"
-    
-    # Paginated fetch for 30-day stories
-    stories_30 = []
-    offset = 0
-    while True:
-        res_30 = with_retry(lambda: supabase.table("stories")\
             .select("id, title, summary, cluster_id, published_at")\
             .eq("outlet_id", outlet_id)\
             .gte("published_at", cutoff_date)\
             .neq("source_type", "fact_check")\
             .range(offset, offset + page_size - 1)\
             .execute())
-            
-        batch = res_30.data or []
-        stories_30.extend(batch)
+        batch = res.data or []
+        stories.extend(batch)
         if len(batch) < page_size:
             break
         offset += page_size
-        
-    total_30 = len(stories_30)
-    
-    if total < 150:
-        return stories_30, "Low Confidence"
-    elif total < 300:
-        return sorted(stories_30, key=lambda x: x.get('published_at', ''), reverse=True)[:150], "Standard"
-    else:
-        return random.sample(stories_30, min(200, total_30)), "High Confidence"
+
+    if len(stories) < MIN_ELIGIBLE_STORIES:
+        return [], "Insufficient Data"
+    sample = random.sample(stories, min(SAMPLE_CAP, len(stories)))
+    confidence = "High Confidence" if len(sample) >= SAMPLE_CAP else "Standard" if len(sample) >= 75 else "Low Confidence"
+    return sample, confidence
 
 def run_brown_envelope_layer_1(story_embedding, published_at):
     """Layer 1: Cosine similarity via pgvector RPC."""
@@ -353,12 +340,14 @@ def analyze_article(s):
         's4_density': None,
         's6_correction': False,
         'be_layer2_flag': False,
+        'judged': False,
         'elapsed': 0.0
     }
     
     try:
         rc = ask_llm(PROMPT_COMBINED, text)
-        if rc:
+        if rc and isinstance(rc.get('s2'), dict) and 'is_churnalism' in rc['s2']:
+            results['judged'] = True
             s1 = rc.get('s1', {})
             s2 = rc.get('s2', {})
             s4 = rc.get('s4', {})
@@ -369,7 +358,7 @@ def analyze_article(s):
                 results['s1_prominent'] = True
             results['government_framing'] = s1.get('government_framing')
             
-            if not s2.get('is_churnalism', True):
+            if not s2['is_churnalism']:
                 results['s2_original'] = True
                 
             results['s4_density'] = s4.get('deference_density_per_1000_words')
@@ -394,7 +383,7 @@ def analyze_outlet(outlet, current, total):
     
     sample, confidence_badge = fetch_sample(outlet_id)
     if not sample:
-        logger.warning(f"No stories for {outlet_name}")
+        logger.warning(f"Not scored: {outlet_name} has fewer than {MIN_ELIGIBLE_STORIES} stories in the last {SAMPLE_WINDOW_DAYS} days")
         return False
         
     sample_size = len(sample)
@@ -421,6 +410,8 @@ def analyze_outlet(outlet, current, total):
             completed += 1
             try:
                 res = future.result()
+                if not res['judged']:
+                    continue
                 llm_results.append(res)
                 if completed % 10 == 0 or completed == total_articles:
                     print(f"  Progress: {completed}/{total_articles} articles", end="\r")
@@ -451,9 +442,13 @@ def analyze_outlet(outlet, current, total):
         except Exception as e:
             logger.error(f"Exception in Layer 1 sequential check for {result.get('title')}: {e}")
 
-    # Signal Scores
-    s1_score = (s1_prominent_count / len(sample)) * 100 if sample else 0
-    s2_score = (s2_original_count / len(sample)) * 100 if sample else 0
+    # Signal scores are shares of the stories the model actually judged.
+    judged = len(llm_results)
+    if judged < MIN_ELIGIBLE_STORIES:
+        logger.error(f"Not scored: {outlet_name} — only {judged} of {sample_size} stories could be judged")
+        return False
+    s1_score = (s1_prominent_count / judged) * 100
+    s2_score = (s2_original_count / judged) * 100
     avg_density = sum(s4_densities) / len(s4_densities) if s4_densities else 0
     s4_score = max(0, 100 - (avg_density * 10))
     
@@ -531,8 +526,8 @@ def analyze_outlet(outlet, current, total):
         final_tii = min(final_tii, KNOWN_ALIGNED_CAP)
             
     # Brown Envelope Override
-    layer1_rate = be_layer1_flags / len(sample) if sample else 0
-    layer2_rate = be_layer2_flags / len(sample) if sample else 0
+    layer1_rate = be_layer1_flags / judged
+    layer2_rate = be_layer2_flags / judged
     promotional_alignment_flag = layer1_rate >= 0.10 or layer2_rate >= 0.10
     
     if promotional_alignment_flag:
@@ -550,7 +545,7 @@ def analyze_outlet(outlet, current, total):
         "s6_score": int(round(s6_score)),
         "promotional_alignment_flag": promotional_alignment_flag,
         "confidence_level": confidence_badge,
-        "story_sample_size": len(sample),
+        "story_sample_size": judged,
         "analyzed_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -562,35 +557,32 @@ def analyze_outlet(outlet, current, total):
     print(f"  S6 Editorial Indicators: {s6_score:.0f}")
     print(f"  Brown Envelope:          {promotional_alignment_flag}")
 
+    # Every computation is written to history first, with its provenance
+    # (counsel, 3 Oct 2026). If that write fails, the score is not published.
     try:
-        # Upsert to behavioral scores (primary key is outlet_slug)
-        with_retry(lambda: supabase.table("outlet_behavioral_scores").upsert(payload).execute())
-        
-        # --- tii score history ---
-        try:
-          supabase.table(
-            "tii_score_history"
-          ).insert({
+        with_retry(lambda: supabase.table("tii_score_history").insert({
             "outlet_slug": outlet_slug,
-            "scored_at": datetime.now(
-              timezone.utc).isoformat(),
-            "independence_score": int(
-              round(final_tii)),
+            "scored_at": payload["analyzed_at"],
+            "independence_score": int(round(final_tii)),
             "s1_score": s1_score,
             "s2_score": s2_score,
             "s3_score": s3_score,
             "s4_score": s4_score,
             "s5_score": s5_score,
             "s6_score": s6_score,
-            "promotional_alignment_flag":
-              promotional_alignment_flag
-          }).execute()
-        except Exception as e:
-          logger.error(
-            f"TII history insert failed "
-            f"for {outlet_slug}: {e}"
-          )
-        # --- end tii score history ---
+            "promotional_alignment_flag": promotional_alignment_flag,
+            "sample_size": judged,
+            "window_days": SAMPLE_WINDOW_DAYS,
+            "model": MODEL,
+            "prompt_version": PROMPT_VERSION,
+        }).execute())
+    except Exception:
+        logger.exception(f"Not scored: history write failed for {outlet_name}; score not published")
+        return False
+
+    try:
+        # Upsert to behavioral scores (primary key is outlet_slug)
+        with_retry(lambda: supabase.table("outlet_behavioral_scores").upsert(payload).execute())
 
         # Update main outlets table
         with_retry(lambda: supabase.table("outlets").update({"independence_score": int(round(final_tii))}).eq("id", outlet_id).execute())
@@ -617,6 +609,12 @@ def already_scored_today(outlet_slug):
     return res.data[0].get('independence_score', 'N/A') if res.data else None
 
 def main(slugs=None):
+    # Counsel's hold (3 Oct 2026) covers the outlet scores behind the old
+    # widget's firings; a run would overwrite them.
+    from app.clusterer import RECORD_HOLD
+    if RECORD_HOLD:
+        logger.error("Scoring refused: RECORD_HOLD is on and a run would overwrite the held outlet scores.")
+        return
     batch_start = time.time()
     scored_count = 0
     skipped_count = 0
@@ -655,17 +653,6 @@ def main(slugs=None):
             continue
             
         try:
-            story_res = with_retry(lambda: supabase.table("stories")\
-                .select("id", count="exact")\
-                .eq("outlet_id", o['id'])\
-                .neq("source_type", "fact_check")\
-                .execute())
-                
-            if story_res.count < 50:
-                print(f"[{current}/{total}] SKIP: {o['name']} - insufficient stories ({story_res.count})")
-                skipped_count += 1
-                continue
-                
             success = analyze_outlet(o, current, total)
             if success:
                 scored_count += 1
