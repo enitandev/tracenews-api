@@ -216,11 +216,12 @@ def submit_framing_feedback(req: FeedbackRequest):
 def get_cluster_summary(id: str):
     try:
         from app.storySummaryStrings import UI
-        res = supabase.table("cluster_summaries").select("*").eq("cluster_id", id).order("generated_at", desc=True).limit(1).execute()
+        from app.summarizer import serving_summary
+        res = supabase.table("cluster_summaries").select("*").eq("cluster_id", id).order("generated_at", desc=True).limit(20).execute()
         if not res.data:
             return {"status": "pending", "bullets": [], "message": UI["pending"]}
-        
-        summary = res.data[0]
+
+        summary = serving_summary(res.data)
         # A correction supersedes the summary; never serve it while the
         # replacement is generated.
         if summary.get("superseded") is True:

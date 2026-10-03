@@ -200,3 +200,67 @@ def test_failed_generation_is_recorded_once(monkeypatch):
     table, row = inserts[0]
     assert table == "cluster_summaries" and row["published"] is False and row["bullets"] == []
     assert row["flags"] == ["generation_failed: RuntimeError"]
+
+
+# A re-run that fails the checks never takes down a summary that passed.
+def test_serving_summary_falls_back_to_the_newest_passing_row():
+    from app.summarizer import serving_summary
+    good = {"id": "old", "published": True, "flags": None, "gate": "auto"}
+    flagged = {"id": "new", "published": False, "flags": ["forbidden_coverage: emphasized"], "gate": "auto"}
+    suppressed = {"id": "new2", "published": False, "flags": None, "gate": "suppress"}
+    assert serving_summary([flagged, good])["id"] == "old"
+    assert serving_summary([suppressed, flagged, good])["id"] == "old"
+    assert serving_summary([flagged])["id"] == "new"
+
+
+def test_a_correction_still_wins_over_the_fallback():
+    from app.summarizer import serving_summary
+    superseded = {"id": "corrected", "published": True, "flags": None, "superseded": True}
+    older = {"id": "older", "published": True, "flags": None}
+    assert serving_summary([superseded, older])["id"] == "corrected"
+    flagged = {"id": "rerun", "published": False, "flags": ["x"]}
+    assert serving_summary([flagged, superseded, older])["id"] == "rerun"
+
+
+def test_escalation_accepts_other_forms_of_a_word_the_sources_used():
+    r = evaluate_summary(["The police said the five men face charges of public disturbance.", "They were remanded."],
+                         "Source 1\nSummary: The five men were charged with public disturbance.")
+    assert not any(f.startswith("escalation") for f in r["flags"])
+    r = evaluate_summary(["The court confirmed the date.", "Lawyers appeared."], "Source 1\nSummary: The court set a date.")
+    assert "escalation: confirmed" in r["flags"]
+
+
+def test_a_flagged_draft_is_drawn_again_up_to_three_times(monkeypatch):
+    import app.summarizer as summarizer
+    drafts = iter([
+        '{"bullets": ["Tinubu emphasized reforms.", "He spoke in Abuja."]}',
+        '{"bullets": ["Outlets reported the speech.", "He spoke in Abuja."]}',
+        '{"bullets": ["Bola Tinubu spoke about reforms.", "He spoke in Abuja."]}',
+    ])
+    calls = []
+
+    class Client:
+        class chat:
+            class completions:
+                @staticmethod
+                def create(**kw):
+                    calls.append(1)
+                    msg = type("M", (), {"content": next(drafts)})
+                    return type("R", (), {"choices": [type("C", (), {"message": msg})]})
+
+    stored = []
+
+    class Q:
+        def select(self, *a): return self
+        def eq(self, *a): return self
+        def insert(self, data):
+            stored.append(data)
+            return self
+        def execute(self):
+            return type("R", (), {"data": [{"title": "Tinubu speaks", "summary": "Bola Tinubu spoke in Abuja about reforms."}] * 2})()
+
+    monkeypatch.setattr(summarizer, "openai_client", Client)
+    monkeypatch.setattr(summarizer, "supabase", type("DB", (), {"table": lambda self, t: Q()})())
+    out = summarizer.generate_cluster_summary("c1")
+    assert len(calls) == 3 and out["flags"] is None and out["published"] is True
+    assert len(stored) == 1

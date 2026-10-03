@@ -334,9 +334,12 @@ def summary_usable(summary):
 
 
 def latest_summary(cluster_id):
+    """The summary the story page serves (app.summarizer.serving_summary): the
+    newest one that passed, unless a correction superseded the newest."""
+    from app.summarizer import serving_summary
     res = supabase.table("cluster_summaries").select("*").eq("cluster_id", cluster_id) \
-        .order("generated_at", desc=True).limit(1).execute()
-    return (res.data or [None])[0]
+        .order("generated_at", desc=True).limit(20).execute()
+    return serving_summary(res.data or [])
 
 
 def coverage_counts(cluster_id):

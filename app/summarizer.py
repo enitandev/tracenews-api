@@ -79,9 +79,16 @@ def evaluate_summary(bullets, articles_text: str, title: str = None) -> dict:
     def mentions(term, text):
         return re.search(r'\b' + re.escape(term.lower()) + r'\b', text) is not None
 
-    # a) Escalation check
+    # a) Escalation check. A term counts as used by the sources if any form
+    # of it is ("charges" / "charged", "confirming" / "confirmed").
+    def used_by_sources(term):
+        if " " in term:
+            return mentions(term, combined_summaries_lower)
+        stem = re.sub(r"(ing|ed|es|s|ion|ions|ment)$", "", term.lower())
+        return re.search(r"\b" + re.escape(stem) + r"\w*", combined_summaries_lower) is not None
+
     for term in ESCALATION_TERMS:
-        if mentions(term, combined_bullets_lower) and not mentions(term, combined_summaries_lower):
+        if mentions(term, combined_bullets_lower) and not used_by_sources(term):
             flags.append(f"escalation: {term}")
 
     # b) Coverage check
@@ -119,7 +126,28 @@ def evaluate_summary(bullets, articles_text: str, title: str = None) -> dict:
     }
 
 
+def serving_summary(rows):
+    """The summary row to serve, from a cluster's rows newest first.
+
+    A correction marks the summary it replaces as superseded; while the newest
+    row is superseded nothing is served. Otherwise the newest row that passed
+    the checks is served: a later re-run that was flagged, gated or failed does
+    not take down a summary that already passed."""
+    rows = rows or []
+    if not rows:
+        return None
+    if rows[0].get("superseded") is True:
+        return rows[0]
+    for row in rows:
+        if row.get("superseded") is True:
+            return rows[0]
+        if row.get("published") and not row.get("flags") and not is_generation_failure(row):
+            return row
+    return rows[0]
+
+
 GENERATION_FAILED_FLAG = "generation_failed"
+SUMMARY_GENERATION_TRIES = 3
 MAX_GENERATION_ATTEMPTS = 3
 
 
@@ -164,26 +192,31 @@ def generate_cluster_summary(cluster_id: str) -> dict:
     articles_text = format_articles_text(stories)
     user_prompt = SUMMARY_USER_PROMPT.format(articles_text=articles_text)
     
-    try:
-        response = openai_client.chat.completions.create(
-            model=SUMMARY_MODEL,
-            temperature=SUMMARY_TEMPERATURE,
-            max_tokens=SUMMARY_MAX_TOKENS,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-                {"role": "user", "content": user_prompt}
-            ]
-        )
-        content_str = response.choices[0].message.content
-        output = json.loads(content_str)
-        bullets = output.get("bullets", [])
-    except Exception as e:
-        logger.exception(f"Failed to generate summary for {cluster_id}")
-        record_generation_failure(cluster_id, e)
-        return None
+    # A summary flagged by the checks is drawn again with the same prompt, up
+    # to SUMMARY_GENERATION_TRIES times; the rules are never relaxed. The
+    # last draw is stored either way, so the record shows what was produced.
+    for attempt in range(1, SUMMARY_GENERATION_TRIES + 1):
+        try:
+            response = openai_client.chat.completions.create(
+                model=SUMMARY_MODEL,
+                temperature=SUMMARY_TEMPERATURE,
+                max_tokens=SUMMARY_MAX_TOKENS,
+                response_format={"type": "json_object"},
+                messages=[
+                    {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
+                    {"role": "user", "content": user_prompt}
+                ]
+            )
+            bullets = json.loads(response.choices[0].message.content).get("bullets", [])
+        except Exception as e:
+            logger.exception(f"Failed to generate summary for {cluster_id}")
+            record_generation_failure(cluster_id, e)
+            return None
+        evaluation = evaluate_summary(bullets, articles_text)
+        if not evaluation["flags"]:
+            break
+        logger.info(f"[summary] {cluster_id} attempt {attempt} flagged: {evaluation['flags']}")
 
-    evaluation = evaluate_summary(bullets, articles_text)
     bullets = evaluation["bullets"]
     gate = evaluation["gate"]
     flags = evaluation["flags"]
