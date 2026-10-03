@@ -11,7 +11,7 @@ import sys
 import os
 import logging
 import traceback
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
 logging.basicConfig(
     level=logging.INFO,
@@ -209,38 +209,19 @@ def main():
             logger.exception("[worker] Event Summaries pipeline failed.")
         logger.info("[worker] Event Summaries done.")
 
-        # 6. Daily Briefing - only during 05:00-07:00 UTC (6-8 AM WAT)
-        lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
-        from app.withdrawals import BRIEFING_PUBLIC
-        if not BRIEFING_PUBLIC:
-            logger.info("[worker] Daily briefing is off (BRIEFING_PUBLIC); not generating.")
-        elif 5 <= datetime.now(timezone.utc).hour <= 6:
-            from app.daily_briefing import (
-                select_daily_briefing_stories,
-                generate_briefing_for_story,
-            )
-            logger.info("[worker] === DAILY BRIEFING ===")
+        # 6. Daily Briefing edition - 05:00-07:00 UTC (6-8 AM WAT). Built from the
+        # cleared story summaries (no new model calls) whether or not the
+        # Briefing is public, so staff can review and approve it; the public
+        # endpoints stay 404 until BRIEFING_PUBLIC is on.
+        if 5 <= datetime.now(timezone.utc).hour <= 6:
+            logger.info("[worker] === DAILY BRIEFING EDITION ===")
             try:
-                select_daily_briefing_stories()
-                today = lagos_now.date().isoformat()
-                rows = (
-                    supabase.table("daily_briefings")
-                    .select("*")
-                    .eq("date", today)
-                    .eq("generation_status", "pending")
-                    .order("position")
-                    .execute()
-                )
-                for row in rows.data or []:
-                    result = generate_briefing_for_story(row)
-                    logger.info(
-                        f"[worker] Briefing position {row.get('position')}: "
-                        f"{result.get('status', 'unknown')}"
-                    )
+                from app.briefing_edition import build_edition
+                logger.info(f"[worker] Briefing edition: {build_edition()}")
             except Exception:
-                logger.exception("[worker] Daily briefing failed")
+                logger.exception("[worker] Daily briefing edition failed")
         else:
-            logger.info("[worker] Skipping daily briefing (outside 05-07 UTC window).")
+            logger.info("[worker] Skipping daily briefing edition (outside 05-07 UTC window).")
 
         # 7. Update public one-tier feed (Cache for Reader Summary & Admin Overview)
         logger.info("[worker] === PUBLIC FEED CACHING ===")

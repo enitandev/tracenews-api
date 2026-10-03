@@ -123,13 +123,14 @@ def is_generation_failure(summary_row: dict) -> bool:
 
 def generate_cluster_summary(cluster_id: str) -> dict:
     """Generate and store an event summary for a given cluster."""
-    stories_res = supabase.table("stories").select("title, summary, outlet_id").eq("cluster_id", cluster_id).execute()
+    stories_res = supabase.table("stories").select("title, summary").eq("cluster_id", cluster_id).execute()
     stories = stories_res.data
     
     if len(stories) < 2:
         return None
         
-    articles_text = "\n\n".join([f"Source: {s.get('outlet_id')}\nHeadline: {s.get('title')}\nSummary: {s.get('summary')}" for s in stories])
+    # The model receives no outlet name, identifier or tier (counsel, 3 Oct 2026, B2).
+    articles_text = "\n\n".join([f"Source {i}\nHeadline: {s.get('title')}\nSummary: {s.get('summary')}" for i, s in enumerate(stories, 1)])
     user_prompt = SUMMARY_USER_PROMPT.format(articles_text=articles_text)
     
     try:
