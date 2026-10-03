@@ -23,7 +23,7 @@ from app.briefingStrings import (
     FORBIDDEN_TOKENS, HEADLINE_ATTRIBUTION_PATTERN, HEADLINE_BODY_TERMS, HEADLINE_CASUALTY_TERMS,
     HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS, HEADLINE_TRAILING_PHRASES, LANE_AUTO, LANE_LEFT_OUT,
     LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES, MIN_DISTINCT_OUTLETS,
-    PARTY_NAMES, SUSPENSION_TRIGGERS, WINDOW_HOURS,
+    PARTY_ALIASES, PARTY_NAMES, SUSPENSION_TRIGGERS, WINDOW_HOURS,
 )
 from app import names
 from app.db import supabase
@@ -208,9 +208,21 @@ def bullet_problem(bullet, articles_text):
     return "; ".join(bad) or None
 
 
+def _party_key(name):
+    name = (name or "").strip()
+    for full, short in PARTY_ALIASES.items():
+        if name.lower() in (full.lower(), short.lower()):
+            return short.lower()
+    return name.lower()
+
+
 def correct_descriptors(text, registry):
     """A party or candidacy descriptor next to a registry person's name is
-    replaced from the registry, or dropped if the registry has none."""
+    checked against the registry's party. Only a party that conflicts with the
+    registry is changed: that party name is swapped for the registry's, and
+    the rest of the descriptor is kept as the sources wrote it. Nothing from
+    the registry's position field is ever inserted. If the registry has no
+    party for the person, the descriptor is dropped."""
     notes = []
     for r in registry:
         for name in {n for n in (r.get("full_name"), r.get("common_name")) if n and len(n) > 3}:
@@ -220,21 +232,26 @@ def correct_descriptors(text, registry):
             if not m:
                 continue
             desc = m.group(1)
-            if not (any(_has(p, desc, case_sensitive=p.isupper()) for p in PARTY_NAMES)
-                    or any(_has(w, desc) for w in CANDIDACY_WORDS)):
+            # Longest names first, so "Labour Party" is found before "LP" or "Accord Party" before "Accord".
+            named = [p for p in sorted(PARTY_NAMES, key=len, reverse=True) if _has(p, desc, case_sensitive=p.isupper())]
+            if not (named or any(_has(w, desc) for w in CANDIDACY_WORDS)):
                 continue
-            party, position = (r.get("party") or "").strip(), (r.get("current_position") or "").strip()
-            registry_desc = ", ".join(x for x in (position, party) if x)
-            if registry_desc and registry_desc.lower() == desc.lower():
-                continue
-            if registry_desc:
-                text = text[:m.start(1)] + registry_desc + text[m.end(1):]
-                notes.append(f"descriptor for {name} replaced from the registry: '{desc}' -> '{registry_desc}'")
-            else:
+            party = (r.get("party") or "").strip()
+            if not party:
                 # Drop ", <descriptor>" and the comma that closed the appositive.
                 tail = text[m.end(1):]
                 text = text[:m.start(1) - 2] + (tail[1:] if tail.startswith(",") else tail)
-                notes.append(f"descriptor for {name} dropped (none in the registry): '{desc}'")
+                notes.append(f"descriptor for {name} dropped (no party in the registry): '{desc}'")
+                continue
+            wrong = [p for p in named if _party_key(p) != _party_key(party)]
+            if not wrong:
+                continue
+            fixed = desc
+            for p in wrong:
+                flags = 0 if p.isupper() else re.IGNORECASE
+                fixed = re.sub(r"(?<![\w-])" + re.escape(p) + r"(?![\w-])", party, fixed, flags=flags)
+            text = text[:m.start(1)] + fixed + text[m.end(1):]
+            notes.append(f"party for {name} corrected from the registry: '{desc}' -> '{fixed}'")
     return text, notes
 
 
