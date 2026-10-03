@@ -106,10 +106,13 @@ HEADLINE_BODY_TERMS = (
     ("arraigned", "arraignment", "arraign"),
 )
 
-# ═══ POLITICAL REVIEW LANE (item 2) ═════════════════════════════════════════
-# For the first 30 days after public launch every item naming a person in the
-# politician registry, a party or a political office is review at minimum,
-# never auto. At day 30 counsel receives the change log
+# ═══ POLITICAL REVIEW LANE (item 2; narrowed by counsel's ruling, 3 Oct) ════
+# For the first 30 days after public launch an item is held for review only
+# when a political figure (registry person or political office) or a party
+# appears together with one of the POLITICAL_TRIGGERS below. Routine
+# announcements and ceremonial messages publish automatically. Court and
+# adjudication items about named persons or companies are held for review
+# (COURT_TERMS). At day 30 counsel receives the change log
 # (scripts/briefing_change_log.py). Ending the lane is counsel's decision.
 POLITICAL_REVIEW_LANE = True
 PARTY_NAMES = (
@@ -133,6 +136,64 @@ POLITICAL_OFFICES = (
     "party chairman", "national chairman", "campaign council", "campaign manager",
     "candidate", "candidates", "candidacy", "running mate", "primaries", "primary election",
     "presidential", "aspirant", "aspirants", "director-general of the campaign",
+)
+
+# Triggers that hold a political item (counsel's ruling, 3 Oct, item 2).
+POLITICAL_CONTEST_TERMS = (
+    "candidacy", "candidate", "candidates", "campaign", "campaigns", "campaigning",
+    "primaries", "primary election", "running mate", "defect", "defects", "defected",
+    "defecting", "defection", "decamp", "decamped", "decamping",
+)
+POLITICAL_ENDORSE_TERMS = (
+    "re-elect", "re-elected", "re-election", "reelect", "reelected", "reelection",
+    "endorse", "endorses", "endorsed", "endorsing", "endorsement",
+)
+# One political actor accusing, condemning or criticising another (two or
+# more political actors in the item, plus one of these verbs).
+POLITICAL_ATTACK_TERMS = (
+    "accuse", "accuses", "accused", "accusing", "condemn", "condemns", "condemned",
+    "condemning", "criticise", "criticises", "criticised", "criticising", "criticize",
+    "criticizes", "criticized", "criticizing", "criticism", "slam", "slams", "slammed",
+    "attack", "attacks", "attacked", "fault", "faults", "faulted", "berate", "berated",
+    "tackle", "tackles", "tackled", "rebuke", "rebuked", "blast", "blasts", "blasted",
+    "fires back", "fired back", "lambast", "lambasted", "knocks", "knocked",
+)
+# The health of a named office-holder.
+POLITICAL_HEALTH_TERMS = (
+    "health", "healthy", "ill", "illness", "sick", "sickness", "ailment", "hospital",
+    "hospitalised", "hospitalized", "medical", "medical treatment", "unwell",
+)
+# "Candidates" in an exam context is not political.
+EXAM_CONTEXT_TERMS = (
+    "exam", "exams", "examination", "examinations", "WAEC", "NECO", "JAMB", "UTME",
+    "SSCE", "WASSCE", "NABTEB", "admission", "admissions", "results", "credits",
+)
+# Court and adjudication: an item using one of these and naming a person or
+# company is held for review for the first 30 days.
+COURT_TERMS = (
+    "court", "courts", "judge", "judges", "tribunal", "tribunals", "magistrate",
+    "court ruling", "ruled that", "judgment", "judgement", "verdict", "arraign", "arraigned",
+    "arraignment", "lawsuit", "suit", "adjourned", "convicted", "acquitted",
+    "sentenced", "found guilty", "panel found", "commission found",
+)
+
+# ═══ HEADLINE CHECKS (counsel's ruling, 3 Oct, item 3) — route to review ════
+# A number or quantity word in the headline that the body does not support.
+HEADLINE_QUANTITY_WORDS = (
+    "scores", "dozens", "hundreds", "thousands", "millions", "many", "several",
+    "numerous", "countless", "mass",
+)
+# A flat killing or casualty claim in the headline with no attribution.
+HEADLINE_CASUALTY_TERMS = (
+    "kill", "kills", "killed", "die", "dies", "died", "dead", "death", "deaths",
+    "casualties", "massacre", "massacred", "slaughter", "slaughtered", "slain",
+    "neutralise", "neutralised", "neutralize", "neutralized",
+)
+# Any of these in the headline counts as attribution ("Military says...",
+# "... — Police", "Police: ...").
+HEADLINE_ATTRIBUTION_PATTERN = (
+    r"\b(says?|said|claims?|claimed|according to|confirms?|confirmed|announces?|announced|reports?)\b"
+    r"|[—–-]\s*[A-Z][\w .'’-]+$|^[A-Z][\w .'’-]{1,40}:\s"
 )
 
 # ═══ AUTOMATIC CHECKS (item 3) — each routes the item to review ═════════════
@@ -172,6 +233,8 @@ SURNAME_CHECK_ORG_WORDS = (
     "Network", "Movement", "Front", "Alliance", "Coalition", "Committee",
     "Institute", "Polytechnic", "College", "Academy", "Prize", "Awards", "Cup",
     "Examination", "Examinations", "Council", "Games", "Championship",
+    "Officer", "Area", "Battalion", "Brigade", "Division", "Theatre", "Headquarters",
+    "Correctional", "Centre", "Prison", "Hospital", "Government",
 )
 
 # (ii) Reported-speech phrases, in an item naming a person or a party.
@@ -180,11 +243,13 @@ REPORTED_PHRASES = (
     "according to report", "according to the report",
     "as stated in the report", "as stated in the reports", "it is reported",
     "it was reported", "reports say", "reports said", "reports indicate",
+    "reports indicated", "reports from", "match reports",
 )
 
 # (iii) Commentary on what something means.
 COMMENTARY_PHRASES = (
     "significant development", "marked a", "underscores", "highlights", "signals that",
+    "indicating", "reflecting", "suggesting",
 )
 # A bullet saying what a statement, decision or event "links" or "marks"
 # (counsel's wording). Plain uses such as "marking the 66th anniversary" or
@@ -192,6 +257,63 @@ COMMENTARY_PHRASES = (
 COMMENTARY_STATEMENT_PATTERN = (
     r"\b(statement|remarks?|comments?|speech|address|decision|move|ruling|development|"
     r"appointment|which|this|it)\s+(links|linked|marks|marked)\b"
+)
+
+# ═══ FULLER SECTIONS (counsel's ruling, 3 Oct, item 6) ══════════════════════
+# "What happened" is the cleared summary itself (up to 8 points, same prompt
+# and rules, never pad). The three sections below are generated by
+# EXTRAS_SYSTEM_PROMPT from the same source text (headlines and feed
+# summaries, labelled Source 1, 2, ...; no outlet names or tiers), then
+# checked in code before anything is stored:
+#   Who said what  - each quote must appear verbatim in the source text
+#                    (string match); named speaker with role; rendered with
+#                    the verb "said" only; kept in source order, never
+#                    arranged as rebuttal pairs; adverse quotes follow the
+#                    same gate as the summary.
+#   What happens next - only dates and steps stated in the sources, each
+#                    attributed; no predictions.
+#   Background     - at most 3 points, source-only; no background about a
+#                    named person's conduct, litigation or party history
+#                    unless it is a public record and attributed.
+#   Coverage       - counts only; no "%" and no "bias".
+QUOTES_MAX = 4
+NEXT_MAX = 3
+BACKGROUND_MAX = 3
+QUOTE_VERB = "said"
+
+EXTRAS_SYSTEM_PROMPT = """You prepare three short sections of a news briefing about one Nigerian news story. You are given article headlines and summaries from several sources, labelled Source 1, Source 2 and so on. Use only what is in them.
+
+Return a JSON object with three keys: "quotes", "next" and "background".
+
+"quotes": up to 4 direct quotes. Each is an object {"speaker": the person's full name, "role": their role as the sources state it, "quote": the exact words}.
+- Copy the words exactly as they appear inside quotation marks in a source. Do not paraphrase, shorten, correct or join quotes.
+- Include a quote only if a source shows it in quotation marks and names who said it.
+- List quotes in the order they appear in the sources. Never arrange them as a reply and a counter-reply.
+- Never quote or name a person under 18.
+
+"next": up to 3 items. Each is a date or a next step stated in the sources, with who stated or set it. Example: "The court adjourned the case to October 13, 2026." No predictions. Do not write "is expected to", "likely" or "could" unless a named source said it, and then attribute it.
+
+"background": up to 3 short points of context taken only from the sources. Do not give background about a named person's conduct, court cases or party history unless the sources tie it to a public record (a court, a published finding, an official announcement), and then attribute it.
+
+The summary rules apply to every section:
+- Never mention outlets, coverage, reports or tiers, and never say what was emphasised or omitted.
+- Attribute every claim that bears on a person's conduct or reputation to its origin.
+- Neutral language. No commentary on what anything means, signals, highlights or marks.
+- Give each person's full name and role at first mention.
+
+If a section has nothing that meets these rules, return an empty list for it. Never pad."""
+
+EXTRAS_USER_PROMPT = """Source material for this story:
+
+{articles_text}
+
+Return the JSON object with "quotes", "next" and "background"."""
+
+# Words that make a "next" item a prediction unless it is attributed.
+NEXT_PREDICTION_TERMS = ("likely", "expected to", "could", "might", "may well", "set to", "poised to")
+NEXT_ATTRIBUTION_PATTERN = (
+    r"\b(according to|said|says|stated|announced|directed|ordered|fixed|adjourned|"
+    r"scheduled|set|declared|told|confirmed)\b"
 )
 
 # ═══ EDITOR (item 9) ════════════════════════════════════════════════════════
@@ -202,7 +324,7 @@ EDITOR_CHECKLIST = (
     ("conduct_origin", "Every claim about conduct has an origin (court, agency, named person)."),
     ("no_reportedly", "No \"reportedly\" or \"according to reports\" without an origin."),
     ("headline", "The headline matches the body and has no prefix words."),
-    ("party_live", "Every candidacy or party descriptor was checked live today."),
+    ("party_live", "Every candidacy or party descriptor was checked live today (source and time entered for each below)."),
     ("no_commentary", "No commentary words."),
     ("no_protected_adverse", "No held or private person appears in an adverse context."),
 )
@@ -214,6 +336,12 @@ UI = {
     "correction_link": SUMMARY_UI["correction_link"],       # "Report an error in this summary"
     "methodology_link": "How TraceNews classifies outlets",
     "coverage_heading": "Outlets that reported this story",
+    "sections": {
+        "what_happened": "What happened",
+        "quotes": "Who said what",
+        "next": "What happens next",
+        "background": "Background",
+    },
     "coverage_as_of": "Counted at {time} WAT",
     "tier_labels": {"govt_aligned": "Govt", "mainstream": "Mainstream", "watchdog": "Watchdog"},
     "empty": "Today's briefing is not ready yet.",

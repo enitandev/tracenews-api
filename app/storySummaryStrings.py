@@ -18,6 +18,12 @@ EXACT STRINGS and THESE EXACT RULES.
     only as the venue of a quoted statement; no commentary on what a statement
     means (rule 6).
 
+    Ruling of 3 October 2026 on the owner's over-gating memo: adverse terms
+    split into CONDUCT_TERMS and HARM_EVENT_TERMS (a harm event alone never
+    suppresses); "match reports", "reports from", "reports indicate(d)" and
+    "reportedly" added to the coverage check; summaries may run to up to
+    SUMMARY_MAX_BULLETS points ("never pad" stays).
+
 RULES
   - Do NOT edit any prompt or string here without a fresh counsel sign-off.
   - Do NOT introduce a user-facing string for this feature anywhere else.
@@ -58,12 +64,14 @@ RULES
 
 # ═══ MODEL ═══════════════════════════════════════════════════════════════════
 SUMMARY_MODEL = "gpt-4.1-mini"
-SUMMARY_MAX_TOKENS = 700
+SUMMARY_MAX_TOKENS = 1000
 SUMMARY_TEMPERATURE = 0.2   # low: we want faithful compression, not fluency
+SUMMARY_MIN_BULLETS = 2
+SUMMARY_MAX_BULLETS = 8     # counsel, 3 Oct 2026: "up to 8"; never pad
 
 
 # ═══ THE PROMPT ══════════════════════════════════════════════════════════════
-SUMMARY_SYSTEM_PROMPT = """You summarise Nigerian news stories for readers. You are given article summaries from several outlets covering the same event. Write 4-5 bullet points telling the reader WHAT HAPPENED.
+SUMMARY_SYSTEM_PROMPT = """You summarise Nigerian news stories for readers. You are given article summaries from several outlets covering the same event. Write up to 8 bullet points telling the reader WHAT HAPPENED.
 
 You are producing a factual record of an event. You are not analysing coverage.
 
@@ -157,7 +165,7 @@ You are producing a factual record of an event. You are not analysing coverage.
 
 ═══ OUTPUT ═══
 
-A JSON object with a single key "bullets" containing 4-5 strings.
+A JSON object with a single key "bullets" containing up to 8 strings.
 Each bullet: one or two sentences, plain, specific, attributed where rule 1 applies.
 
 If the provided summaries do not contain enough substance for 4 bullets, write
@@ -168,12 +176,17 @@ SUMMARY_USER_PROMPT = """Article summaries covering this story:
 
 {articles_text}
 
-Write 4-5 bullet points reporting what happened. Attribute every claim bearing on
+Write up to 8 bullet points reporting what happened. Attribute every claim bearing on
 a person's conduct. Do not mention outlets or coverage."""
 
 
 # ═══ GATING — counsel's three-tier treatment ═════════════════════════════════
-ADVERSE_CONTEXT_TERMS = [
+# Counsel's ruling of 3 Oct 2026: adverse terms are split. A CONDUCT term
+# keeps the original treatment (senior review / review / suppress). A
+# HARM_EVENT term alone never suppresses: it publishes automatically unless
+# a CONDUCT term also appears or a named person is the subject or alleged
+# cause of the harm, in which case it goes to review.
+CONDUCT_TERMS = [
     "allegation", "allegations", "alleged", "alleges", "allege",
     "accuse", "accuses", "accused", "accusation", "accusations",
     "fraud", "frauds", "fraudulent",
@@ -199,10 +212,15 @@ ADVERSE_CONTEXT_TERMS = [
     "sack", "sacks", "sacked",
     "dismiss", "dismisses", "dismissed", "dismissal",
     "suspend", "suspends", "suspended", "suspension",
-    "die", "dies", "died", "death", "deaths",
-    "kill", "kills", "killed",
-    "injure", "injures", "injured", "injury", "injuries",
 ]
+
+HARM_EVENT_TERMS = [
+    "die", "dies", "died", "dying", "death", "deaths",
+    "kill", "kills", "killed", "killing", "killings",
+    "injure", "injures", "injured", "injuring", "injury", "injuries",
+]
+
+ADVERSE_CONTEXT_TERMS = CONDUCT_TERMS + HARM_EVENT_TERMS
 
 # The mere naming of a body is expressly NOT an anchor. An anchor requires
 # evidence of an actual proceeding or published finding.
@@ -280,7 +298,8 @@ FORBIDDEN_COVERAGE_TERMS = [
     "frame", "frames", "framed", "framing",
     "tier", "tiers", "government-aligned", "government aligned",
     "mainstream", "watchdog", "watchdogs",
-    "some publications", "some publication", "several sources", "several source"
+    "some publications", "some publication", "several sources", "several source",
+    "match reports", "reports from", "reports indicate", "reports indicated", "reportedly",
 ]
 
 

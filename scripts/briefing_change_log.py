@@ -6,7 +6,7 @@ Read-only.
   railway run python scripts/briefing_change_log.py --since 2026-10-10 [--until 2026-11-09] [--include-samples]
 
 Writes briefing_change_log_<stamp>.csv: one row per editor action (rewrite,
-leave out, restore, approve) with the editor's name, the time, and the text
+leave out, restore, approve, approve_second) with the editor's name, the time, and the text
 before and after.
 """
 import argparse
@@ -44,7 +44,7 @@ def main():
         for r in rows:
             w.writerow({k: json.dumps(r.get(k), ensure_ascii=False) if k in ("before", "after") else r.get(k) for k in FIELDS})
     print(f"{len(rows)} entries: " + ", ".join(f"{a} {sum(1 for r in rows if r['action'] == a)}"
-                                                for a in ("rewrite", "leave_out", "restore", "approve")))
+                                                for a in ("rewrite", "leave_out", "restore", "approve", "approve_second")))
     print(f"done: {out}")
 
 

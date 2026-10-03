@@ -58,12 +58,63 @@ def test_gate_runs_over_headline_and_body():
     assert a["lane"] == "review"
 
 
-# Item 2: political review lane
-@pytest.mark.parametrize("title", ["Atiku Abubakar visits Kano", "APC holds rally in Ibadan", "Governor opens new school"])
-def test_political_items_are_never_auto(title):
-    a = assess(title, ["Atiku Abubakar visited Kano on Tuesday." if "Atiku" in title else "The event took place on Tuesday.", "Residents attended."])
+# Item 2: political review lane (narrowed by counsel's ruling, 3 Oct)
+@pytest.mark.parametrize("title,bullets", [
+    ("Governor opens new school", ["The governor opened a new school in Ibadan on Monday.", "Pupils attended."]),
+    ("NIPOST launches digital postcode", ["The Minister of Communications launched the postcode system.", "It covers all buildings."]),
+    ("Akpabio salutes Nigerians at 66", ["Senate President Godswill Akpabio congratulated Nigerians on the 66th anniversary.", "He urged unity."]),
+    ("NECO releases results", ["NECO said 804,948 candidates obtained five credits.", "The minister of education commended the council."]),
+])
+def test_routine_political_items_publish_automatically(title, bullets):
+    a = assess(title, bullets, registry=REG + [{"full_name": "Godswill Akpabio", "common_name": "Godswill Akpabio", "publication_status": "published"}])
+    assert a["lane"] == "auto", a["reasons"]
+
+
+@pytest.mark.parametrize("title,bullets,trigger", [
+    ("ADC names campaign council", ["Atiku Abubakar named the ADC campaign council on Thursday.", "The council has 40 members."], "campaign"),
+    ("Speaker urges re-election", ["Atiku Abubakar urged members of the ADC to re-elect the party leadership.", "Delegates met in Abuja."], "re-elect"),
+    ("Atiku tackles Tinubu", ["Atiku Abubakar criticised Bola Tinubu over the economy.", "He spoke in Yola."], "criticised"),
+    ("President returns", ["Bola Tinubu said he was healthy and ready to resume duties.", "He landed in Lagos."], "healthy"),
+])
+def test_political_items_with_a_trigger_are_held(title, bullets, trigger):
+    reg = REG + [{"full_name": "Bola Tinubu", "common_name": "Bola Tinubu", "publication_status": "published"}]
+    a = assess(title, bullets, registry=reg)
     assert a["lane"] == "review"
-    assert any(r.startswith("political review lane") for r in a["reasons"])
+    assert any(r.startswith("political review lane") and trigger in r for r in a["reasons"]), a["reasons"]
+
+
+def test_ruled_out_and_ruling_party_are_not_court_items():
+    a = assess("President rules out subsidy", ["President Bola Tinubu ruled out a return to petrol subsidies.", "The ruling party backed him."])
+    assert not any(r.startswith("court or adjudication") for r in a["reasons"])
+
+
+def test_court_items_about_named_people_or_companies_are_held():
+    a = assess("Court fixes hearing date", ["The Federal High Court fixed October 13 for the hearing of Musa Bello's suit.", "Lawyers appeared."])
+    assert any(r.startswith("court or adjudication") for r in a["reasons"])
+    b = assess("Manchester City appeal", ["Manchester City will appeal the verdict of the independent commission.", "The club issued a statement."])
+    assert any(r.startswith("court or adjudication") for r in b["reasons"])
+
+
+# Item 3: headline checks
+@pytest.mark.parametrize("title,bullets,reason", [
+    ("Troops kill scores of terrorists in Adamawa",
+     ["Troops neutralised 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."],
+     "headline quantity word not in body: scores"),
+    ("Mutfwang pardons 134 prisoners",
+     ["Governor Caleb Mutfwang pardoned 130 inmates and commuted four death sentences.", "The governor's office announced it."],
+     "headline number not in body: 134"),
+    ("Gunmen kill 5 in Benue", ["Gunmen killed 5 villagers in Benue, the police said.", "Residents fled."],
+     "unattributed casualty claim in headline"),
+])
+def test_headline_checks_route_to_review(title, bullets, reason):
+    a = assess(title, bullets)
+    assert a["lane"] == "review" and reason in a["reasons"], a["reasons"]
+
+
+def test_attributed_casualty_headline_passes():
+    a = assess("Military says troops killed 16 terrorists in Adamawa",
+               ["Troops killed 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."])
+    assert a["lane"] == "auto", a["reasons"]
 
 
 def test_non_political_neutral_item_is_auto():
@@ -89,8 +140,19 @@ def test_organisations_are_not_treated_as_surnames():
 
 
 def test_reported_speech_naming_a_person_goes_to_review():
-    a = assess("Rail line approved", ["Atiku Abubakar reportedly opposed the plan.", "Construction starts in January."])
+    a = assess("Rail line approved", ["Atiku Abubakar opposed the plan, according to reports.", "Construction starts in January."])
     assert any(r.startswith("reported speech") for r in a["reasons"])
+
+
+@pytest.mark.parametrize("bullet", [
+    "Atiku Abubakar reportedly opposed the plan.",
+    "Guinea-Bissau won 3-0, according to match reports.",
+    "Reports from Ondo indicated partial compliance.",
+])
+def test_bare_reported_phrases_are_caught_by_the_coverage_check(bullet):
+    # Counsel, 3 Oct 2026: added to the coverage checks, so the item is left out.
+    a = assess("Rail line approved", [bullet, "Construction starts in January."])
+    assert a["lane"] == "left_out" and "forbidden_coverage" in a["reasons"][0]
 
 
 @pytest.mark.parametrize("bullet", [
@@ -214,9 +276,9 @@ def test_reader_items_carry_no_reviewer_fields_and_no_samples(monkeypatch):
 def test_held_item_publishes_only_with_a_valid_approval(monkeypatch):
     from datetime import date
     db = edition_db()
-    db.tables["cluster_summaries"][0]["bullets"] = ["APC officials met in Abuja on Monday.", "The meeting lasted two hours."]
+    db.tables["cluster_summaries"][0]["bullets"] = ["APC officials met in Abuja to choose a presidential candidate.", "The meeting lasted two hours."]
     monkeypatch.setattr(be, "supabase", db)
-    monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "APC officials met in Abuja.")
+    monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "APC officials met in Abuja to choose a presidential candidate.")
     be._registry.update(at=0, rows=[])
     assert be.edition_items(date(2026, 10, 4)) == []
     db.tables["briefing_editions"][0].update(approved_by="Ada (editorial)", approved_summary_id="s1")
@@ -332,9 +394,9 @@ def test_approval_needs_every_checklist_line(monkeypatch):
     from fastapi import HTTPException
     br, db, updates = editor_setup(monkeypatch)
     with pytest.raises(HTTPException) as e:
-        br.approve_item("e1", br.Approval(checklist={**ALL_TICKED, "party_live": False}), authorization="Bearer t")
+        br.approve_item("e1", br.Approval(checklist={**ALL_TICKED, "party_live": False}, no_party_descriptors=True), authorization="Bearer t")
     assert e.value.status_code == 422 and not updates and not db.tables["briefing_edit_log"]
-    br.approve_item("e1", br.Approval(checklist=ALL_TICKED), authorization="Bearer t")
+    br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
     assert updates[0]["approved_by"] == "Ada Obi (editorial)" and updates[0]["approved_summary_id"] == "s1"
     assert db.tables["briefing_edit_log"][0]["action"] == "approve"
 
@@ -343,7 +405,7 @@ def test_approval_needs_a_named_editor(monkeypatch):
     from fastapi import HTTPException
     br, _, updates = editor_setup(monkeypatch, actor="3f2b8c1e-1111-2222-3333-444455556666 (editorial)")
     with pytest.raises(HTTPException) as e:
-        br.approve_item("e1", br.Approval(checklist=ALL_TICKED), authorization="Bearer t")
+        br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
     assert e.value.status_code == 403 and not updates
 
 
@@ -351,7 +413,7 @@ def test_auto_or_left_out_items_cannot_be_approved(monkeypatch):
     from fastapi import HTTPException
     br, _, _ = editor_setup(monkeypatch, lane="left_out")
     with pytest.raises(HTTPException) as e:
-        br.approve_item("e1", br.Approval(checklist=ALL_TICKED), authorization="Bearer t")
+        br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
     assert e.value.status_code == 409
 
 
@@ -363,7 +425,8 @@ def test_rewrite_is_logged_with_before_and_after_and_rejects_forbidden_words(mon
     br.rewrite_item("e1", br.Rewrite(title="ADC names campaign council", bullets=["One.", "Two."], note="from sources"),
                     authorization="Bearer t")
     entry = db.tables["briefing_edit_log"][-1]
-    assert entry["action"] == "rewrite" and entry["after"] == {"title": "ADC names campaign council", "bullets": ["One.", "Two."]}
+    assert entry["action"] == "rewrite"
+    assert entry["after"] == {"title": "ADC names campaign council", "bullets": ["One.", "Two."], "sections": None}
     assert entry["editor"] == "Ada Obi (editorial)" and updates[-1]["edited_by"] == "Ada Obi (editorial)"
 
 
@@ -393,3 +456,113 @@ def test_plain_reporting_is_not_commentary(bullet):
 def test_acronyms_initials_and_common_nouns_are_not_surnames(bullets):
     a = assess("Results released", bullets)
     assert not any(r.startswith("named by one name only") for r in a["reasons"])
+
+
+# Counsel's ruling, 3 Oct, item 5: party checks, second approver, no duplicates
+def test_party_live_needs_source_and_time_for_each_descriptor(monkeypatch):
+    from fastapi import HTTPException
+    br, db, updates = editor_setup(monkeypatch)
+    with pytest.raises(HTTPException) as e:
+        br.approve_item("e1", br.Approval(checklist=ALL_TICKED), authorization="Bearer t")
+    assert e.value.status_code == 422 and not updates
+    with pytest.raises(HTTPException):
+        br.approve_item("e1", br.Approval(checklist=ALL_TICKED, party_checks=[
+            {"descriptor": "Atiku Abubakar, ADC candidate", "source": "", "checked_at": "3 Oct 17:00"}]), authorization="Bearer t")
+    br.approve_item("e1", br.Approval(checklist=ALL_TICKED, party_checks=[
+        {"descriptor": "Atiku Abubakar, ADC candidate", "source": "inecnigeria.org", "checked_at": "3 Oct 2026 17:00 WAT"}]),
+        authorization="Bearer t")
+    assert updates[-1]["approval_checklist"]["party_checks"][0]["source"] == "inecnigeria.org"
+
+
+def approved_row(db):
+    db.tables["briefing_editions"][0].update(approved_by="Ada Obi (editorial)", approved_summary_id="s1",
+                                             approved_edit_at=None, edited_at=None)
+
+
+def test_senior_review_needs_a_second_different_approver(monkeypatch):
+    from fastapi import HTTPException
+    br, db, updates = editor_setup(monkeypatch, lane="senior_review")
+    approved_row(db)
+    with pytest.raises(HTTPException) as e:
+        br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
+    assert e.value.status_code == 409 and "second approver" in e.value.detail
+    monkeypatch.setattr(br, "get_actor_name", lambda auth: "Enitan Bello (super_admin)")
+    br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
+    assert updates[-1]["second_approved_by"] == "Enitan Bello (super_admin)"
+    assert db.tables["briefing_edit_log"][-1]["action"] == "approve_second"
+
+
+def test_a_second_approval_click_is_refused_not_logged_twice(monkeypatch):
+    from fastapi import HTTPException
+    br, db, updates = editor_setup(monkeypatch, lane="review")
+    approved_row(db)
+    with pytest.raises(HTTPException) as e:
+        br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
+    assert e.value.status_code == 409 and not db.tables["briefing_edit_log"]
+
+
+def test_senior_item_publishes_only_with_both_approvals():
+    row = {"approved_by": "Ada (editorial)", "approved_summary_id": "s1", "approved_edit_at": None, "edited_at": None}
+    assert be.approval_valid(row, {"id": "s1"}, "review")
+    assert not be.approval_valid(row, {"id": "s1"}, "senior_review")
+    assert not be.approval_valid({**row, "second_approved_by": "Ada (editorial)"}, {"id": "s1"}, "senior_review")
+    assert be.approval_valid({**row, "second_approved_by": "Enitan (super_admin)"}, {"id": "s1"}, "senior_review")
+
+
+def test_section_rewrite_rejects_a_quote_not_in_the_sources(monkeypatch):
+    from fastapi import HTTPException
+    br, db, updates = editor_setup(monkeypatch)
+    monkeypatch.setattr(br, "cluster_articles_text", lambda cid: 'Source 1\nSummary: The minister said "work starts in January".')
+    with pytest.raises(HTTPException) as e:
+        br.rewrite_item("e1", br.Rewrite(sections={"quotes": [{"speaker": "Ada Obi", "role": "Minister", "quote": "work starts soon"}]}),
+                        authorization="Bearer t")
+    assert e.value.status_code == 422 and "verbatim" in e.value.detail
+    br.rewrite_item("e1", br.Rewrite(sections={"quotes": [{"speaker": "Ada Obi", "role": "Minister", "quote": "work starts in January"}]}),
+                    authorization="Bearer t")
+    assert updates[-1]["edited_extras"]["quotes"][0]["quote"] == "work starts in January"
+
+
+# Item 6: the fuller sections
+SRC = ('Source 1\nHeadline: Court adjourns case\nSummary: Justice Inyang Ekwo adjourned the case to October 13, 2026. '
+       '"We will be ready," lawyer Musa Bello said. The suit was filed in July 2026.')
+
+
+def test_quotes_must_appear_verbatim_and_render_with_said():
+    from app.briefing_extras import check_extras, quote_line
+    kept, dropped = check_extras({"quotes": [
+        {"speaker": "Musa Bello", "role": "lawyer for the plaintiffs", "quote": "We will be ready,"},
+        {"speaker": "Musa Bello", "role": "lawyer", "quote": "We will win"}]}, SRC)
+    assert len(kept["quotes"]) == 1 and "verbatim" in dropped[0]
+    assert quote_line(kept["quotes"][0]) == 'Musa Bello, lawyer for the plaintiffs, said: "We will be ready,"'
+
+
+def test_next_steps_must_be_attributed_and_not_predictions():
+    from app.briefing_extras import check_extras
+    kept, dropped = check_extras({"next": [
+        "Justice Inyang Ekwo adjourned the case to October 13, 2026.",
+        "The case will likely end in November.",
+        "The hearing is on October 20, 2026, the court said."]}, SRC)
+    assert kept["next"] == ["Justice Inyang Ekwo adjourned the case to October 13, 2026."]
+    assert len(dropped) == 2
+
+
+def test_background_about_a_named_persons_conduct_needs_an_attributed_public_record():
+    from app.briefing_extras import check_extras
+    kept, dropped = check_extras({"background": [
+        "Musa Bello was accused of fraud in 2019.",
+        "The suit was filed in July 2026, according to court records.",
+        "The state has 23 local government areas."] + ["Extra point."] * 2}, SRC)
+    assert "Musa Bello was accused of fraud in 2019." not in kept["background"]
+    assert len(kept["background"]) == 3
+
+
+def test_sections_follow_the_gate_and_reach_readers_without_reviewer_fields(monkeypatch):
+    from datetime import date
+    db = edition_db()
+    db.tables["briefing_editions"][0]["extras"] = {"quotes": [], "next": ["The council will meet on Monday, the minister said."], "background": []}
+    monkeypatch.setattr(be, "supabase", db)
+    monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "Rail line approved. " + " ".join(NEUTRAL))
+    be._registry.update(at=0, rows=[])
+    item = be.edition_items(date(2026, 10, 4))[0]
+    assert item["sections"]["next"] == ["The council will meet on Monday, the minister said."]
+    assert "extras_dropped" not in item
