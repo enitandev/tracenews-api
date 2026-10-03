@@ -10,6 +10,7 @@ action is written to the change log.
   railway run python scripts/build_sample_editions.py                 # plan only
   railway run python scripts/build_sample_editions.py --regenerate --yes
   railway run python scripts/build_sample_editions.py --replace --regenerate --yes
+  railway run python scripts/build_sample_editions.py --replace --regenerate-flagged --yes
 
 --replace rebuilds dates that already have a SAMPLE edition (never a real
 one). It first writes the old sample rows and their change-log entries to
@@ -35,7 +36,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.briefing_edition import build_edition, candidate_clusters, edition_window, lagos_today, select_clusters  # noqa: E402
 from app.db import supabase  # noqa: E402
-from app.summarizer import generate_cluster_summary  # noqa: E402
+from app.summarizer import generate_cluster_summary, is_generation_failure  # noqa: E402
 
 # 25 Sep: ADC campaign council (to be rewritten by an editor). 29 Sep: "Alleged
 # forgery" (Atiku motion). 30 Sep: Manchester City. 1 Oct: Adeyemi arraignment.
@@ -47,6 +48,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--dates", default=",".join(DEFAULT_DATES))
     ap.add_argument("--regenerate", action="store_true", help="re-run the cleared summary for each selected story (paid)")
+    ap.add_argument("--regenerate-flagged", action="store_true",
+                    help="re-run the summary only for stories whose newest summary was flagged, suppressed or failed (paid)")
     ap.add_argument("--replace", action="store_true", help="rebuild dates that already have a sample edition (backs them up first)")
     ap.add_argument("--yes", action="store_true", help="carry out the plan")
     args = ap.parse_args()
@@ -70,10 +73,22 @@ def main():
         for c in selected:
             print(f"    {c['representative_title'][:100]}")
 
+    def needs_rerun(cluster_id):
+        rows = supabase.table("cluster_summaries").select("*").eq("cluster_id", cluster_id) \
+            .order("generated_at", desc=True).limit(1).execute().data or []
+        if not rows:
+            return True
+        newest = rows[0]
+        return bool(newest.get("flags")) or newest.get("gate") == "suppress" or is_generation_failure(newest)
+
+    rerun = set()
+    if args.regenerate_flagged and not args.regenerate:
+        rerun = {c["id"] for _, sel in plan for c in sel if needs_rerun(c["id"])}
+        print(f"\n{len(rerun)} stories have a flagged, suppressed or failed newest summary and will be re-run.")
     stories = sum(len(s) for _, s in plan)
-    calls = stories * (2 if args.regenerate else 1)
+    calls = stories + (stories if args.regenerate else len(rerun) * 3)
     print(f"\nPlan: {len(plan)} sample editions; {calls} paid model calls "
-          f"({'summary + sections' if args.regenerate else 'sections'} per story); "
+          f"(at most; sections for every story, summaries {'for every story' if args.regenerate else 'for re-runs, up to 3 draws each'}); "
           f"{len(to_replace)} old sample items to replace.")
     if not args.yes:
         print("Nothing written. Re-run with --yes to carry out the plan.")
@@ -92,8 +107,8 @@ def main():
 
     failed = []
     for day, selected in plan:
-        if args.regenerate:
-            for c in selected:
+        for c in selected:
+            if args.regenerate or c["id"] in rerun:
                 if generate_cluster_summary(c["id"]) is None:
                     failed.append(c["representative_title"])
         print(f"{day}: {build_edition(day, sample=True)}")
