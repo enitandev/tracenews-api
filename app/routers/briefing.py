@@ -101,6 +101,18 @@ def staff_edition(day: str = None, _: str = Depends(require_permission("briefing
             "checklist": CHECKLIST, "ui": UI}
 
 
+@router.get("/api/admin/briefing/dates")
+def staff_edition_dates(_: str = Depends(require_permission("briefing", "view"))):
+    """Dates that have an edition, newest first, with item counts and whether it is a sample."""
+    rows = supabase.table("briefing_editions").select("date, is_sample") \
+        .order("date", desc=True).limit(1000).execute().data or []
+    dates = {}
+    for r in rows:
+        d = dates.setdefault(r["date"], {"date": r["date"], "is_sample": bool(r.get("is_sample")), "items": 0})
+        d["items"] += 1
+    return {"dates": list(dates.values())}
+
+
 class Rewrite(BaseModel):
     title: Optional[str] = None
     bullets: Optional[List[str]] = None
