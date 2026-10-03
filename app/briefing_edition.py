@@ -14,7 +14,7 @@ import time as _time
 from datetime import datetime, time, timedelta, timezone
 
 from app.briefingStrings import (
-    COMMENTARY_PHRASES, COMMENTARY_VERBS, EDITION_CUTOFF_HOUR_LAGOS, FORBIDDEN_TOKENS,
+    COMMENTARY_PHRASES, COMMENTARY_STATEMENT_PATTERN, EDITION_CUTOFF_HOUR_LAGOS, FORBIDDEN_TOKENS,
     HEADLINE_BODY_TERMS, HEADLINE_PREFIXES, HEADLINE_TRAILING_PHRASES, LANE_AUTO,
     LANE_LEFT_OUT, LANE_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES,
     MIN_DISTINCT_OUTLETS, PARTY_NAMES, POLITICAL_OFFICES, POLITICAL_REVIEW_LANE,
@@ -160,7 +160,8 @@ def offices_in(text):
     return [o for o in POLITICAL_OFFICES if _has(o, text)]
 
 
-_CAP_RUN = re.compile(r"[A-Z][\w'’\-]*(?:\s+[A-Z][\w'’\-]*)*")
+# Capitalised runs; an initial such as "A." stays inside the run ("Peter A. Okebukola").
+_CAP_RUN = re.compile(r"[A-Z][\w'’\-]*\.?(?:\s+[A-Z][\w'’\-]*\.?)*")
 _IGNORE = set(SURNAME_CHECK_IGNORE)
 _ORG = set(SURNAME_CHECK_ORG_WORDS)
 
@@ -170,18 +171,35 @@ def _name_runs(text):
     words dropped and possessives stripped."""
     runs = []
     for m in _CAP_RUN.finditer(text):
-        words = [re.sub(r"(['’]s|['’])$", "", w) for w in m.group(0).split()]
-        words = [w for w in words if w and w not in _IGNORE]
+        words = [re.sub(r"(['’]s|['’])$", "", w.rstrip(".")) for w in m.group(0).split()]
+        words = [w for w in words if _is_name_word(w)]
         if words:
             runs.append((m.start(), words))
     return runs
 
 
+def _is_name_word(w):
+    """A word that can be part of a person's name: not a title or common
+    capitalised word, not an acronym (SSCE, ADC), not an initial, no digits,
+    and not a hyphenated common noun ("T-shirts")."""
+    if not w or w in _IGNORE or len(w) < 2:
+        return False
+    if w.isupper() or any(ch.isdigit() for ch in w):
+        return False
+    if "-" in w and any(part[:1].islower() for part in w.split("-")[1:]):
+        return False
+    return True
+
+
 def _registry_words(registry):
+    """First and last names from the registry (not middle words), so a
+    one-name reference to a registry person is recognised."""
     words = set()
     for r in registry:
         for n in (r.get("full_name"), r.get("common_name")):
-            words |= {w for w in (n or "").split() if len(w) > 2 and w not in _IGNORE}
+            parts = [w for w in (n or "").split() if len(w) > 2 and _is_name_word(w)]
+            if parts:
+                words |= {parts[0], parts[-1]}
     return words
 
 
@@ -212,7 +230,9 @@ def names_a_person_or_party(text, registry):
 
 def commentary_in(bullets):
     text = " ".join(b for b in bullets if isinstance(b, str))
-    return [p for p in COMMENTARY_PHRASES + COMMENTARY_VERBS if _has(p, text)]
+    found = [p for p in COMMENTARY_PHRASES if _has(p, text)]
+    found += [m.group(0) for m in re.finditer(COMMENTARY_STATEMENT_PATTERN, text, re.IGNORECASE)]
+    return found
 
 
 def assess_item(raw_title, bullets, articles_text, registry):
