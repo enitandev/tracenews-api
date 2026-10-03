@@ -23,6 +23,21 @@ with open(json_path, "r") as f:
     CONSENT_DATA = json.load(f)
 
 CONSENT_VERSION = CONSENT_DATA["CONSENT_REVIEW"]["version"]
+# Reader tracking stays unavailable to real readers until counsel closes
+# CONSENT_REVIEW (reviewedBy set in readerAnalyticsConsent.json). Staff
+# accounts may use it for testing. Counsel, 3 Oct 2026, F3.
+CONSENT_REVIEW_CLOSED = bool(CONSENT_DATA["CONSENT_REVIEW"].get("reviewedBy"))
+
+
+def tracking_available(user_id: str) -> bool:
+    if CONSENT_REVIEW_CLOSED:
+        return True
+    from app.permissions import is_staff_role
+    res = supabase.table("profiles").select("role, is_staff").eq("id", user_id).limit(1).execute()
+    profile = (res.data or [{}])[0]
+    return is_staff_role(profile.get("role"), profile.get("is_staff"))
+
+
 SHOWN_STRINGS = {
     "promise": CONSENT_DATA["TOGGLE"]["promise"],
     "shortNotice": CONSENT_DATA["TOGGLE"]["shortNotice"],
@@ -31,6 +46,9 @@ SHOWN_STRINGS = {
 
 @router.post("/consent")
 def submit_consent(request: ConsentRequest, user_id: str = Depends(get_current_user)):
+    # Turning tracking OFF is always allowed; turning it on waits for CONSENT_REVIEW.
+    if request.granted and not tracking_available(user_id):
+        raise HTTPException(status_code=403, detail="Reading tracking is not available yet.")
     try:
         payload = {
             "user_id": user_id,
@@ -53,6 +71,8 @@ class TrackReadRequest(BaseModel):
 
 @router.post("/track-read")
 def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_user)):
+    if not tracking_available(user_id):
+        raise HTTPException(status_code=403, detail="Reading tracking is not available yet.")
     try:
         if request.tier not in ["govt", "mainstream", "watchdog"]:
             raise HTTPException(status_code=400, detail="Invalid tier")
@@ -174,6 +194,7 @@ async def get_summary(user_id: str = Depends(get_current_user)):
             },
             "tier_distribution": counts,
             "consent_granted": consent_granted,
+            "tracking_available": tracking_available(user_id),
             "public_one_tier_stories": public_one_tier,
             "public_one_tier_computed_at": computed_at,
             "alerts": []
