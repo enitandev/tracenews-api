@@ -173,7 +173,8 @@ EXAM_CONTEXT_TERMS = (
 COURT_TERMS = (
     "court", "courts", "judge", "judges", "tribunal", "tribunals", "magistrate",
     "court ruling", "ruled that", "judgment", "judgement", "verdict", "arraign", "arraigned",
-    "arraignment", "lawsuit", "suit", "adjourned", "convicted", "acquitted",
+    "arraignment", "lawsuit", "suit", "adjourned the case", "adjourned the matter",
+    "adjourned the hearing", "adjourned the suit", "convicted", "acquitted",
     "sentenced", "found guilty", "panel found", "commission found",
 )
 
@@ -214,6 +215,14 @@ SURNAME_CHECK_IGNORE = (
     "They", "It", "This", "That", "According", "Deputy", "Former", "Late",
     "First", "Lady", "Acting", "Executive", "Permanent", "Minority", "Majority",
     "African", "American", "European", "Asian", "Kenyan", "Ugandan", "Ghanaian",
+    # Places are not surnames: the states, the FCT, and countries in the news.
+    "Abia", "Adamawa", "Akwa", "Ibom", "Anambra", "Bauchi", "Bayelsa", "Benue", "Borno",
+    "Cross", "River", "Delta", "Ebonyi", "Edo", "Ekiti", "Enugu", "Gombe", "Imo", "Jigawa",
+    "Kaduna", "Kano", "Katsina", "Kebbi", "Kogi", "Kwara", "Nasarawa", "Niger", "Ogun",
+    "Ondo", "Osun", "Oyo", "Plateau", "Rivers", "Sokoto", "Taraba", "Yobe", "Zamfara", "FCT",
+    "Maiduguri", "Ibadan", "Kenya", "Ghana", "Uganda", "Tanzania", "Morocco", "Madagascar",
+    "Guinea-Bissau", "Guinea", "Senegal", "Cameroon", "Benin", "Togo", "Egypt", "Paris",
+    "London", "France", "Britain", "China", "America", "Washington", "Tennessee",
 )
 
 # A capitalised run of words ending in one of these is an organisation or a
