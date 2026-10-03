@@ -20,6 +20,13 @@ PERMISSIONS = {
         "editorial": "yes",
         "super_admin": "yes"
     },
+    "briefing": {
+        "reader": "no",
+        "read_only": "view",
+        "tech": "no",
+        "editorial": "yes",
+        "super_admin": "yes"
+    },
     "reports": {
         "reader": "no",
         "read_only": "view",
