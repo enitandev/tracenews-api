@@ -1,117 +1,132 @@
 """
-Sample editions of the rebuilt Daily Briefing for counsel (consolidated
-instruction, 3 Oct 2026, B9). Read-only: no database writes, no model calls.
+Exports the Daily Briefing sample editions for counsel. Read-only: no
+database writes, no model calls.
 
-For each of the last DAYS days it selects stories exactly as the Briefing
-does (stories first seen in the 24 hours before 06:00 Lagos, widest coverage
-first), attaches each story's stored cleared summary, and applies the same
-gate. Run from the repo root:
-    railway run python scripts/briefing_samples.py
-Writes briefing_samples_<stamp>/samples.html (what a reader would see, with
-each item's gate status) and samples.json.
+  railway run python scripts/briefing_samples.py
+  railway run python scripts/briefing_samples.py --dates 2026-09-25,2026-09-30
+
+Reads the editions built by scripts/build_sample_editions.py (or any real
+edition) exactly as staff see them at /admin/briefing, and writes
+briefing_samples_<stamp>/samples.html and samples.json. Each item shows:
+  - what a reader would see (or that it is held / left out, and why);
+  - the reviewer panel: routing reasons, editor rewrites, approval with the
+    checklist, and "Named in the source articles" — reviewer-only, never
+    shown to readers;
+and the change log for those dates.
 """
+import argparse
 import html
 import json
 import os
 import sys
-from datetime import datetime, time, timedelta, timezone
+from datetime import date, datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.briefing_edition import (  # noqa: E402
-    LAGOS, candidate_clusters, coverage_counts, has_forbidden_token, latest_summary, select_clusters, summary_usable,
-)
-from app.briefingStrings import GATE_NEEDS_EDITOR_APPROVAL, UI  # noqa: E402
+from app.briefing_edition import edition_items  # noqa: E402
+from app.briefingStrings import EDITOR_CHECKLIST, UI  # noqa: E402
 from app.db import supabase  # noqa: E402
 
-DAYS = 14
+LANE_TEXT = {
+    "auto": "Publishes automatically",
+    "review": "Held for a named editor (review)",
+    "senior_review": "Held for a named editor (senior review: adverse context, principal office-holder)",
+    "left_out": "Left out",
+}
 
 
-def names_in(cluster_id):
-    stories = supabase.table("stories").select("id").eq("cluster_id", cluster_id).execute().data or []
-    ids = [s["id"] for s in stories][:100]
-    if not ids:
-        return []
-    ents = supabase.table("story_entities").select("politician_id").in_("story_id", ids).eq("entity_type", "politician").execute().data or []
-    pids = sorted({e["politician_id"] for e in ents if e.get("politician_id")})
-    if not pids:
-        return []
-    rows = supabase.table("politicians").select("common_name").in_("id", pids).execute().data or []
-    return sorted(r["common_name"] for r in rows if r.get("common_name"))
+def e(s):
+    return html.escape(str(s if s is not None else ""))
 
 
-def edition_for(day):
-    end = datetime.combine(day, time(6, 0), LAGOS)
-    start = end - timedelta(hours=24)
-    clusters = candidate_clusters(start, end)
-    items, left_out = [], []
-    for c in select_clusters(clusters):
-        s = latest_summary(c["id"])
-        if not summary_usable(s):
-            left_out.append({"title": c["representative_title"], "why": "no usable summary (missing, flagged, suppressed or failed)"})
-            continue
-        token = has_forbidden_token(s.get("bullets") or [])
-        if token:
-            left_out.append({"title": c["representative_title"], "why": f"forbidden token: {token}"})
-            continue
-        status = ("Publishes automatically (gate: auto)" if s.get("gate") not in GATE_NEEDS_EDITOR_APPROVAL
-                  else f"Held for a named editor's approval (gate: {s.get('gate')})")
-        items.append({
-            "title": c["representative_title"], "slug": c["slug"], "category": c.get("category"),
-            "bullets": s.get("bullets") or [], "gate": s.get("gate"), "status": status,
-            "coverage_counts": coverage_counts(c["id"]), "named_people": names_in(c["id"]),
-        })
-    return {"date": day.isoformat(), "items": items, "left_out": left_out}
-
-
-def render(editions, counted_at):
+def counts_line(c):
     t = UI["tier_labels"]
-    out = [f"<!doctype html><meta charset='utf-8'><title>{UI['title']} — sample editions</title>",
-           "<style>body{font-family:sans-serif;max-width:820px;margin:auto;padding:24px;color:#222}"
-           ".item{border:1px solid #ccc;border-radius:6px;padding:14px;margin:12px 0}.label{font-size:12px;color:#666}"
-           ".status{font-size:12px;background:#f3f3f3;padding:4px 8px;display:inline-block;margin-bottom:8px}"
-           ".counts{font-size:13px;color:#444}.out{font-size:12px;color:#888}</style>",
-           f"<h1>{UI['title']} — sample editions</h1>",
-           "<p>Built from stored cleared summaries with the Briefing's own selection and gate. Not published. "
-           f"Coverage counts were taken when this file was generated ({counted_at}), not on the edition date.</p>"]
+    c = c or {}
+    total = sum(c.get(k) or 0 for k in t)
+    return f"<b>{e(UI['coverage_heading'])}:</b> {total} — " + " · ".join(f"{e(t[k])} {c.get(k) or 0}" for k in t)
+
+
+def render(editions, log, generated):
+    out = [f"<!doctype html><meta charset='utf-8'><title>{e(UI['title'])} — sample editions</title>",
+           "<style>body{font-family:sans-serif;max-width:860px;margin:auto;padding:24px;color:#222}"
+           ".item{border:1px solid #ccc;border-radius:6px;padding:14px;margin:14px 0}"
+           ".reader{background:#fff}.label{font-size:12px;color:#666}.status{font-size:12px;font-weight:bold;margin-bottom:8px}"
+           ".rev{margin-top:10px;padding:10px;background:#f6f3ea;border-left:3px solid #b08900;font-size:12px}"
+           ".out{color:#999}.counts{font-size:13px;color:#444}table{border-collapse:collapse;font-size:12px}"
+           "td,th{border:1px solid #ddd;padding:4px 6px;vertical-align:top}</style>",
+           f"<h1>{e(UI['title'])} — sample editions</h1>",
+           f"<p>Generated {e(generated)}. Built with the Briefing's own selection and routing, from the cleared "
+           "summary prompt as amended in October 2026. Not published: sample editions are never shown to readers. "
+           "The shaded panel under each item is the editor's view and never appears to readers.</p>"]
     for ed in editions:
-        out.append(f"<h2>{ed['date']}</h2>")
+        out.append(f"<h2>{e(ed['date'])}</h2>")
+        shown = [i for i in ed["items"] if i["lane"] != "left_out"]
+        out.append(f"<p class='label'>{len(ed['items'])} stories selected; "
+                   f"{sum(1 for i in ed['items'] if i['publishable'])} would publish as the edition stands.</p>")
         for it in ed["items"]:
-            c = it["coverage_counts"]
-            total = sum(c.values())
-            out.append("<div class='item'>")
-            out.append(f"<div class='status'>{html.escape(it['status'])}</div>")
-            out.append(f"<h3>{html.escape(it['title'])}</h3><div class='label'>{UI['attribution_label']}</div><ul>")
-            out += [f"<li>{html.escape(b)}</li>" for b in it["bullets"] if isinstance(b, str)]
-            out.append("</ul>")
-            out.append(f"<div class='counts'><b>{UI['coverage_heading']}:</b> {total} — "
-                       f"{t['govt_aligned']} {c['govt_aligned']} · {t['mainstream']} {c['mainstream']} · {t['watchdog']} {c['watchdog']}</div>")
-            out.append(f"<div class='label'>{UI['correction_link']} · {UI['methodology_link']}</div>")
-            if it["named_people"]:
-                out.append(f"<div class='out'>Named in the source articles: {html.escape(', '.join(it['named_people']))}</div>")
-            out.append("</div>")
-        for lo in ed["left_out"]:
-            out.append(f"<div class='out'>Left out: {html.escape(lo['title'])} — {lo['why']}</div>")
+            status = LANE_TEXT[it["lane"]]
+            if it["lane"] in ("review", "senior_review"):
+                status += f" — approved by {it['approved_by']}" if it["approved_by"] else " — not yet approved"
+            cls = "item" if it in shown else "item out"
+            out.append(f"<div class='{cls}'><div class='status'>{e(status)}</div>")
+            out.append(f"<h3>{e(it['title'])}</h3><div class='label'>{e(UI['attribution_label'])}</div><ul>")
+            out += [f"<li>{e(b)}</li>" for b in it["bullets"] if isinstance(b, str)]
+            out.append(f"</ul><div class='counts'>{counts_line(it['coverage_counts'])}</div>")
+            out.append(f"<div class='label'>{e(UI['correction_link'])} · {e(UI['methodology_link'])}</div>")
+            out.append("<div class='rev'><b>Editor's view (never shown to readers)</b><br>")
+            out.append(f"Source headline: {e(it['source_headline'])}<br>")
+            if it["reasons"]:
+                out.append("Routing: " + "; ".join(e(r) for r in it["reasons"]) + "<br>")
+            if it["edited_by"]:
+                out.append(f"Rewritten by {e(it['edited_by'])} at {e(it['edited_at'])}. Model summary before the rewrite: "
+                           + " / ".join(e(b) for b in it["summary_bullets"]) + "<br>")
+            if it["named_in_sources"]:
+                out.append(f"Named in the source articles: {e(', '.join(it['named_in_sources']))}<br>")
+            out.append("</div></div>")
+    out.append("<h2>Change log for these dates</h2>")
+    if not log:
+        out.append("<p>No editor actions.</p>")
+    else:
+        out.append("<table><tr><th>When (UTC)</th><th>Edition</th><th>Editor</th><th>Action</th><th>Before</th><th>After</th><th>Note</th></tr>")
+        for r in log:
+            out.append(f"<tr><td>{e(r['created_at'])}</td><td>{e(r['date'])}</td><td>{e(r['editor'])}</td>"
+                       f"<td>{e(r['action'])}</td><td>{e(json.dumps(r.get('before'), ensure_ascii=False))}</td>"
+                       f"<td>{e(json.dumps(r.get('after'), ensure_ascii=False))}</td><td>{e(r.get('note'))}</td></tr>")
+        out.append("</table>")
+    out.append("<h2>Editor's checklist (ticked for every approval)</h2><ul>")
+    out += [f"<li>{e(label)}</li>" for _, label in EDITOR_CHECKLIST]
+    out.append("</ul>")
     return "\n".join(out)
 
 
 def main():
-    today = datetime.now(LAGOS).date()
-    editions = [edition_for(today - timedelta(days=n)) for n in range(DAYS)]
-    editions = [e for e in editions if e["items"] or e["left_out"]]
-    counted_at = datetime.now(timezone.utc).isoformat(timespec="minutes")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--dates", help="comma-separated; default: every sample edition")
+    args = ap.parse_args()
+    if args.dates:
+        days = sorted({d.strip() for d in args.dates.split(",") if d.strip()})
+    else:
+        rows = supabase.table("briefing_editions").select("date").eq("is_sample", True).execute().data or []
+        days = sorted({r["date"] for r in rows})
+    if not days:
+        sys.exit("No sample editions found. Run scripts/build_sample_editions.py first.")
+
+    editions = [{"date": d, "items": edition_items(date.fromisoformat(d), publishable_only=False)} for d in days]
+    log = supabase.table("briefing_edit_log").select("*").in_("date", days).order("created_at").execute().data or []
+    generated = datetime.now(timezone.utc).isoformat(timespec="minutes")
     out = f"briefing_samples_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
     os.makedirs(out)
     with open(os.path.join(out, "samples.json"), "w") as f:
-        json.dump(editions, f, indent=2, default=str, ensure_ascii=False)
+        json.dump({"editions": editions, "change_log": log}, f, indent=2, default=str, ensure_ascii=False)
     with open(os.path.join(out, "samples.html"), "w") as f:
-        f.write(render(editions, counted_at))
-    items = [i for e in editions for i in e["items"]]
-    political_named = [i for i in items if i["category"] == "Politics" and i["named_people"]]
-    print(f"{len(editions)} editions, {len(items)} items "
-          f"({sum(1 for i in items if i['gate'] not in GATE_NEEDS_EDITOR_APPROVAL)} auto, "
-          f"{sum(1 for i in items if i['gate'] in GATE_NEEDS_EDITOR_APPROVAL)} held for an editor); "
-          f"{len(political_named)} political items naming individuals")
+        f.write(render(editions, log, generated))
+
+    items = [i for ed in editions for i in ed["items"]]
+    by_lane = {lane: sum(1 for i in items if i["lane"] == lane) for lane in LANE_TEXT}
+    unapproved = sum(1 for i in items if i["lane"] in ("review", "senior_review") and not i["approved_by"])
+    print(f"{len(editions)} editions, {len(items)} items: " + ", ".join(f"{v} {k}" for k, v in by_lane.items())
+          + f"; {sum(1 for i in items if i['publishable'])} would publish; {unapproved} held items not yet approved; "
+          f"{len(log)} change-log entries")
     print(f"done: {out}/samples.html")
 
 

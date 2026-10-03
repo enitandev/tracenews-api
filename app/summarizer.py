@@ -24,7 +24,7 @@ from app.storySummaryStrings import (
 logger = logging.getLogger("summarizer")
 openai_client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-def evaluate_summary(bullets, articles_text: str) -> dict:
+def evaluate_summary(bullets, articles_text: str, title: str = None) -> dict:
     """
     Decide whether generated bullets may publish. This is the legal-risk
     routing for event summaries:
@@ -41,6 +41,10 @@ def evaluate_summary(bullets, articles_text: str) -> dict:
 
     Publishes only when the gate is auto AND nothing was flagged.
     A bullet that is not text is flagged, never coerced into text.
+
+    title: the Briefing runs this over headline + body together (counsel's
+    review of the 3 Oct samples, item 1b). The headline joins every check
+    except the bullet count. Story pages pass no title.
     """
     if not isinstance(bullets, list):
         bullets = [str(bullets)]
@@ -51,7 +55,7 @@ def evaluate_summary(bullets, articles_text: str) -> dict:
         flags.append(f"bullet_type: {len(non_text)} non-text")
     text_bullets = [b for b in bullets if isinstance(b, str)]
 
-    combined_bullets_lower = " ".join(text_bullets).lower()
+    combined_bullets_lower = " ".join(([title] if isinstance(title, str) else []) + text_bullets).lower()
     combined_summaries_lower = articles_text.lower()
 
     def mentions(term, text):
@@ -121,16 +125,22 @@ def is_generation_failure(summary_row: dict) -> bool:
     return any(str(f).startswith(GENERATION_FAILED_FLAG) for f in (summary_row.get("flags") or []))
 
 
+def format_articles_text(stories) -> str:
+    """The model receives no outlet name, identifier or tier (counsel, 3 Oct 2026, B2)."""
+    return "\n\n".join(f"Source {i}\nHeadline: {s.get('title')}\nSummary: {s.get('summary')}" for i, s in enumerate(stories, 1))
+
+
+def cluster_articles_text(cluster_id: str) -> str:
+    stories = supabase.table("stories").select("title, summary").eq("cluster_id", cluster_id).execute().data or []
+    return format_articles_text(stories)
+
+
 def generate_cluster_summary(cluster_id: str) -> dict:
     """Generate and store an event summary for a given cluster."""
-    stories_res = supabase.table("stories").select("title, summary").eq("cluster_id", cluster_id).execute()
-    stories = stories_res.data
-    
+    stories = supabase.table("stories").select("title, summary").eq("cluster_id", cluster_id).execute().data or []
     if len(stories) < 2:
         return None
-        
-    # The model receives no outlet name, identifier or tier (counsel, 3 Oct 2026, B2).
-    articles_text = "\n\n".join([f"Source {i}\nHeadline: {s.get('title')}\nSummary: {s.get('summary')}" for i, s in enumerate(stories, 1)])
+    articles_text = format_articles_text(stories)
     user_prompt = SUMMARY_USER_PROMPT.format(articles_text=articles_text)
     
     try:
