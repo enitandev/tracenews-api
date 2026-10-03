@@ -1,8 +1,9 @@
 """Daily briefing."""
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.db import supabase
 from app.image_utils import get_cluster_image
+from app.withdrawals import BRIEFING_WITHDRAWN
 
 logger = logging.getLogger(__name__)
 
@@ -10,6 +11,8 @@ router = APIRouter()
 
 @router.get("/daily-briefing")
 def get_daily_briefing():
+    if BRIEFING_WITHDRAWN:
+        raise HTTPException(status_code=410, detail="The Daily Briefing has been withdrawn.")
     from datetime import datetime, timezone, timedelta
     
     lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
@@ -83,8 +86,9 @@ def get_daily_briefing():
 
 @router.get("/daily-briefing/{slug}")
 def get_daily_briefing_story(slug: str):
+    if BRIEFING_WITHDRAWN:
+        raise HTTPException(status_code=410, detail="The Daily Briefing has been withdrawn.")
     from datetime import datetime, timezone, timedelta
-    from fastapi import HTTPException
     
     lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
     today = lagos_now.date().isoformat()
