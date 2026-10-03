@@ -211,9 +211,9 @@ def main():
 
         # 6. Daily Briefing - only during 05:00-07:00 UTC (6-8 AM WAT)
         lagos_now = datetime.now(timezone.utc) + timedelta(hours=1)
-        from app.withdrawals import BRIEFING_WITHDRAWN
-        if BRIEFING_WITHDRAWN:
-            logger.info("[worker] Daily briefing withdrawn (counsel, 3 Oct 2026); generation stopped.")
+        from app.withdrawals import BRIEFING_PUBLIC
+        if not BRIEFING_PUBLIC:
+            logger.info("[worker] Daily briefing is off (BRIEFING_PUBLIC); not generating.")
         elif 5 <= datetime.now(timezone.utc).hour <= 6:
             from app.daily_briefing import (
                 select_daily_briefing_stories,
