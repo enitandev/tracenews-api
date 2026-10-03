@@ -371,9 +371,22 @@ def source_articles(cluster_id):
 
 # ═══ EDITIONS ════════════════════════════════════════════════════════════════
 
-def build_edition(day=None, sample=False):
+def make_extras(cluster_id):
+    """Generate and check the fuller sections for one story. A failure is
+    logged and recorded on the row; the item still runs with What happened."""
+    from app.briefing_extras import generate_extras
+    try:
+        kept, dropped = generate_extras(cluster_articles_text(cluster_id))
+        return {"extras": kept, "extras_dropped": dropped, "extras_error": None}
+    except Exception as e:
+        logger.exception(f"[briefing] fuller sections failed for {cluster_id}")
+        return {"extras": None, "extras_dropped": None, "extras_error": f"{type(e).__name__}: {e}"[:300]}
+
+
+def build_edition(day=None, sample=False, with_extras=True):
     """Select a day's stories and record them. Idempotent per day.
-    sample=True builds a staff-only sample edition for counsel."""
+    sample=True builds a staff-only sample edition for counsel.
+    with_extras generates the fuller sections (one model call per story)."""
     day = day or lagos_today()
     if supabase.table("briefing_editions").select("id").eq("date", day.isoformat()).limit(1).execute().data:
         # One edition per date, real or sample (unique date + story).
@@ -386,7 +399,7 @@ def build_edition(day=None, sample=False):
         if not summary_usable(summary):
             skipped[cluster["slug"]] = "no usable summary (missing, flagged, suppressed or failed)"
             continue
-        rows.append({
+        row = {
             "date": day.isoformat(),
             "position": len(rows) + 1,
             "cluster_id": cluster["id"],
@@ -395,7 +408,11 @@ def build_edition(day=None, sample=False):
             "coverage_counts": coverage_counts(cluster["id"]),
             "counts_as_of": datetime.now(timezone.utc).isoformat(),
             "is_sample": sample,
-        })
+        }
+        if with_extras:
+            row.update(make_extras(cluster["id"]))
+            row["extras_generated_at"] = datetime.now(timezone.utc).isoformat()
+        rows.append(row)
     if rows:
         supabase.table("briefing_editions").insert(rows).execute()
     for slug, why in skipped.items():
@@ -409,13 +426,50 @@ def current_text(row, cluster, summary):
             edited if edited else (summary or {}).get("bullets") or [])
 
 
-def approval_valid(row, summary):
+def current_extras(row):
+    return row.get("edited_extras") or row.get("extras") or {"quotes": [], "next": [], "background": []}
+
+
+def reader_sections(extras):
+    from app.briefing_extras import quote_line
+    return {
+        "quotes": [{**q, "line": quote_line(q)} for q in extras.get("quotes") or []],
+        "next": list(extras.get("next") or []),
+        "background": list(extras.get("background") or []),
+    }
+
+
+def first_approval_valid(row, summary):
     """An approval covers the exact text approved (summary id + edit time)."""
     if not row.get("approved_by"):
         return False
     if str(row.get("approved_summary_id") or "") != str((summary or {}).get("id") or ""):
         return False
     return (row.get("approved_edit_at") or None) == (row.get("edited_at") or None)
+
+
+def approval_valid(row, summary, lane=None):
+    """Review needs one named editor. Senior review needs a second, different
+    approver of the same text (counsel's ruling, 3 Oct, item 5)."""
+    if not first_approval_valid(row, summary):
+        return False
+    if lane == LANE_SENIOR_REVIEW:
+        return bool(row.get("second_approved_by")) and row.get("second_approved_by") != row.get("approved_by")
+    return True
+
+
+def route_row(row, cluster, summary, registry):
+    raw_title, bullets = current_text(row, cluster, summary)
+    extras = current_extras(row)
+    if row.get("left_out_by"):
+        a = {"title": raw_title, "lane": LANE_LEFT_OUT,
+             "reasons": [f"left out by {row['left_out_by']}: {row.get('left_out_reason') or ''}".strip()]}
+    elif not summary_usable(summary):
+        a = {"title": raw_title, "lane": LANE_LEFT_OUT, "reasons": ["no usable cleared summary"]}
+    else:
+        from app.briefing_extras import section_texts
+        a = assess_item(raw_title, bullets, cluster_articles_text(row["cluster_id"]), registry, section_texts(extras))
+    return a, bullets, extras
 
 
 def edition_items(day, publishable_only=True):
@@ -433,15 +487,8 @@ def edition_items(day, publishable_only=True):
         summary = latest_summary(row["cluster_id"])
         cluster = (supabase.table("clusters").select("slug, representative_title, category")
                    .eq("id", row["cluster_id"]).limit(1).execute().data or [{}])[0]
-        raw_title, bullets = current_text(row, cluster, summary)
-        if row.get("left_out_by"):
-            a = {"title": raw_title, "lane": LANE_LEFT_OUT,
-                 "reasons": [f"left out by {row['left_out_by']}: {row.get('left_out_reason') or ''}".strip()]}
-        elif not summary_usable(summary):
-            a = {"title": raw_title, "lane": LANE_LEFT_OUT, "reasons": ["no usable cleared summary"]}
-        else:
-            a = assess_item(raw_title, bullets, cluster_articles_text(row["cluster_id"]), registry)
-        approved = approval_valid(row, summary)
+        a, bullets, extras = route_row(row, cluster, summary, registry)
+        approved = approval_valid(row, summary, a["lane"])
         publishable = a["lane"] == LANE_AUTO or (a["lane"] in LANES_NEEDING_EDITOR and approved)
         if publishable_only and not publishable:
             continue
@@ -455,10 +502,12 @@ def edition_items(day, publishable_only=True):
             "category": cluster.get("category"),
             "image_url": image,
             "bullets": bullets,
+            "sections": reader_sections(extras),
             "coverage_counts": row.get("coverage_counts"),
             "counts_as_of": row.get("counts_as_of"),
         }
         if not publishable_only:
+            first_ok = first_approval_valid(row, summary)
             item.update({
                 "lane": a["lane"],
                 "reasons": a["reasons"],
@@ -469,10 +518,16 @@ def edition_items(day, publishable_only=True):
                 "summary_gate": (summary or {}).get("gate"),
                 "edited_by": row.get("edited_by"),
                 "edited_at": row.get("edited_at"),
-                "approved_by": row.get("approved_by") if approved else None,
-                "approved_at": row.get("approved_at") if approved else None,
-                "stale_approval_by": row.get("approved_by") if row.get("approved_by") and not approved else None,
+                "approved_by": row.get("approved_by") if first_ok else None,
+                "approved_at": row.get("approved_at") if first_ok else None,
+                "second_approved_by": row.get("second_approved_by") if first_ok else None,
+                "second_approved_at": row.get("second_approved_at") if first_ok else None,
+                "needs_second_approver": a["lane"] == LANE_SENIOR_REVIEW and first_ok and not approved,
+                "approval_checklist": row.get("approval_checklist") if first_ok else None,
+                "stale_approval_by": row.get("approved_by") if row.get("approved_by") and not first_ok else None,
                 "left_out_by": row.get("left_out_by"),
+                "extras_dropped": row.get("extras_dropped") or [],
+                "extras_error": row.get("extras_error"),
                 "named_in_sources": named_people(row["cluster_id"]),
                 "sources": source_articles(row["cluster_id"]),
             })
@@ -483,10 +538,7 @@ def edition_items(day, publishable_only=True):
 def item_lane(row):
     """Routing for one stored row (used by the approve endpoint)."""
     summary = latest_summary(row["cluster_id"])
-    if row.get("left_out_by") or not summary_usable(summary):
-        return LANE_LEFT_OUT, summary
     cluster = (supabase.table("clusters").select("representative_title")
                .eq("id", row["cluster_id"]).limit(1).execute().data or [{}])[0]
-    raw_title, bullets = current_text(row, cluster, summary)
-    return assess_item(raw_title, bullets, cluster_articles_text(row["cluster_id"]), load_registry())["lane"], summary
-
+    a, _, _ = route_row(row, cluster, summary, load_registry())
+    return a["lane"], summary

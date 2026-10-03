@@ -15,8 +15,11 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel
 
 from app.admin_auth import get_actor_name, require_permission
-from app.briefing_edition import edition_items, has_forbidden_token, item_lane, lagos_today
-from app.briefingStrings import EDITOR_CHECKLIST, LANES_NEEDING_EDITOR, UI
+from app.briefing_edition import edition_items, first_approval_valid, has_forbidden_token, item_lane, lagos_today
+from app.briefing_extras import check_extras, section_texts
+from app.briefingStrings import EDITOR_CHECKLIST, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, UI
+from app.storySummaryStrings import SUMMARY_MAX_BULLETS
+from app.summarizer import cluster_articles_text
 from app.db import supabase
 from app.withdrawals import BRIEFING_PUBLIC
 
@@ -113,9 +116,22 @@ def staff_edition_dates(_: str = Depends(require_permission("briefing", "view"))
     return {"dates": list(dates.values())}
 
 
+class Quote(BaseModel):
+    speaker: str
+    role: str
+    quote: str
+
+
+class Sections(BaseModel):
+    quotes: List[Quote] = []
+    next: List[str] = []
+    background: List[str] = []
+
+
 class Rewrite(BaseModel):
     title: Optional[str] = None
     bullets: Optional[List[str]] = None
+    sections: Optional[Sections] = None
     note: Optional[str] = None
 
 
@@ -126,16 +142,27 @@ def rewrite_item(item_id: str, body: Rewrite, authorization: str = Header(...),
     row = _row(item_id)
     title = body.title.strip() if body.title is not None else row.get("edited_title")
     bullets = [b.strip() for b in body.bullets if b.strip()] if body.bullets is not None else row.get("edited_bullets")
-    if bullets is not None and not 1 <= len(bullets) <= 5:
-        raise HTTPException(status_code=422, detail="A rewrite has 1 to 5 bullets.")
-    token = has_forbidden_token([title or ""] + (bullets or []))
+    if bullets is not None and not 1 <= len(bullets) <= SUMMARY_MAX_BULLETS:
+        raise HTTPException(status_code=422, detail=f"What happened has 1 to {SUMMARY_MAX_BULLETS} points.")
+    sections = row.get("edited_extras")
+    if body.sections is not None:
+        # The editor's sections pass the same checks as generated ones:
+        # quotes verbatim in the sources, attributed next steps, limits.
+        raw = body.sections.model_dump()
+        sections, dropped = check_extras(raw, cluster_articles_text(row["cluster_id"]))
+        if dropped:
+            raise HTTPException(status_code=422, detail="Not saved: " + " | ".join(dropped))
+    section_text = section_texts(sections or {})
+    token = has_forbidden_token([title or ""] + (bullets or []) + section_text)
     if token:
         raise HTTPException(status_code=422, detail=f"The rewrite contains a forbidden word: {token}")
-    before = {"title": row.get("edited_title"), "bullets": row.get("edited_bullets")}
-    after = {"title": title or None, "bullets": bullets or None}
+    before = {"title": row.get("edited_title"), "bullets": row.get("edited_bullets"), "sections": row.get("edited_extras")}
+    after = {"title": title or None, "bullets": bullets or None, "sections": sections or None}
+    if before == after:
+        raise HTTPException(status_code=409, detail="Nothing changed.")
     _log(row, editor, "rewrite", before, after, body.note)
     supabase.table("briefing_editions").update({
-        "edited_title": after["title"], "edited_bullets": after["bullets"],
+        "edited_title": after["title"], "edited_bullets": after["bullets"], "edited_extras": after["sections"],
         "edited_by": editor, "edited_at": _now(),
     }).eq("id", item_id).execute()
     logger.info(f"[briefing] item {item_id} rewritten by {editor}")
@@ -174,35 +201,68 @@ def restore_item(item_id: str, authorization: str = Header(...),
     return {"status": "restored"}
 
 
+class PartyCheck(BaseModel):
+    descriptor: str      # e.g. "Atiku Abubakar, ADC presidential candidate"
+    source: str          # where it was checked (URL or named source)
+    checked_at: str      # when it was checked
+
+
 class Approval(BaseModel):
     checklist: Dict[str, bool]
+    party_checks: List[PartyCheck] = []
+    no_party_descriptors: bool = False
     note: Optional[str] = None
 
 
 @router.post("/api/admin/briefing/{item_id}/approve")
 def approve_item(item_id: str, body: Approval, authorization: str = Header(...),
                  _: str = Depends(require_permission("briefing", "edit"))):
+    """First approval for review and senior review; a second, different
+    approver for senior review (counsel's ruling, 3 Oct, item 5). The
+    party_live line needs the source and time checked for each descriptor."""
     editor = _named_editor(authorization)
     missing = [label for key, label in EDITOR_CHECKLIST if not body.checklist.get(key)]
     if missing:
         raise HTTPException(status_code=422, detail="Tick every checklist line before approving: " + " | ".join(missing))
+    checks = [c for c in body.party_checks if c.descriptor.strip() and c.source.strip() and c.checked_at.strip()]
+    if len(checks) != len(body.party_checks) or (not checks and not body.no_party_descriptors):
+        raise HTTPException(status_code=422, detail="For each party or candidacy descriptor, enter the descriptor, the source and the time you checked it, or confirm the item has none.")
     row = _row(item_id)
     lane, summary = item_lane(row)
     if lane not in LANES_NEEDING_EDITOR:
         raise HTTPException(status_code=409, detail=f"Only an item held for review can be approved (this item: {lane}).")
-    checklist = {k: True for k, _ in EDITOR_CHECKLIST}
-    _log(row, editor, "approve", None,
-         {"title": row.get("edited_title"), "bullets": row.get("edited_bullets") or (summary or {}).get("bullets"),
-          "summary_id": str(summary["id"]), "checklist": checklist}, body.note)
+    record = {"checklist": {k: True for k, _ in EDITOR_CHECKLIST},
+              "party_checks": [c.model_dump() for c in checks], "no_party_descriptors": body.no_party_descriptors and not checks}
+    approved_text = {"title": row.get("edited_title"), "bullets": row.get("edited_bullets") or (summary or {}).get("bullets"),
+                     "sections": row.get("edited_extras") or row.get("extras"), "summary_id": str(summary["id"]), **record}
+
+    if first_approval_valid(row, summary):
+        if lane != LANE_SENIOR_REVIEW:
+            raise HTTPException(status_code=409, detail=f"Already approved by {row['approved_by']}.")
+        if row.get("second_approved_by"):
+            raise HTTPException(status_code=409, detail=f"Already approved by {row['approved_by']} and {row['second_approved_by']}.")
+        if editor == row["approved_by"]:
+            raise HTTPException(status_code=409, detail="Senior review needs a second approver who is not the first editor.")
+        _log(row, editor, "approve_second", None, approved_text, body.note)
+        supabase.table("briefing_editions").update({
+            "second_approved_by": editor, "second_approved_at": _now(),
+        }).eq("id", item_id).execute()
+        logger.info(f"[briefing] item {item_id} second approval by {editor}")
+        return {"status": "approved", "approved_by": row["approved_by"], "second_approved_by": editor}
+
+    _log(row, editor, "approve", None, approved_text, body.note)
     supabase.table("briefing_editions").update({
         "approved_by": editor,
         "approved_at": _now(),
         "approved_summary_id": str(summary["id"]),
         "approved_edit_at": row.get("edited_at"),
-        "approval_checklist": checklist,
+        "approval_checklist": record,
+        "second_approved_by": None,
+        "second_approved_at": None,
     }).eq("id", item_id).execute()
     logger.info(f"[briefing] item {item_id} approved by {editor}")
-    return {"status": "approved", "approved_by": editor}
+    return {"status": "approved", "approved_by": editor,
+            "needs_second_approver": lane == LANE_SENIOR_REVIEW}
 
 
 @router.get("/api/admin/briefing/log")

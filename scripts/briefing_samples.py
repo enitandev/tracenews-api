@@ -67,11 +67,21 @@ def render(editions, log, generated):
             status = LANE_TEXT[it["lane"]]
             if it["lane"] in ("review", "senior_review"):
                 status += f" — approved by {it['approved_by']}" if it["approved_by"] else " — not yet approved"
+            if it["lane"] == "senior_review" and it["approved_by"]:
+                status += f" and {it['second_approved_by']}" if it["second_approved_by"] else " — second approver still needed"
             cls = "item" if it in shown else "item out"
             out.append(f"<div class='{cls}'><div class='status'>{e(status)}</div>")
-            out.append(f"<h3>{e(it['title'])}</h3><div class='label'>{e(UI['attribution_label'])}</div><ul>")
+            sec = UI["sections"]
+            out.append(f"<h3>{e(it['title'])}</h3><div class='label'>{e(UI['attribution_label'])}</div>")
+            out.append(f"<h4>{e(sec['what_happened'])}</h4><ul>")
             out += [f"<li>{e(b)}</li>" for b in it["bullets"] if isinstance(b, str)]
-            out.append(f"</ul><div class='counts'>{counts_line(it['coverage_counts'])}</div>")
+            out.append("</ul>")
+            sections = it.get("sections") or {}
+            for key in ("quotes", "next", "background"):
+                rows = [q["line"] for q in sections.get("quotes") or []] if key == "quotes" else sections.get(key) or []
+                if rows:
+                    out.append(f"<h4>{e(sec[key])}</h4><ul>" + "".join(f"<li>{e(r)}</li>" for r in rows) + "</ul>")
+            out.append(f"<div class='counts'>{counts_line(it['coverage_counts'])}</div>")
             out.append(f"<div class='label'>{e(UI['correction_link'])} · {e(UI['methodology_link'])}</div>")
             out.append("<div class='rev'><b>Editor's view (never shown to readers)</b><br>")
             out.append(f"Source headline: {e(it['source_headline'])}<br>")
@@ -80,6 +90,14 @@ def render(editions, log, generated):
             if it["edited_by"]:
                 out.append(f"Rewritten by {e(it['edited_by'])} at {e(it['edited_at'])}. Model summary before the rewrite: "
                            + " / ".join(e(b) for b in it["summary_bullets"]) + "<br>")
+            checks = (it.get("approval_checklist") or {}).get("party_checks") or []
+            if checks:
+                out.append("Party and candidacy descriptors checked: " + "; ".join(
+                    f"{e(c['descriptor'])} (source: {e(c['source'])}, checked {e(c['checked_at'])})" for c in checks) + "<br>")
+            if it.get("extras_dropped"):
+                out.append("Removed by the section checks: " + "; ".join(e(d) for d in it["extras_dropped"]) + "<br>")
+            if it.get("extras_error"):
+                out.append(f"Fuller sections could not be generated: {e(it['extras_error'])}<br>")
             if it["named_in_sources"]:
                 out.append(f"Named in the source articles: {e(', '.join(it['named_in_sources']))}<br>")
             out.append("</div></div>")
