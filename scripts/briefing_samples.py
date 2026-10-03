@@ -19,9 +19,9 @@ from datetime import datetime, time, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.briefing_edition import (  # noqa: E402
-    LAGOS, coverage_counts, has_forbidden_token, latest_summary, select_clusters, summary_usable,
+    LAGOS, candidate_clusters, coverage_counts, has_forbidden_token, latest_summary, select_clusters, summary_usable,
 )
-from app.briefingStrings import GATE_NEEDS_EDITOR_APPROVAL, MIN_DISTINCT_OUTLETS, UI  # noqa: E402
+from app.briefingStrings import GATE_NEEDS_EDITOR_APPROVAL, UI  # noqa: E402
 from app.db import supabase  # noqa: E402
 
 DAYS = 14
@@ -43,10 +43,7 @@ def names_in(cluster_id):
 def edition_for(day):
     end = datetime.combine(day, time(6, 0), LAGOS)
     start = end - timedelta(hours=24)
-    clusters = supabase.table("clusters").select(
-        "id, slug, representative_title, category, first_seen_at, coverage_stats, stories(image_url)"
-    ).gte("first_seen_at", start.isoformat()).lt("first_seen_at", end.isoformat()) \
-        .gte("outlet_count", MIN_DISTINCT_OUTLETS).execute().data or []
+    clusters = candidate_clusters(start, end)
     items, left_out = [], []
     for c in select_clusters(clusters):
         s = latest_summary(c["id"])
