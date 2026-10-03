@@ -110,11 +110,6 @@ async def sitemap():
                 "changefreq": "hourly"
             },
             {
-                "loc": "https://tracenews.ng/daily-briefing",
-                "priority": "0.9",
-                "changefreq": "daily"
-            },
-            {
                 "loc": "https://tracenews.ng/topics/politics",
                 "priority": "0.8",
                 "changefreq": "hourly"
@@ -671,8 +666,6 @@ async def sitemap_static():
     static_pages = [
         ("https://tracenews.ng/", 
          "1.0", "hourly"),
-        ("https://tracenews.ng/daily-briefing", 
-         "0.9", "daily"),
         ("https://tracenews.ng/methodology", 
          "0.8", "monthly"),
         ("https://tracenews.ng/about", 
