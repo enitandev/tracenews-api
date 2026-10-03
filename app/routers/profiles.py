@@ -1,6 +1,6 @@
 """Outlet and politician profiles."""
 import logging
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from app.db import supabase
 
 logger = logging.getLogger(__name__)
@@ -59,166 +59,97 @@ def get_outlet(slug: str):
     }
 
 
+def _published_politician(slug: str):
+    """The politician row if the page may be shown, else None. Held
+    (pending_review), excluded (private figures) and inactive people are not
+    shown anywhere."""
+    res = supabase.table("politicians").select(
+        "id, full_name, common_name, slug, party, state, geopolitical_region, "
+        "category, current_position, active, wikipedia_image_url, publication_status"
+    ).eq("slug", slug).eq("active", True).limit(1).execute()
+    row = (res.data or [None])[0]
+    if not row or (row.get("publication_status") or "published") != "published":
+        return None
+    return row
+
+
+def _politician_articles(pid):
+    """Every tagged article mentioning the person, with its outlet (paged)."""
+    rows, offset = [], 0
+    while True:
+        page = supabase.table("story_entities").select(
+            "story_id, stories(id, outlet_id)"
+        ).eq("politician_id", pid).eq("entity_type", "politician").range(offset, offset + 999).execute().data or []
+        rows.extend(page)
+        if len(page) < 1000:
+            return rows
+        offset += 1000
+
+
+@router.get("/politicians/{slug}/visibility")
+def politician_visibility(slug: str):
+    """Cheap check used by the site middleware: may this page be served?"""
+    p = _published_politician(slug)
+    if not p:
+        return {"visible": False}
+    any_article = supabase.table("story_entities").select("story_id").eq(
+        "politician_id", p["id"]).eq("entity_type", "politician").limit(1).execute().data
+    return {"visible": bool(any_article)}
+
+
 @router.get("/politicians/{slug}")
 def get_politician(slug: str):
-    # Fetch politician by slug
-    result = supabase.table(
-        "politicians"
-    ).select(
-        "id, full_name, common_name, "
-        "slug, party, state, "
-        "geopolitical_region, category, "
-        "current_position, active, "
-        "wikipedia_image_url, "
-        "publication_status"
-    ).eq(
-        "slug", slug
-    ).eq(
-        "active", True
-    ).single().execute()
-    
-    if not result.data:
-        from fastapi import HTTPException
-        raise HTTPException(
-            status_code=404,
-            detail="Politician not found"
-        )
-    
-    politician = result.data
-    pub_status = politician.get(
-        "publication_status", "published"
-    )
+    """
+    Counts only (counsel, 3 Oct 2026): the number of articles naming the
+    person, by the tier of the outlet that published each one, as of today.
+    No percentages and no shares. Held, private, inactive and no-data pages
+    are 404.
+    """
+    from datetime import datetime, timezone
+    from app.coverage import get_outlets_cache
+    from app.tier_utils import get_outlet_tier
 
-    if pub_status == "excluded":
-        from fastapi.responses import Response
-        return Response(
-            content='{"detail": "Gone — '
-            'this page has been permanently '
-            'withdrawn."}',
-            status_code=410,
-            media_type="application/json"
-        )
+    politician = _published_politician(slug)
+    if not politician:
+        raise HTTPException(status_code=404, detail="Not found")
 
-    if pub_status == "pending_review":
-        from fastapi.responses import Response
-        return Response(
-            content='{"detail": '
-            '"Not found"}',
-            status_code=404,
-            media_type="application/json"
-        )
+    outlets_map, _ = get_outlets_cache()
+    counts = {"govt_aligned": 0, "mainstream": 0, "watchdog": 0, "untiered": 0}
+    seen = set()
+    for e in _politician_articles(politician["id"]):
+        story = e.get("stories") or {}
+        sid = story.get("id")
+        if not sid or sid in seen:
+            continue
+        seen.add(sid)
+        outlet = outlets_map.get(story.get("outlet_id"))
+        tier = get_outlet_tier(outlet.get("government_alignment"), outlet.get("is_blog")) if outlet else "unscored"
+        counts[tier if tier in counts else "untiered"] += 1
+    total = len(seen)
+    if total == 0:
+        raise HTTPException(status_code=404, detail="Not found")
 
-    pid = politician["id"]
-    
-    # Fetch story entities for 
-    # this politician
-    # Get cluster IDs where this 
-    # politician is mentioned
-    entities_res = supabase.table(
-        "story_entities"
-    ).select(
-        "story_id"
-    ).eq(
-        "politician_id", pid
-    ).eq(
-        "entity_type", "politician"
-    ).execute()
-    
-    story_ids = [
-        e["story_id"] 
-        for e in (entities_res.data or [])
-    ]
-    
-    total_count = len(story_ids)
-    
-    # Get recent stories via join
-    # instead of .in_() with large list
-    recent_res = supabase.table(
-        "story_entities"
-    ).select(
-        "story_id, "
-        "stories(id, title, url, "
-        "published_at, image_url, "
-        "cluster_id, "
-        "clusters(slug, outlet_count, "
-        "category, coverage_stats))"
-    ).eq(
-        "politician_id", pid
-    ).eq(
-        "entity_type", "politician"
-    ).order(
-        "story_id", desc=False
-    ).limit(20).execute()
-
+    recent_res = supabase.table("story_entities").select(
+        "story_id, stories(id, title, url, published_at, image_url, cluster_id, "
+        "clusters(slug, outlet_count, category, coverage_stats))"
+    ).eq("politician_id", politician["id"]).eq("entity_type", "politician").order(
+        "story_id", desc=False).limit(20).execute()
     recent_stories = []
     for e in (recent_res.data or []):
-        s = e.get("stories") or {}
-        if not s:
+        st = e.get("stories") or {}
+        if not st:
             continue
-        cluster_data = \
-            s.pop("clusters", {}) or {}
-        s["cluster_slug"] = \
-            cluster_data.get("slug")
-        s["cluster_outlet_count"] = \
-            cluster_data.get("outlet_count")
-        s["cluster_category"] = \
-            cluster_data.get("category")
-        s["cluster_coverage_stats"] = \
-            cluster_data.get(
-                "coverage_stats"
-            )
-        recent_stories.append(s)
+        cluster_data = st.pop("clusters", {}) or {}
+        st["cluster_slug"] = cluster_data.get("slug")
+        st["cluster_outlet_count"] = cluster_data.get("outlet_count")
+        st["cluster_category"] = cluster_data.get("category")
+        st["cluster_coverage_stats"] = cluster_data.get("coverage_stats")
+        recent_stories.append(st)
 
-    # Get tier distribution via 
-    # story_entities join
-    dist_res = supabase.table(
-        "story_entities"
-    ).select(
-        "story_id, "
-        "stories(cluster_id, "
-        "clusters(coverage_stats))"
-    ).eq(
-        "politician_id", pid
-    ).eq(
-        "entity_type", "politician"
-    ).execute()
-    
-    tier_dist = {
-        "govt_aligned": 0,
-        "mainstream": 0,
-        "watchdog": 0
-    }
-    seen_clusters = set()
-    stories_with_dist = 0
-    
-    for e in (dist_res.data or []):
-        s = e.get("stories") or {}
-        cid = s.get("cluster_id")
-        if not cid or cid in seen_clusters:
-            continue
-        seen_clusters.add(cid)
-        
-        cluster_data = \
-            s.get("clusters") or {}
-        stats = cluster_data.get(
-            "coverage_stats", {}
-        ) or {}
-        dist = stats.get(
-            "coverage_tier_distribution",
-            {}
-        ) or {}
-        
-        if dist:
-            stories_with_dist += 1
-            tier_dist["govt_aligned"] += dist.get("pro_establishment", dist.get("govt_aligned", 0))
-            tier_dist["mainstream"] += dist.get("institutional", dist.get("mainstream", 0))
-            tier_dist["watchdog"] += dist.get("adversarial", dist.get("watchdog", 0))
-    
     return {
         "politician": politician,
-        "total_story_count": total_count,
-        "tier_distribution": tier_dist,
-        "stories_with_distribution": 
-            stories_with_dist,
-        "recent_stories": recent_stories
+        "total_articles": total,
+        "article_counts": counts,
+        "as_of": datetime.now(timezone.utc).date().isoformat(),
+        "recent_stories": recent_stories,
     }
