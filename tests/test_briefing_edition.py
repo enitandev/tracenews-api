@@ -365,3 +365,10 @@ def test_rewrite_is_logged_with_before_and_after_and_rejects_forbidden_words(mon
     entry = db.tables["briefing_edit_log"][-1]
     assert entry["action"] == "rewrite" and entry["after"] == {"title": "ADC names campaign council", "bullets": ["One.", "Two."]}
     assert entry["editor"] == "Ada Obi (editorial)" and updates[-1]["edited_by"] == "Ada Obi (editorial)"
+
+
+def test_staff_edition_dates_lists_each_date_once_with_counts(monkeypatch):
+    import app.routers.briefing as br
+    monkeypatch.setattr(br, "supabase", edition_db())
+    out = br.staff_edition_dates()
+    assert out == {"dates": [{"date": "2026-10-04", "is_sample": False, "items": 2}]}
