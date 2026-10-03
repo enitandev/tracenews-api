@@ -12,6 +12,7 @@ CAP_RUN = re.compile(r"[A-Z][\w'’\-]*\.?(?:\s+[A-Z][\w'’\-]*\.?)*")
 IGNORE = set(SURNAME_CHECK_IGNORE)
 ORG = set(SURNAME_CHECK_ORG_WORDS)
 ORG_LEADS = ("Operation", "Exercise")
+INITIAL = "<initial>"   # stands in for initials that complete a full name
 
 
 def is_name_word(w):
@@ -40,16 +41,20 @@ def name_runs(text):
         # Godswill Akpabio" is a person; "Manchester City" is not).
         if any(w in ORG and w not in IGNORE for w in words):
             continue
-        words = [w for w in words if is_name_word(w)]
-        if words:
-            runs.append((m.start(), words))
+        named = [w for w in words if is_name_word(w)]
+        if named:
+            # Initials and short capitals count toward a full name
+            # ("MKO Abiola", "Peter A. Okebukola"), though they are not
+            # matched as names themselves.
+            parts = sum(1 for w in words if w not in IGNORE and (is_name_word(w) or (w.isupper() and len(w) <= 4)))
+            runs.append((m.start(), named if parts < 2 or len(named) >= 2 else [INITIAL] + named))
     return runs
 
 
 def person_names(text):
     """Full names of people in the text: runs of two to four name words that
     are not organisations or places."""
-    return [" ".join(ws) for _, ws in name_runs(text) if 2 <= len(ws) <= 4]
+    return [" ".join(w for w in ws if w != INITIAL) for _, ws in name_runs(text) if 2 <= len(ws) <= 4]
 
 
 def organisation_names(text):

@@ -176,7 +176,9 @@ def _registry_words(registry):
     words = set()
     for r in registry:
         for n in (r.get("full_name"), r.get("common_name")):
-            parts = [w for w in (n or "").split() if len(w) > 2 and _is_name_word(w)]
+            # "Emir of Kano", "Alaafin of Oyo": the place after "of" is a title, not a name.
+            n = re.split(r"\s+of\s+", n or "")[0]
+            parts = [w for w in n.split() if len(w) > 2 and _is_name_word(w)]
             if parts:
                 words |= {parts[0], parts[-1]}
     return words

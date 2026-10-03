@@ -566,3 +566,21 @@ def test_sections_follow_the_gate_and_reach_readers_without_reviewer_fields(monk
     item = be.edition_items(date(2026, 10, 4))[0]
     assert item["sections"]["next"] == ["The council will meet on Monday, the minister said."]
     assert "extras_dropped" not in item
+
+
+# Places, titles and initials are not one-name references.
+@pytest.mark.parametrize("bullets", [
+    ["Kano State recorded the highest number of candidates, NECO said.", "Oyo and Sokoto followed."],
+    ["Guinea-Bissau beat Nigeria 3-0 in Bissau.", "Guinea-Bissau lead Group L."],
+    ["President Bola Tinubu honoured Chief MKO Abiola in Lagos.", "Abiola won the 1993 election."],
+])
+def test_places_and_initials_are_not_flagged_as_one_name(bullets):
+    reg = REG + [{"full_name": "Aminu Ado Bayero", "common_name": "Emir of Kano", "publication_status": "pending_review"},
+                 {"full_name": "Lamidi Adeyemi", "common_name": "Alaafin of Oyo", "publication_status": "pending_review"}]
+    a = assess("Results and messages", bullets, registry=reg)
+    assert not any(r.startswith("named by one name only") for r in a["reasons"]), a["reasons"]
+
+
+def test_a_legislature_adjourning_is_not_a_court_item():
+    a = assess("House extends budget", ["The House of Representatives adjourned plenary after passing the bill.", "Speaker Tajudeen Abbas presided."])
+    assert not any(r.startswith("court or adjudication") for r in a["reasons"])
