@@ -372,3 +372,24 @@ def test_staff_edition_dates_lists_each_date_once_with_counts(monkeypatch):
     monkeypatch.setattr(br, "supabase", edition_db())
     out = br.staff_edition_dates()
     assert out == {"dates": [{"date": "2026-10-04", "is_sample": False, "items": 2}]}
+
+
+# Owner's direction, 3 Oct: checks follow counsel's wording, not wider.
+@pytest.mark.parametrize("bullet", [
+    "Governors pardoned inmates, marking the 66th Independence anniversary.",
+    "The company recorded receivables largely linked to energy security costs.",
+    "Officials marked the day with a parade.",
+])
+def test_plain_reporting_is_not_commentary(bullet):
+    a = assess("Rail line approved", [bullet, "Construction starts in January."])
+    assert not any(r.startswith("commentary") for r in a["reasons"])
+
+
+@pytest.mark.parametrize("bullets", [
+    ["NECO released the 2026 SSCE results on Thursday.", "Candidates in Kano led the results."],
+    ["Five men were held for wearing 'Tinubu Must Go' T-shirts, the police said.", "They were remanded."],
+    ["Nigeria leads the region, according to Prof. Peter A. Okebukola, the committee chairman.", "Rankings rose."],
+])
+def test_acronyms_initials_and_common_nouns_are_not_surnames(bullets):
+    a = assess("Results released", bullets)
+    assert not any(r.startswith("named by one name only") for r in a["reasons"])

@@ -40,7 +40,7 @@ editor rewrite)
     - POLITICAL_REVIEW_LANE: a registry name, a party or a political office
     - SURNAME CHECK: a person referred to by one name with no earlier full name
     - REPORTED_PHRASES in an item naming a person or party
-    - COMMENTARY_PHRASES / COMMENTARY_VERBS
+    - COMMENTARY_PHRASES / COMMENTARY_STATEMENT_PATTERN
     - an adverse item naming an excluded, held or private registry person
   Auto: none of the above.
 
@@ -152,6 +152,7 @@ SURNAME_CHECK_IGNORE = (
     "November", "December", "The", "A", "An", "In", "On", "At", "He", "She",
     "They", "It", "This", "That", "According", "Deputy", "Former", "Late",
     "First", "Lady", "Acting", "Executive", "Permanent", "Minority", "Majority",
+    "African", "American", "European", "Asian", "Kenyan", "Ugandan", "Ghanaian",
 )
 
 # A capitalised run of words ending in one of these is an organisation or a
@@ -183,12 +184,15 @@ REPORTED_PHRASES = (
 
 # (iii) Commentary on what something means.
 COMMENTARY_PHRASES = (
-    "significant development", "marked a", "marks a", "underscores",
-    "underscored", "highlights", "highlighted", "signals that", "signalled that",
-    "signaled that", "is seen as", "is widely seen", "raises questions",
+    "significant development", "marked a", "underscores", "highlights", "signals that",
 )
-# Any bullet saying what a statement or event "links" or "marks".
-COMMENTARY_VERBS = ("links", "linked", "linking", "marks", "marked", "marking")
+# A bullet saying what a statement, decision or event "links" or "marks"
+# (counsel's wording). Plain uses such as "marking the 66th anniversary" or
+# "costs linked to security" are reporting, not commentary, and do not match.
+COMMENTARY_STATEMENT_PATTERN = (
+    r"\b(statement|remarks?|comments?|speech|address|decision|move|ruling|development|"
+    r"appointment|which|this|it)\s+(links|linked|marks|marked)\b"
+)
 
 # ═══ EDITOR (item 9) ════════════════════════════════════════════════════════
 # The approving editor must tick every line. The ticks are stored with the
