@@ -4,6 +4,8 @@ Preserve and reconstruct what the old MonitoringSignals widget published,
 
 Run from the repo root with the production Supabase env vars set, e.g.
     railway run python scripts/export_widget_record.py
+If a run stops part-way, resume it (finished tables are reused):
+    railway run python scripts/export_widget_record.py widget_record_<stamp>
 It only reads. Output goes to widget_record_<UTC timestamp>/:
 
   raw/<table>.jsonl   full copies of every table the widget's inputs came from
@@ -90,14 +92,29 @@ def execute(query):
         return query.execute().data or []
 
 
+# Large tables are paged by primary key ("after the last id"), which uses the
+# index at any depth; offset paging deep into them hits the statement timeout.
+KEYSET_TABLES = {"clusters", "stories"}
+
+
 def fetch_all(table, columns):
-    rows, offset = [], 0
+    rows, offset, last_id = [], 0, None
     while True:
-        page = execute(supabase.table(table).select(columns).range(offset, offset + 999))
+        q = supabase.table(table).select(columns)
+        if table in KEYSET_TABLES:
+            q = q.order("id")
+            if last_id is not None:
+                q = q.gt("id", last_id)
+            page = execute(q.limit(1000))
+        else:
+            page = execute(q.range(offset, offset + 999))
         rows.extend(page)
         if len(page) < 1000:
             return rows
         offset += 1000
+        last_id = page[-1]["id"]
+        if table in KEYSET_TABLES and len(rows) % 50000 == 0:
+            print(f"  {table}: {len(rows)} rows")
 
 
 def fetch_in_batches(table, key, ids, extra=lambda q: q, order=None):
@@ -135,16 +152,36 @@ def write_table(out_dir, manifest, table, rows):
     print(f"exported {table}: {len(rows)} rows")
 
 
+def read_table(out_dir, table):
+    with open(os.path.join(out_dir, "raw", f"{table}.jsonl")) as f:
+        rows = [json.loads(line) for line in f]
+    print(f"resumed {table}: {len(rows)} rows from the earlier run")
+    return rows
+
+
 def export(out_dir):
-    os.makedirs(os.path.join(out_dir, "raw"))
-    data, manifest = {}, {"exported_at": datetime.now(timezone.utc).isoformat(), "tables": {}}
+    """Tables already in out_dir's manifest (an interrupted run) are reused."""
+    manifest_path = os.path.join(out_dir, "manifest.json")
+    if os.path.exists(manifest_path):
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+    else:
+        os.makedirs(os.path.join(out_dir, "raw"), exist_ok=True)
+        manifest = {"exported_at": datetime.now(timezone.utc).isoformat(), "tables": {}}
+    data = {}
     for table, columns in TABLES.items():
+        if table in manifest["tables"]:
+            data[table] = read_table(out_dir, table)
+            continue
         data[table] = fetch_all(table, columns)
         write_table(out_dir, manifest, table, data[table])
-    window = lambda q: q.gte("snapshot_at", WINDOW_START).lte("snapshot_at", WINDOW_END)  # noqa: E731
-    data["coverage_snapshots"] = fetch_in_batches(
-        "coverage_snapshots", "cluster_id", [c["id"] for c in data["clusters"]], window, order="snapshot_at")
-    write_table(out_dir, manifest, "coverage_snapshots", data["coverage_snapshots"])
+    if "coverage_snapshots" in manifest["tables"]:
+        data["coverage_snapshots"] = read_table(out_dir, "coverage_snapshots")
+    else:
+        window = lambda q: q.gte("snapshot_at", WINDOW_START).lte("snapshot_at", WINDOW_END)  # noqa: E731
+        data["coverage_snapshots"] = fetch_in_batches(
+            "coverage_snapshots", "cluster_id", [c["id"] for c in data["clusters"]], window, order="snapshot_at")
+        write_table(out_dir, manifest, "coverage_snapshots", data["coverage_snapshots"])
     return data, manifest
 
 
@@ -305,9 +342,12 @@ homepage at a given moment.
 
 
 def main():
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    out_dir = f"widget_record_{stamp}"
-    os.makedirs(out_dir)
+    # Resume an interrupted run: python scripts/export_widget_record.py widget_record_<stamp>
+    if len(sys.argv) > 1:
+        out_dir = sys.argv[1]
+    else:
+        out_dir = f"widget_record_{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+        os.makedirs(out_dir)
     data, manifest = export(out_dir)
 
     def load_entities(story_ids):
