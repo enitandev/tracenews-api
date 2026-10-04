@@ -24,6 +24,11 @@ def warm_public_caches():
         ("landing", lambda: feeds.get_landing_clusters(limit=15)),
         ("feed", lambda: feeds.get_feed_clusters(limit=65, offset=15, tier=None)),
         ("briefing", lambda: briefing.get_daily_briefing() if briefing.BRIEFING_PUBLIC else None),
+    ] + [
+        # The homepage's category rails (src/pages/Home.jsx section order).
+        (f"most-carried {cat}", lambda cat=cat: feeds.get_most_carried_clusters(category=cat, limit=6))
+        for cat in ("Politics", "Economy", "Sports", "Entertainment", "Security", "Health",
+                    "Education", "International", "Technology", "Religion", "Judiciary", "General")
     ]
     for name, job in jobs:
         try:
