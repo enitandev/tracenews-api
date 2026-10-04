@@ -22,7 +22,7 @@ from app.briefingStrings import (
     ACTOR_ROLE_WORDS, AUTHORITY_WORDS, CANDIDACY_WORDS, EDITION_CUTOFF_HOUR_LAGOS, EDITOR_LANE_TRIGGERS,
     FORBIDDEN_TOKENS, HEADLINE_ATTRIBUTION_PATTERN, HEADLINE_BODY_TERMS, HEADLINE_CASUALTY_TERMS,
     HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS, HEADLINE_TRAILING_PHRASES, LANE_AUTO, LANE_LEFT_OUT,
-    LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES, MIN_DISTINCT_OUTLETS,
+    LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES, MIN_DISTINCT_OUTLETS, SENIOR_SECOND_APPROVERS,
     PARTY_ALIASES, PARTY_NAMES, SUSPENSION_TRIGGERS, WINDOW_HOURS,
 )
 from app import names
@@ -624,6 +624,8 @@ def edition_items(day, publishable_only=True):
                 "second_approved_by": row.get("second_approved_by") if first_ok else None,
                 "second_approved_at": row.get("second_approved_at") if first_ok else None,
                 "needs_second_approver": a["lane"] == LANE_SENIOR_REVIEW and first_ok and not approved,
+                "waiting_for": waiting_for(row.get("approved_by"))
+                if a["lane"] == LANE_SENIOR_REVIEW and first_ok and not approved else None,
                 "approval_checklist": row.get("approval_checklist") if first_ok else None,
                 "stale_approval_by": row.get("approved_by") if row.get("approved_by") and not first_ok else None,
                 "left_out_by": row.get("left_out_by"),
@@ -634,6 +636,18 @@ def edition_items(day, publishable_only=True):
             })
         items.append(item)
     return items
+
+
+def is_senior_approver(editor):
+    """Editors are recorded as "Name (role)"; the name decides."""
+    return bool(editor) and editor.split(" (")[0] in SENIOR_SECOND_APPROVERS
+
+
+def waiting_for(approved_by):
+    """Who can give the missing approval on a senior-review item."""
+    if is_senior_approver(approved_by):
+        return f"an editor other than {approved_by.split(' (')[0]}"
+    return " or ".join(SENIOR_SECOND_APPROVERS)
 
 
 def item_lane(row):
