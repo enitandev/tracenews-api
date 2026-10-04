@@ -1,9 +1,13 @@
 {
   "CONSENT_REVIEW": {
-    "version": "1.0.3-draft",
+    "version": "1.0.4-draft",
     "reviewedBy": null,
     "reviewedAt": null,
     "architectureRef": "counters-only; no server-side per-story log"
+  },
+  "CONTROLLER": {
+    "hostingLocation": "Ireland and the Netherlands, with article text sent to a provider in the United States",
+    "contactEmail": "info@tracenews.ng"
   },
   "TOGGLE": {
     "label": "Show me my reading summary",
@@ -42,9 +46,9 @@
       "Withdraw consent at any time, as easily as you gave it."
     ],
     "recipients": "No one. These counts are not shared with any third party, and no external analytics service receives them.",
-    "transfers": "Your counts are stored on servers in Ireland, operated on our behalf by our hosting providers. Ireland has data-protection laws recognised as providing protection comparable to Nigeria's, and our contracts require those providers to protect your data and to use it only for us.",
+    "transfers": "Your counts are stored on servers in Ireland and the Netherlands, with article text sent to a provider in the United States, operated on our behalf by our hosting providers. Ireland has data-protection laws recognised as providing protection comparable to Nigeria's, and our contracts require those providers to protect your data and to use it only for us.",
     "automatedDecisions": "The summary is a description of your own counts. It makes no decision about you, and has no legal or similar effect on you.",
-    "complaints": "You can complain to us at privacy@tracenews.ng or to the Nigeria Data Protection Commission (NDPC).",
-    "contact": "Controller: TraceNews Limited (TraceNews). Privacy: privacy@tracenews.ng. Data Protection Officer: dpo@tracenews.ng."
+    "complaints": "You can complain to us at info@tracenews.ng or to the Nigeria Data Protection Commission (NDPC).",
+    "contact": "Controller: TraceNews Limited (TraceNews). Privacy: info@tracenews.ng. Data Protection Officer: dpo@tracenews.ng."
   }
 }
