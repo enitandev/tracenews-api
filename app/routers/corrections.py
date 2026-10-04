@@ -32,7 +32,7 @@ class CorrectionSubmit(BaseModel):
     requester_relationship: Optional[str] = None
 
 @router.post("/api/corrections", status_code=201)
-async def submit_correction(payload: CorrectionSubmit):
+def submit_correction(payload: CorrectionSubmit):
     res = supabase.table("correction_requests").insert({
         "page_url": payload.page_url,
         "subject_type": payload.subject_type,
@@ -57,7 +57,7 @@ async def submit_correction(payload: CorrectionSubmit):
 # --- Admin queue ---
 
 @router.get("/api/admin/corrections")
-async def list_corrections(status: Optional[str] = None, _: str = Depends(require_permission('corrections', 'view'))):
+def list_corrections(status: Optional[str] = None, _: str = Depends(require_permission('corrections', 'view'))):
     query = supabase.table("correction_requests").select("*")
     if status:
         query = query.eq("status", status)
@@ -70,7 +70,7 @@ class CorrectionUpdate(BaseModel):
     resolution_note: Optional[str] = None
 
 @router.patch("/api/admin/corrections/{correction_id}")
-async def update_correction(
+def update_correction(
     correction_id: str,
     payload: CorrectionUpdate,
     actor: str = Depends(get_actor_name),

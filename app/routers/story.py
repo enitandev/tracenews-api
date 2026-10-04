@@ -6,6 +6,7 @@ from app.db import supabase
 from app.tier_utils import get_outlet_tier, is_republisher, normalize_tier_distribution
 from app.monitoring_spirit import resolve_verdict
 from app.summarizer import is_generation_failure
+from app.response_cache import cached_response
 from app.coverage import strip_embeddings, render_safe_verdict, get_sourcing_info, get_outlets_cache, compute_live_coverage_tier_distribution
 
 logger = logging.getLogger(__name__)
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/clusters/by-slug/{slug}")
+@cached_response(ttl=60)
 def get_cluster_by_slug(slug: str):
     """Get full detailed analytics for a cluster and its stories by slug."""
     cluster_res = supabase.table("clusters").select("*, cluster_scores(*)").eq("slug", slug).execute()

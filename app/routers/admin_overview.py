@@ -5,7 +5,7 @@ from app.db import supabase
 router = APIRouter(prefix="/api/admin/overview", tags=["admin"])
 
 @router.get("")
-async def get_overview(_: str = Depends(require_permission('console_access', 'view'))):
+def get_overview(_: str = Depends(require_permission('console_access', 'view'))):
     # 1. Figures
     # Open corrections
     corr_res = supabase.table("correction_requests").select("id", count="exact").eq("status", "open").execute()

@@ -1,3 +1,4 @@
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from datetime import datetime, timezone, timedelta
@@ -8,14 +9,15 @@ from app.monitoring_spirit import resolve_verdict
 router = APIRouter()
 
 def _get_outlets_cache():
-    outlets_res = supabase.table("outlets").select("*").execute()
-    outlets_map = {o["slug"]: o for o in (outlets_res.data or [])}
-    behavioral_res = supabase.table("outlet_behavioral_scores").select("*").execute()
-    behavioral_map = {b["outlet_slug"]: b for b in (behavioral_res.data or [])}
-    return outlets_map, behavioral_map
+    """Outlets keyed by id (the stories' outlet_id), as the tier counting
+    expects, and behavioural scores keyed by slug; cached for an hour. This
+    used to key outlets by slug, so no story matched an outlet and every
+    cluster counted as unscored."""
+    from app.coverage import get_outlets_cache
+    return get_outlets_cache()
 
 @router.get("/api/admin/monitoring-spirit/verdicts")
-async def list_current_verdicts(_: str = Depends(require_permission('monitoring_spirit', 'view'))):
+def list_current_verdicts(_: str = Depends(require_permission('monitoring_spirit', 'view'))):
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=72)).isoformat()
     clusters = (
         supabase.table("clusters")
@@ -32,25 +34,26 @@ async def list_current_verdicts(_: str = Depends(require_permission('monitoring_
     overrides_data = []
     stories_data = []
     snaps_data = []
-    
-    for i in range(0, len(cluster_ids), 50):
-        batch = cluster_ids[i:i+50]
-        
-        # Overrides chunk
-        o_res = supabase.table("verdict_overrides").select("cluster_id").eq("active", True).in_("cluster_id", batch).execute()
-        overrides_data.extend(o_res.data or [])
-        
-        # Stories chunk
-        s_res = supabase.table("stories").select(
-            "*, story_bias_tags(bias_category_id, source), outlets(slug, name, government_alignment, independence_score, is_blog, logo_url, ownership_name, ownership_type, ownership_transparency, party_proximity, track_record_status, promotional_alignment_count, headquarters_city, geopolitical_lean)"
-        ).in_("cluster_id", batch).execute()
-        stories_data.extend(s_res.data or [])
-        
-        # Snapshots chunk
-        sn_res = supabase.table("coverage_snapshots").select(
+
+    def fetch(batch):
+        overrides = supabase.table("verdict_overrides").select("cluster_id").eq("active", True) \
+            .in_("cluster_id", batch).execute().data or []
+        # Only what the verdict uses: the outlet (tiers come from the cached
+        # outlet map) and the bias tags. Selecting "*" pulled every article's
+        # text and embedding vector for nothing.
+        stories = supabase.table("stories").select("cluster_id, outlet_id, story_bias_tags(bias_category_id, source)") \
+            .in_("cluster_id", batch).execute().data or []
+        snaps = supabase.table("coverage_snapshots").select(
             "cluster_id, coverage_tier_distribution, outlet_count, snapshot_at"
-        ).in_("cluster_id", batch).order("snapshot_at", desc=True).execute()
-        snaps_data.extend(sn_res.data or [])
+        ).in_("cluster_id", batch).order("snapshot_at", desc=True).execute().data or []
+        return overrides, stories, snaps
+
+    batches = [cluster_ids[i:i + 50] for i in range(0, len(cluster_ids), 50)]
+    with ThreadPoolExecutor(max_workers=min(len(batches), 8)) as pool:
+        for overrides, stories, snaps in pool.map(fetch, batches):
+            overrides_data.extend(overrides)
+            stories_data.extend(stories)
+            snaps_data.extend(snaps)
 
     overridden_ids = {o["cluster_id"] for o in overrides_data}
 
@@ -129,7 +132,7 @@ class OverrideCreate(BaseModel):
     reason: str
 
 @router.post("/api/admin/monitoring-spirit/overrides", status_code=201)
-async def create_override(payload: OverrideCreate, actor: str = Depends(get_actor_name), _: str = Depends(require_permission('monitoring_spirit', 'yes'))):
+def create_override(payload: OverrideCreate, actor: str = Depends(get_actor_name), _: str = Depends(require_permission('monitoring_spirit', 'yes'))):
     if not payload.reason.strip():
         raise HTTPException(status_code=400, detail="Reason is required")
 
@@ -154,7 +157,7 @@ async def create_override(payload: OverrideCreate, actor: str = Depends(get_acto
 
 
 @router.get("/api/admin/monitoring-spirit/overrides")
-async def list_overrides(_: str = Depends(require_permission('monitoring_spirit', 'view'))):
+def list_overrides(_: str = Depends(require_permission('monitoring_spirit', 'view'))):
     res = (
         supabase.table("verdict_overrides")
         .select("*")
@@ -166,7 +169,7 @@ async def list_overrides(_: str = Depends(require_permission('monitoring_spirit'
 
 
 @router.post("/api/admin/monitoring-spirit/overrides/{override_id}/reinstate")
-async def reinstate_override(override_id: str, actor: str = Depends(get_actor_name), _: str = Depends(require_permission('monitoring_spirit', 'yes'))):
+def reinstate_override(override_id: str, actor: str = Depends(get_actor_name), _: str = Depends(require_permission('monitoring_spirit', 'yes'))):
     before_res = supabase.table("verdict_overrides").select("*").eq("id", override_id).execute()
     if not before_res.data:
         raise HTTPException(status_code=404, detail="Not found")

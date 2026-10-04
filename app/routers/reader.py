@@ -135,7 +135,7 @@ def track_read(request: TrackReadRequest, user_id: str = Depends(get_current_use
         raise HTTPException(status_code=500, detail="Failed to track read")
 
 @router.get("/summary")
-async def get_summary(user_id: str = Depends(get_current_user)):
+def get_summary(user_id: str = Depends(get_current_user)):
     try:
         # Counters
         res = supabase.table("reader_tier_counters") \

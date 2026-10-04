@@ -11,7 +11,7 @@ class SignupRequest(BaseModel):
     age_assertion: bool  # must be explicitly True — no default, no pre-check
 
 @router.post("/api/auth/signup", status_code=201)
-async def signup(payload: SignupRequest):
+def signup(payload: SignupRequest):
     if not payload.age_assertion:
         raise HTTPException(
             status_code=400,
@@ -53,7 +53,7 @@ def get_current_user(authorization: str = Header(...)):
 
 
 @router.delete("/api/auth/account")
-async def delete_account(user_id: str = Depends(get_current_user)):
+def delete_account(user_id: str = Depends(get_current_user)):
     """
     Deletes the auth.users row. profiles cascades automatically (ON DELETE
     CASCADE). Once the reader-analytics feature ships, its counters table

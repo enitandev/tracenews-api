@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 @router.get("/story-og/{slug}")
-async def story_og(slug: str):
+def story_og(slug: str):
     from fastapi.responses import HTMLResponse
     import re
     
@@ -78,7 +78,7 @@ async def story_og(slug: str):
 
 
 @router.get("/sitemap.xml")
-async def sitemap():
+def sitemap():
     """
     Generates sitemap.xml for all 
     clusters with slugs.
@@ -309,7 +309,7 @@ async def sitemap():
 
 
 @router.get("/news-sitemap.xml")
-async def news_sitemap():
+def news_sitemap():
     """
     Google News sitemap — last 48 hours
     only, per Google News spec.
@@ -433,7 +433,7 @@ async def news_sitemap():
         )
 
 @router.get("/sitemap-index.xml")
-async def sitemap_index():
+def sitemap_index():
     """
     Sitemap index pointing to all 
     child sitemaps.
@@ -510,7 +510,7 @@ async def sitemap_stories():
     )
 
 @router.get("/sitemap-outlets.xml")
-async def sitemap_outlets():
+def sitemap_outlets():
     try:
         res = supabase.table(
             "outlets"
@@ -578,7 +578,7 @@ async def sitemap_outlets():
         )
 
 @router.get("/sitemap-politicians.xml")
-async def sitemap_politicians():
+def sitemap_politicians():
     try:
         res = supabase.table(
             "politicians"
@@ -662,7 +662,7 @@ async def sitemap_politicians():
         )
 
 @router.get("/sitemap-static.xml")
-async def sitemap_static():
+def sitemap_static():
     static_pages = [
         ("https://tracenews.ng/", 
          "1.0", "hourly"),
