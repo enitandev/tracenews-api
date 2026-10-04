@@ -531,6 +531,23 @@ def test_only_the_named_second_approver_can_give_the_second_approval(monkeypatch
     assert e.value.status_code == 403 and "Enitan Bello" in e.value.detail
 
 
+def test_an_editor_completes_a_senior_item_the_owner_approved_first(monkeypatch):
+    """Order does not matter: the owner signed first, an editor completes the pair."""
+    br, db, updates = editor_setup(monkeypatch, lane="senior_review", actor="Toluwalope Ade (editorial)")
+    db.tables["briefing_editions"][0].update(approved_by="Enitan Bello (super_admin)", approved_at="2026-10-04T00:00:00Z",
+                                             approved_summary_id="s1", approved_edit_at=None, edited_at=None)
+    out = br.approve_item("e1", br.Approval(checklist=ALL_TICKED, no_party_descriptors=True), authorization="Bearer t")
+    assert out == {"status": "approved", "approved_by": "Toluwalope Ade (editorial)", "second_approved_by": "Enitan Bello (super_admin)"}
+    assert updates[-1]["approved_by"] == "Toluwalope Ade (editorial)"
+    assert updates[-1]["second_approved_by"] == "Enitan Bello (super_admin)"
+    assert db.tables["briefing_edit_log"][-1]["action"] == "approve"
+
+
+def test_waiting_for_names_who_can_give_the_missing_approval():
+    assert be.waiting_for("Enitan Bello (super_admin)") == "an editor other than Enitan Bello"
+    assert be.waiting_for("Toluwalope Ade (editorial)") == "Enitan Bello"
+
+
 def test_everyday_charge_phrases_and_roles_after_a_name_do_not_trigger_the_lane():
     a = assess("Refinery", ["Aliko Dangote, who is in charge of the group, opened the refinery.", "Entry was free of charge."])
     assert a["lane"] == "auto", a["reasons"]

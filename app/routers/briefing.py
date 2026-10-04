@@ -16,7 +16,8 @@ from pydantic import BaseModel
 
 from app.admin_auth import get_actor_name, require_permission
 from app.briefing_edition import (
-    clean_headline, edition_items, first_approval_valid, has_forbidden_token, headline_problems, item_lane, lagos_today,
+    clean_headline, edition_items, first_approval_valid, has_forbidden_token, headline_problems, is_senior_approver,
+    item_lane, lagos_today,
 )
 from app.briefing_extras import check_extras, section_texts
 from app.briefingStrings import EDITOR_CHECKLIST, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, SENIOR_SECOND_APPROVERS, UI
@@ -249,7 +250,18 @@ def approve_item(item_id: str, body: Approval, authorization: str = Header(...),
             raise HTTPException(status_code=409, detail=f"Already approved by {row['approved_by']} and {row['second_approved_by']}.")
         if editor == row["approved_by"]:
             raise HTTPException(status_code=409, detail="Senior review needs a second approver who is not the first editor.")
-        if editor.split(" (")[0] not in SENIOR_SECOND_APPROVERS:
+        if is_senior_approver(row["approved_by"]) and not is_senior_approver(editor):
+            # The senior approver signed first: this editor's approval completes
+            # the pair. The order does not matter, only two different named
+            # people, one of them a senior approver.
+            _log(row, editor, "approve", None, approved_text, body.note)
+            supabase.table("briefing_editions").update({
+                "approved_by": editor, "approved_at": _now(), "approval_checklist": record,
+                "second_approved_by": row["approved_by"], "second_approved_at": row.get("approved_at"),
+            }).eq("id", item_id).execute()
+            logger.info(f"[briefing] item {item_id} approved by {editor}; senior approval by {row['approved_by']}")
+            return {"status": "approved", "approved_by": editor, "second_approved_by": row["approved_by"]}
+        if not is_senior_approver(editor):
             raise HTTPException(status_code=403, detail="The second approval for senior-review items is given by: " + ", ".join(SENIOR_SECOND_APPROVERS) + ".")
         _log(row, editor, "approve_second", None, approved_text, body.note)
         supabase.table("briefing_editions").update({
