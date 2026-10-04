@@ -1,4 +1,5 @@
 import os
+import threading
 import httpx
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -49,4 +50,26 @@ httpx.Client.request = retrying_request
 def get_client() -> Client:
     return create_client(url, key)
 
-supabase: Client = get_client()
+
+class _PerThreadClient:
+    """One Supabase client per thread. Requests now run side by side (FastAPI's
+    thread pool, and parallel reads inside some endpoints), and the client's
+    HTTP/2 connection pool is not safe to share: the stale-connection recovery
+    above closes the whole pool, which broke other threads' requests mid-flight
+    (HTTP 500 on the Desk until a refresh). With a client per thread, a reset
+    only touches that thread's own connections."""
+
+    def __init__(self):
+        self._local = threading.local()
+
+    def _client(self) -> Client:
+        client = getattr(self._local, "client", None)
+        if client is None:
+            client = self._local.client = get_client()
+        return client
+
+    def __getattr__(self, name):
+        return getattr(self._client(), name)
+
+
+supabase: Client = _PerThreadClient()
