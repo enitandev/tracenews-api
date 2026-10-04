@@ -22,7 +22,10 @@ from app.briefingStrings import (
     ACTOR_ROLE_WORDS, AUTHORITY_WORDS, CANDIDACY_WORDS, EDITION_CUTOFF_HOUR_LAGOS, EDITOR_LANE_TRIGGERS,
     FORBIDDEN_TOKENS, HEADLINE_ATTRIBUTION_PATTERN, HEADLINE_BODY_TERMS, HEADLINE_CASUALTY_TERMS,
     HEADLINE_NON_CASUALTY_PHRASES, HEADLINE_PIDGIN_MARKERS, HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS,
-    PRESS_ACCESS_PHRASES, SPEECH_VERB_FIXES, HEADLINE_TRAILING_PHRASES, LANE_AUTO, LANE_LEFT_OUT,
+    PRESS_ACCESS_PHRASES, SPEECH_VERB_FIXES, HEADLINE_OFFENDER_LABELS, HEADLINE_OFFENDER_QUALIFIERS,
+    BODY_CONVICTION_PATTERN, COLLECTIVE_ORIGINS, ADVERSE_CHARACTERISATION_TERMS, BRIEFING_MIN_POINTS,
+    EXTRA_OUTLET_NAMES, AMBIGUOUS_OUTLET_NAMES, OUTLET_REPORTING_CONTEXT, OUTLET_VENUE_CONTEXT,
+    SOURCE_NUMBER_PATTERN, HEADLINE_TRAILING_PHRASES, LANE_AUTO, LANE_LEFT_OUT,
     LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES, MIN_DISTINCT_OUTLETS, SENIOR_SECOND_APPROVERS,
     PARTY_ALIASES, PARTY_NAMES, SUSPENSION_TRIGGERS, WINDOW_HOURS,
 )
@@ -180,6 +183,11 @@ def headline_issues(title, body):
         issues.append("unattributed casualty claim")
     if any(_has(m, title) for m in HEADLINE_PIDGIN_MARKERS):
         issues.append("not in English")
+    labels = [w for w in HEADLINE_OFFENDER_LABELS if _has(w, title)]
+    if labels and not re.search(HEADLINE_OFFENDER_QUALIFIERS, title, re.IGNORECASE) \
+            and not re.search(HEADLINE_ATTRIBUTION_PATTERN, title, re.IGNORECASE) \
+            and not re.search(BODY_CONVICTION_PATTERN, body, re.IGNORECASE):
+        issues.append("offender label without conviction, 'suspected' or 'alleged': " + ", ".join(labels))
     return issues
 
 
@@ -270,31 +278,116 @@ def fix_speech_verbs(text):
     return fixed, notes
 
 
-def auto_correct(headlines, bullets, extras, articles_text, registry):
+def assert_no_source_numbers(title, bullets, extras):
+    """Counsel, 4 Oct 2026, fix 4: the build fails if "(Sources n)" reaches output."""
+    extras = extras or {}
+    texts = [title or ""] + list(bullets or []) + list(extras.get("next") or []) + list(extras.get("background") or []) \
+        + [q.get("quote", "") for q in extras.get("quotes") or []]
+    leaked = next((t for t in texts if isinstance(t, str) and re.search(SOURCE_NUMBER_PATTERN, t)), None)
+    if leaked:
+        raise RuntimeError(f"source numbers reached Briefing output: {leaked[:80]}")
+
+
+def strip_source_numbers(text):
+    """"(Sources 2, 3, 13)" is the model's working note, never reader text."""
+    return re.sub(SOURCE_NUMBER_PATTERN, "", text or "").strip()
+
+
+def collective_origin(text):
+    """A critical or adverse characterisation attributed to a collective or
+    unnamed origin ("critics", "some voices", "civil society"), or None."""
+    who = [c for c in COLLECTIVE_ORIGINS if _has(c, text)]
+    what = [t for t in ADVERSE_CHARACTERISATION_TERMS if _has(t, text)]
+    return f"criticism with a collective origin: {who[0]} ({what[0]})" if who and what else None
+
+
+def load_outlet_names():
+    """Every outlet's name, for the outlet-name check."""
+    rows = supabase.table("outlets").select("name").execute().data or []
+    return sorted({r["name"].strip() for r in rows if (r.get("name") or "").strip()} | set(EXTRA_OUTLET_NAMES))
+
+
+def outlet_problem(text, title, outlets):
+    """An outlet named in reader text where it is neither the story's subject
+    (named in the headline) nor the venue of a statement; or None."""
+    ambiguous = set(AMBIGUOUS_OUTLET_NAMES)
+    for name in sorted(outlets, key=len, reverse=True):
+        exact = r"(?<![\w-])" + re.escape(name) + r"(?![\w-])"
+        if name in ambiguous:
+            m = re.search(OUTLET_REPORTING_CONTEXT + exact, text)
+        else:
+            m = re.search(exact, text)
+        if not m:
+            continue
+        if title and re.search(exact, title):
+            continue
+        if re.search(OUTLET_VENUE_CONTEXT + exact, text, re.IGNORECASE if name not in ambiguous else 0):
+            continue
+        return f"outlet named: {name}"
+    return None
+
+
+def _claim_bigrams(text):
+    words = [w.lower() for w in re.findall(r"[A-Za-z][A-Za-z'-]+", text)]
+    words = [w for w in words if w not in _STOP]
+    return {(a, b) for a, b in zip(words, words[1:])}
+
+
+_STOP = set("""a an the of in on at to for from by with and or but as is was were be been has have had it its this that
+these those their his her he she they them which who whom whose following after before about into over than then also
+said says say according reportedly reports report reported some many several""".split())
+
+
+def auto_correct(headlines, bullets, extras, articles_text, registry, outlets=()):
     """Apply every automatic correction. headlines: the story's source
     headlines, representative one first. Returns (title, bullets, extras,
     corrections, left_out_reason)."""
     corrections = []
-    kept = []
-    for b in [b for b in bullets if isinstance(b, str)]:
-        b, notes = fix_speech_verbs(b)
+    main_title = clean_headline(next((h for h in headlines if h), "") or "")
+
+    def problem_of(text):
+        return (bullet_problem(text, articles_text) or collective_origin(text)
+                or outlet_problem(text, main_title, outlets))
+
+    def prepare(text):
+        nonlocal corrections
+        cleaned = strip_source_numbers(text)
+        if cleaned != text:
+            corrections.append(f"source numbers removed: {text[:80]}")
+        cleaned, notes = fix_speech_verbs(cleaned)
         corrections += notes
-        problem = bullet_problem(b, articles_text)
+        return cleaned
+
+    kept, removed = [], []
+    for b in [b for b in bullets if isinstance(b, str)]:
+        b = prepare(b)
+        problem = problem_of(b)
         if problem:
             corrections.append(f"bullet removed ({problem}): {b[:80]}")
+            removed.append(b)
             continue
         b, notes = correct_descriptors(b, registry)
         corrections += notes
         kept.append(b)
+    # Counsel, 4 Oct 2026, fix 3: a removed claim is removed from every
+    # section. A line repeating a word pair found only in a removed point
+    # (e.g. "electrical surge") carries the same claim.
+    kept_pairs = set().union(*[_claim_bigrams(k) for k in kept]) if kept else set()
+    removed_pairs = set().union(*[_claim_bigrams(r) for r in removed]) - kept_pairs if removed else set()
+
+    def repeats_removed(text):
+        shared = _claim_bigrams(text) & removed_pairs
+        return " ".join(sorted(shared)[0]) if shared else None
+
     extras = dict(extras or {})
     for key in ("next", "background"):
         fixed = []
         for t in extras.get(key) or []:
-            t, notes = fix_speech_verbs(t)
-            corrections += notes
-            problem = bullet_problem(t, articles_text)
-            if problem:
-                corrections.append(f"{key} removed ({problem}): {t[:80]}")
+            t = prepare(t)
+            problem = problem_of(t)
+            echo = None if problem else repeats_removed(t)
+            if problem or echo:
+                corrections.append(f"{key} removed ({problem or 'repeats a removed claim: ' + echo}): {t[:80]}")
                 continue
             t, notes = correct_descriptors(t, registry)
             corrections += notes
@@ -302,14 +395,14 @@ def auto_correct(headlines, bullets, extras, articles_text, registry):
         extras[key] = fixed
     quotes = []
     for q in extras.get("quotes") or []:
-        problem = bullet_problem(q.get("quote", ""), articles_text)
+        problem = problem_of(q.get("quote", "")) or repeats_removed(q.get("quote", ""))
         if problem:
             corrections.append(f"quote removed ({problem}): {q.get('quote', '')[:80]}")
         else:
             quotes.append(q)
     extras["quotes"] = quotes
-    if len(kept) < SUMMARY_MIN_BULLETS:
-        return None, kept, extras, corrections, "fewer than two points left after corrections"
+    if len(kept) < BRIEFING_MIN_POINTS:
+        return None, kept, extras, corrections, f"fewer than {BRIEFING_MIN_POINTS} points left after corrections"
 
     body_parts = kept + [x for k in ("next", "background") for x in extras.get(k) or []]
     title, first_problems = None, None
@@ -360,20 +453,32 @@ _BENIGN = re.compile(r"\b(in charge( of)?|free of charge|charge d'affaires|charg
 _QUOTED = re.compile(r"(?<!\w)[\"“‘'][^\"“”‘’]{2,60}?[\"”’'](?!\w)")
 
 
+def suspended_person(verb, person, sentence):
+    """The person is the one suspended or dismissed: "suspended Musa Bello",
+    "Musa Bello was suspended", "the suspension of Musa Bello"."""
+    who = re.escape(person)
+    patterns = (
+        r"\b" + verb + r"\b(?:\s+of)?\s+(?:[\w'.-]+\s+){0,4}?" + who,
+        who + r"(?:,[^,]{0,80},)?\s+(?:was|were|has been|have been|had been|is|are|got|being)\s+(?:\w+\s+)?" + verb,
+    )
+    return any(re.search(p, sentence, re.IGNORECASE) for p in patterns)
+
+
 def lane_triggers(texts, registry):
     """(reason, principal_named) for the editor lane, or (None, False)."""
     reasons, principal = [], False
     for text in texts:
         for sentence in _sentences(_BENIGN.sub(" ", text)):
             hits = [k for k, pat in EDITOR_LANE_TRIGGERS.items() if re.search(pat, sentence, re.IGNORECASE)]
-            susp = [k for k, pat in SUSPENSION_TRIGGERS.items() if re.search(pat, sentence, re.IGNORECASE)]
+            susp = [k for k, pat in SUSPENSION_TRIGGERS.items() if re.search(r"\b" + pat + r"\b", sentence, re.IGNORECASE)]
             if not (hits or susp):
                 continue
             subjects = _subjects(sentence, registry)
             if susp:
-                subjects_people = [x for x in subjects if not names.organisation_names(x)]
-                if subjects_people:
-                    hits += susp
+                people = [x for x in subjects if not names.organisation_names(x)]
+                hits += [k for k in susp if any(suspended_person(SUSPENSION_TRIGGERS[k], p, sentence) for p in people)]
+                if not hits:
+                    continue
             if hits and subjects:
                 reasons.append(f"{', '.join(dict.fromkeys(hits))} — {', '.join(subjects)}")
                 # A principal named only inside a quoted slogan or title is not the subject.
@@ -399,8 +504,14 @@ def assess_item(raw_title, bullets, articles_text, registry, extra_texts=()):
     token = has_forbidden_token([title] + body_parts)
     if token:
         return left_out(f"forbidden word: {token}")
-    if len(text_bullets) < SUMMARY_MIN_BULLETS:
-        return left_out("fewer than two points")
+    if len(text_bullets) < BRIEFING_MIN_POINTS:
+        return left_out(f"fewer than {BRIEFING_MIN_POINTS} points")
+    numbered = next((t for t in [title] + body_parts if re.search(SOURCE_NUMBER_PATTERN, t)), None)
+    if numbered:
+        return left_out("source numbers in reader text: " + numbered[:60])
+    collective = next((c for c in map(collective_origin, body_parts) if c), None)
+    if collective:
+        return left_out("check failed after corrections: " + collective)
     remaining = [b for b in body_parts if bullet_problem(b, articles_text)]
     if remaining:
         return left_out("check failed after corrections: " + bullet_problem(remaining[0], articles_text))
@@ -498,6 +609,7 @@ def build_edition(day=None, sample=False, with_extras=True):
 
     start, end = edition_window(day)
     registry = load_registry()
+    outlets = load_outlet_names()
     rows, logs, skipped = [], [], {}
     now = datetime.now(timezone.utc).isoformat()
     for cluster in select_clusters(candidate_clusters(start, end)):
@@ -523,7 +635,9 @@ def build_edition(day=None, sample=False, with_extras=True):
         before = {"title": cluster.get("representative_title"), "bullets": summary.get("bullets"),
                   "sections": row.get("extras")}
         title, bullets, extras, corrections, out_reason = auto_correct(
-            headlines, summary.get("bullets") or [], row.get("extras"), cluster_articles_text(cluster["id"]), registry)
+            headlines, summary.get("bullets") or [], row.get("extras"), cluster_articles_text(cluster["id"]), registry,
+            outlets)
+        assert_no_source_numbers(title, bullets, extras)
         if corrections or out_reason:
             row.update({"edited_title": title, "edited_bullets": bullets, "edited_extras": extras,
                         "edited_by": "system", "edited_at": now})

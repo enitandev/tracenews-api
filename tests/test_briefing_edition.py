@@ -23,10 +23,22 @@ REG = [
     {"full_name": "Aliko Dangote", "common_name": "Aliko Dangote", "publication_status": "excluded"},
 ]
 NEUTRAL = ["The Federal Executive Council approved a new rail line on Wednesday.",
-           "Construction is scheduled to begin in January."]
+           "Construction is scheduled to begin in January.",
+           "The line will run from Lagos to Ibadan."]
+
+
+FILLER = "The statement was issued on Wednesday."
+
+
+def three(bullets):
+    """Counsel, 4 Oct 2026: an item needs at least three points; tests written
+    for two get a neutral third so they still test what they were written for."""
+    bullets = list(bullets)
+    return bullets + [FILLER] * (be.BRIEFING_MIN_POINTS - len(bullets)) if len(bullets) < be.BRIEFING_MIN_POINTS else bullets
 
 
 def assess(title, bullets=NEUTRAL, articles=None, registry=REG):
+    bullets = three(bullets)
     return be.assess_item(title, bullets, articles or "\n".join([title] + list(bullets)), registry)
 
 
@@ -154,7 +166,8 @@ def test_reader_items_carry_no_reviewer_fields_and_no_samples(monkeypatch):
 def test_held_item_publishes_only_with_a_valid_approval(monkeypatch):
     from datetime import date
     db = edition_db()
-    db.tables["cluster_summaries"][0]["bullets"] = ["The police arrested Musa Bello, a contractor, in Abuja on Monday.", "He was released on bail."]
+    db.tables["cluster_summaries"][0]["bullets"] = ["The police arrested Musa Bello, a contractor, in Abuja on Monday.", "He was released on bail.",
+                                                    "The case was adjourned to November."]
     monkeypatch.setattr(be, "supabase", db)
     monkeypatch.setattr(be, "cluster_articles_text", lambda cid: "The police arrested Musa Bello, a contractor, in Abuja. He was released on bail.")
     be._registry.update(at=0, rows=[])
@@ -463,7 +476,8 @@ def test_a_principal_office_holder_makes_it_senior_review():
 def test_a_failing_headline_is_replaced_by_another_outlets_headline():
     title, bullets, extras, notes, out = be.auto_correct(
         ["BREAKING: Troops kill scores of terrorists in Adamawa", "Military says troops killed 16 terrorists in Adamawa"],
-        ["Troops killed 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered."], {}, "x", REG)
+        ["Troops killed 16 terrorists in Adamawa, according to a military statement.", "Weapons were recovered.",
+         "The operation took place on Tuesday."], {}, "x", REG)
     assert title == "Military says troops killed 16 terrorists in Adamawa" and out is None
     assert notes and notes[0].startswith("headline replaced")
 
@@ -471,7 +485,8 @@ def test_a_failing_headline_is_replaced_by_another_outlets_headline():
 def test_no_passing_headline_leaves_the_item_out():
     src = "Governor Caleb Mutfwang pardoned 130 inmates and commuted four death sentences."
     title, _, _, _, out = be.auto_correct(["Mutfwang pardons 134 prisoners"],
-                                          ["Governor Caleb Mutfwang pardoned 130 inmates.", "Four death sentences were commuted."], {}, src, REG)
+                                          ["Governor Caleb Mutfwang pardoned 130 inmates.", "Four death sentences were commuted.",
+                                           "The pardons marked Independence Day."], {}, src, REG)
     assert title is None and out == "no source headline passes the headline checks"
 
 
@@ -479,13 +494,15 @@ def test_a_bullet_with_a_coverage_word_is_removed_not_the_item():
     title, bullets, _, notes, out = be.auto_correct(
         ["Workers begin warning strike"],
         ["Workers began a three-day warning strike on Friday.", "Federal workers reportedly joined in Niger State.",
-         "The union cited the minimum wage."], {}, "Workers began a three-day warning strike. The union cited the minimum wage.", REG)
-    assert out is None and len(bullets) == 2 and any("reportedly" in n for n in notes)
+         "The union cited the minimum wage.", "The strike began in Abuja."], {},
+        "Workers began a three-day warning strike. The union cited the minimum wage.", REG)
+    assert out is None and len(bullets) == 3 and any("reportedly" in n for n in notes)
 
 
-def test_fewer_than_two_points_after_corrections_leaves_the_item_out():
-    _, _, _, _, out = be.auto_correct(["Strike"], ["Workers reportedly joined.", "Reports from Ondo indicated compliance."], {}, "x", REG)
-    assert out == "fewer than two points left after corrections"
+def test_fewer_than_three_points_after_corrections_leaves_the_item_out():
+    _, _, _, _, out = be.auto_correct(["Strike"], ["Workers reportedly joined.", "Reports from Ondo indicated compliance.",
+                                                   "The strike began on Friday.", "The union cited the minimum wage."], {}, "x", REG)
+    assert out == "fewer than 3 points left after corrections"
 
 
 def test_only_a_conflicting_party_is_corrected_from_the_registry():
@@ -566,7 +583,8 @@ def test_a_death_sentence_is_not_a_casualty_claim_and_pidgin_headlines_are_skipp
 def test_emphasised_is_written_as_said_and_the_bullet_is_kept():
     title, bullets, _, notes, out = be.auto_correct(
         ["Wike vows to resign"], ["Nyesom Wike emphasized his alignment with Bola Tinubu remains unshakable.",
-                                 "Nyesom Wike spoke in Port Harcourt."], {}, "Wike spoke in Port Harcourt.", [])
+                                 "Nyesom Wike spoke in Port Harcourt.", "The meeting held on Monday."], {},
+        "Wike spoke in Port Harcourt.", [])
     assert out is None and bullets[0] == "Nyesom Wike said his alignment with Bola Tinubu remains unshakable."
     assert any("said" in n for n in notes)
 
