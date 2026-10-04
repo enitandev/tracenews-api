@@ -8,7 +8,7 @@ router = APIRouter(prefix="/api/admin/overview", tags=["admin"])
 def get_overview(_: str = Depends(require_permission('console_access', 'view'))):
     # 1. Figures
     # Open corrections
-    corr_res = supabase.table("correction_requests").select("id", count="exact").eq("status", "open").execute()
+    corr_res = supabase.table("correction_requests").select("id", count="exact").in_("status", ["new", "in_review", "escalated_legal"]).execute()
     open_corrections_count = corr_res.count if corr_res.count is not None else 0
 
     from datetime import datetime, timezone, timedelta
@@ -32,7 +32,7 @@ def get_overview(_: str = Depends(require_permission('console_access', 'view')))
     }
     
     # 2. Sections
-    open_corrections = supabase.table("correction_requests").select("id, category, subject_id, created_at").eq("status", "open").order("created_at", desc=True).limit(5).execute().data or []
+    open_corrections = supabase.table("correction_requests").select("id, category, subject_id, created_at").in_("status", ["new", "in_review", "escalated_legal"]).order("created_at", desc=True).limit(5).execute().data or []
     live_verdicts = verdicts_data[:5]
     
     # 3. Standing Column

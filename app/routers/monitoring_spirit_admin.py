@@ -165,7 +165,18 @@ def list_overrides(_: str = Depends(require_permission('monitoring_spirit', 'vie
         .order("created_at", desc=True)
         .execute()
     )
-    return res.data
+    rows = res.data or []
+    # The headline of each withdrawn story, so the Desk can say what it was.
+    ids = list({r["cluster_id"] for r in rows if r.get("cluster_id")})
+    titles = {}
+    if ids:
+        for c in supabase.table("clusters").select("id, slug, representative_title").in_("id", ids).execute().data or []:
+            titles[c["id"]] = c
+    for r in rows:
+        c = titles.get(r.get("cluster_id")) or {}
+        r["headline"] = c.get("representative_title")
+        r["slug"] = c.get("slug")
+    return rows
 
 
 @router.post("/api/admin/monitoring-spirit/overrides/{override_id}/reinstate")
