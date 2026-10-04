@@ -553,3 +553,35 @@ def test_everyday_charge_phrases_and_roles_after_a_name_do_not_trigger_the_lane(
     assert a["lane"] == "auto", a["reasons"]
     b = assess("Abduction", ["Henry Okoye, Police Public Relations Officer, said two suspects were arrested.", "Search continues."])
     assert b["lane"] == "auto", b["reasons"]
+
+
+# Sample review, 4 Oct: corrections that misfired
+def test_a_death_sentence_is_not_a_casualty_claim_and_pidgin_headlines_are_skipped():
+    assert be.headline_issues("Four kidnappers sentenced to death in Edo", "Four kidnappers were sentenced to death in Edo.") == []
+    assert "unattributed casualty claim" in be.headline_issues("Gunmen kill five in Edo", "Gunmen killed five in Edo.")
+    assert "not in English" in be.headline_issues(
+        "Special court for Edo say make dem kpai convicts by hanging afta Govnor Okpebholo vow - wat next?", "x")
+
+
+def test_emphasised_is_written_as_said_and_the_bullet_is_kept():
+    title, bullets, _, notes, out = be.auto_correct(
+        ["Wike vows to resign"], ["Nyesom Wike emphasized his alignment with Bola Tinubu remains unshakable.",
+                                 "Nyesom Wike spoke in Port Harcourt."], {}, "Wike spoke in Port Harcourt.", [])
+    assert out is None and bullets[0] == "Nyesom Wike said his alignment with Bola Tinubu remains unshakable."
+    assert any("said" in n for n in notes)
+
+
+def test_press_passes_are_not_a_coverage_word():
+    assert be.bullet_problem("The order directed the White House to return the press passes of the reporters.", "x") is None
+    assert be.bullet_problem("The press focused on the minister's remarks.", "x") is not None
+
+
+def test_commuted_sentences_and_quoted_slogans_do_not_route_or_raise_to_senior():
+    a = assess("Pardons", ["Enugu State Governor Peter Mbah approved the pardon and commutation of sentences of 13 inmates.",
+                           "Kogi State Governor Usman Ododo granted clemency to 101 inmates and convicts."])
+    assert a["lane"] == "auto", a["reasons"]
+    b = assess("Arrests", ["Police in Borno arrested Musa Bello and Ali Kyari for wearing ‘Tinubu Must Go’ T-shirts.",
+                           "The two men were remanded."])
+    assert b["lane"] == "review", b["reasons"]
+    c = assess("Court", ["A court in Abuja heard Atiku Abubakar's suit against Bola Tinubu's election.", "Hearing continues."])
+    assert c["lane"] == "senior_review", c["reasons"]
