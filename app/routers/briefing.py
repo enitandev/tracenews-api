@@ -165,13 +165,17 @@ def _now():
 @router.get("/api/admin/briefing")
 def staff_edition(day: str = None, _: str = Depends(require_permission("briefing", "view"))):
     d = date.fromisoformat(day) if day else lagos_today()
+    return {"date": d.isoformat(), "items": staff_items(d), "checklist": CHECKLIST, "ui": UI}
+
+
+def staff_items(d):
+    """Every item of a date's edition with its routing, cached per date."""
     hit = _staff.get(d)
     if hit and time.time() - hit[0] < STAFF_CACHE_SECONDS:
-        items = hit[1]
-    else:
-        items = edition_items(d, publishable_only=False)
-        _staff[d] = (time.time(), items)
-    return {"date": d.isoformat(), "items": items, "checklist": CHECKLIST, "ui": UI}
+        return hit[1]
+    items = edition_items(d, publishable_only=False)
+    _staff[d] = (time.time(), items)
+    return items
 
 
 @router.get("/api/admin/briefing/dates")
