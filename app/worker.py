@@ -227,9 +227,7 @@ def main():
         logger.info("[worker] === PUBLIC FEED CACHING ===")
         try:
             from app.routers.monitoring_spirit_admin import list_current_verdicts
-            import asyncio
-            loop = asyncio.get_event_loop()
-            verdicts = loop.run_until_complete(list_current_verdicts("bypass"))
+            verdicts = list_current_verdicts("bypass")
             public_one_tier = select_public_one_tier(verdicts)
             
             now_iso = datetime.now(timezone.utc).isoformat()

@@ -14,9 +14,29 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+def warm_public_caches():
+    """Build the homepage lists and the Briefing once at start, in the
+    background, so the first reader after a deploy does not wait. The
+    arguments match what the homepage requests, so the cached copies are the
+    ones it reads. A failure is logged; the first request then builds it."""
+    from app.routers import briefing, feeds
+    jobs = [
+        ("landing", lambda: feeds.get_landing_clusters(limit=15)),
+        ("feed", lambda: feeds.get_feed_clusters(limit=65, offset=15, tier=None)),
+        ("briefing", lambda: briefing.get_daily_briefing() if briefing.BRIEFING_PUBLIC else None),
+    ]
+    for name, job in jobs:
+        try:
+            job()
+        except Exception:
+            logger.exception(f"[startup] warming the {name} cache failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     start_scheduler()
+    import threading
+    threading.Thread(target=warm_public_caches, daemon=True).start()
     yield
     stop_scheduler()
 
@@ -33,6 +53,24 @@ ALLOWED_ORIGINS = [
     "https://www.tracenews.ng",
     "http://localhost:5173",
 ]
+
+
+SLOW_REQUEST_SECONDS = 2.0
+
+
+@app.middleware("http")
+async def time_requests(request: Request, call_next):
+    """Every response carries its server time (Server-Timing, visible in the
+    browser's network panel); requests slower than SLOW_REQUEST_SECONDS are
+    logged with their path so slow screens can be found from the logs."""
+    import time
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - start
+    response.headers["Server-Timing"] = f"app;dur={elapsed * 1000:.0f}"
+    if elapsed >= SLOW_REQUEST_SECONDS:
+        logger.warning(f"[slow] {request.method} {request.url.path} {elapsed:.1f}s status={response.status_code}")
+    return response
 
 
 @app.exception_handler(Exception)

@@ -5,6 +5,7 @@ from app.db import supabase
 from app.image_utils import get_cluster_image, is_image_allowed
 from app.tier_utils import get_distinct_scored_count, get_outlet_tier, normalize_tier_distribution, count_outlet_tiers, card_distribution
 from app.coverage import strip_embeddings, get_outlets_cache, enrich_clusters_with_live_tiers
+from app.response_cache import cached_response
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,7 @@ def get_cluster_stories(cluster_id: str):
 
 
 @router.get("/clusters/landing")
+@cached_response(ttl=90)
 def get_landing_clusters(limit: int = 40):
     """Get optimized clusters for the landing page scrolling feed."""
     result = supabase.table("clusters").select(
@@ -97,6 +99,7 @@ def get_landing_clusters(limit: int = 40):
 
 
 @router.get("/clusters/feed")
+@cached_response(ttl=90)
 def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     """Get full clusters with scores for the main feed."""
     query = supabase.table("clusters").select(
@@ -159,6 +162,7 @@ def get_feed_clusters(limit: int = 30, offset: int = 0, tier: str = None):
     return {"clusters": strip_embeddings(formatted), "count": len(enriched_clusters)}
 
 @router.get("/clusters/most-carried")
+@cached_response(ttl=90)
 def get_most_carried_clusters(category: str, limit: int = 6):
     """Get the clusters with the highest distinct scored outlet coverage."""
     from datetime import datetime, timezone, timedelta
@@ -233,6 +237,7 @@ def get_most_carried_clusters(category: str, limit: int = 6):
     return {"clusters": top_clusters, "count": len(top_clusters)}
 
 @router.get("/clusters/by-category")
+@cached_response(ttl=90)
 def get_clusters_by_category(category: str, limit: int = 8):
     """Get the most recent clusters for a category without an outlet floor (for COMPACT)."""
     # 1. Fetch exactly `limit` clusters
@@ -284,6 +289,7 @@ def get_clusters_by_category(category: str, limit: int = 8):
 
 
 @router.get("/categories/{category}/feed")
+@cached_response(ttl=90)
 def get_category_feed(category: str, limit: int = 30, offset: int = 0):
     from datetime import datetime, timezone, timedelta
     now = datetime.now(timezone.utc)

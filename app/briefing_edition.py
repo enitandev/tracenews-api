@@ -15,6 +15,7 @@ about named people or organisations; everything else publishes.
 """
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 import time as _time
 from datetime import datetime, time, timedelta, timezone
 
@@ -720,8 +721,8 @@ def edition_items(day, publishable_only=True):
         q = q.eq("is_sample", False)
     rows = q.order("position").execute().data or []
     registry = load_registry() if rows else []
-    items = []
-    for row in rows:
+
+    def build(row):
         # The current summary is used: if a correction replaced the one the
         # edition was built with, the replacement is routed afresh.
         summary = latest_summary(row["cluster_id"])
@@ -731,7 +732,7 @@ def edition_items(day, publishable_only=True):
         approved = approval_valid(row, summary, a["lane"])
         publishable = a["lane"] == LANE_AUTO or (a["lane"] in LANES_NEEDING_EDITOR and approved)
         if publishable_only and not publishable:
-            continue
+            return None
         image = (supabase.table("stories").select("image_url").eq("cluster_id", row["cluster_id"])
                  .not_.is_("image_url", "null").limit(1).execute().data or [{}])[0].get("image_url")
         item = {
@@ -773,8 +774,13 @@ def edition_items(day, publishable_only=True):
                 "named_in_sources": named_people(row["cluster_id"]),
                 "sources": source_articles(row["cluster_id"]),
             })
-        items.append(item)
-    return items
+        return item
+
+    # Each item needs several database reads; they run side by side so a
+    # nine-story edition takes about as long as its slowest item, not the sum.
+    with ThreadPoolExecutor(max_workers=max(1, min(len(rows), 10))) as pool:
+        built = list(pool.map(build, rows))
+    return [item for item in built if item is not None]
 
 
 def is_senior_approver(editor):

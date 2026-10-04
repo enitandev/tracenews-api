@@ -62,7 +62,7 @@ def trigger_full_run():
 from app.clusterer import run_full_recluster, RECORD_HOLD
 
 @router.post("/admin/recluster-all", dependencies=[pipeline_admin])
-async def recluster_all(background_tasks: BackgroundTasks):
+def recluster_all(background_tasks: BackgroundTasks):
     """One-time recovery endpoint to recluster all stories in the background."""
     if RECORD_HOLD:
         raise HTTPException(status_code=409, detail="Refused: a record hold is on and a full recluster would wipe every cluster.")
