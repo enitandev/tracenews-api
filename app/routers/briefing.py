@@ -8,6 +8,7 @@ and write every such action to briefing_edit_log.
 """
 import logging
 import re
+import time
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
 
@@ -36,34 +37,58 @@ def _require_public():
         raise HTTPException(status_code=404, detail="Not found")
 
 
-def _latest_published_day():
-    """Today's edition, or the most recent one that has something to show."""
+# The public edition is routed afresh from the stored text, which takes
+# several seconds; readers get a copy at most PUBLIC_CACHE_SECONDS old, and
+# every editor action clears it so an approval shows at once.
+PUBLIC_CACHE_SECONDS = 120
+_public = {"at": 0.0, "day": None, "items": []}
+
+
+def clear_public_cache():
+    _public["at"] = 0.0
+
+
+def _public_edition():
+    """(day, items): today's edition, or the most recent one with something to show."""
+    if time.time() - _public["at"] < PUBLIC_CACHE_SECONDS:
+        return _public["day"], _public["items"]
     days = supabase.table("briefing_editions").select("date").eq("is_sample", False) \
         .order("date", desc=True).limit(7).execute().data or []
+    found, items = None, []
     for d in sorted({r["date"] for r in days}, reverse=True):
         day = date.fromisoformat(d)
-        if day <= lagos_today() and edition_items(day):
-            return day
-    return None
+        if day > lagos_today():
+            continue
+        items = edition_items(day)
+        if items:
+            found = day
+            break
+    _public.update(at=time.time(), day=found, items=items if found else [])
+    return _public["day"], _public["items"]
+
+
+def _card(item):
+    """A short form of an item for "More from today's Briefing"."""
+    return {k: item.get(k) for k in ("slug", "title", "image_url", "category", "coverage_counts")}
 
 
 @router.get("/daily-briefing")
 def get_daily_briefing():
     _require_public()
-    day = _latest_published_day()
+    day, items = _public_edition()
     if not day:
         return {"date": None, "items": [], "message": UI["empty"], "ui": UI}
-    return {"date": day.isoformat(), "items": edition_items(day), "ui": UI}
+    return {"date": day.isoformat(), "items": items, "ui": UI}
 
 
 @router.get("/daily-briefing/{slug}")
 def get_daily_briefing_story(slug: str):
     _require_public()
-    day = _latest_published_day()
-    item = next((i for i in (edition_items(day) if day else []) if i["slug"] == slug), None)
+    day, items = _public_edition()
+    item = next((i for i in items if i["slug"] == slug), None)
     if not item:
         raise HTTPException(status_code=404, detail="Not found")
-    return {"date": day.isoformat(), "item": item, "ui": UI}
+    return {"date": day.isoformat(), "item": item, "more": [_card(i) for i in items if i["slug"] != slug], "ui": UI}
 
 
 # ═══ STAFF ═══════════════════════════════════════════════════════════════════
@@ -172,6 +197,7 @@ def rewrite_item(item_id: str, body: Rewrite, authorization: str = Header(...),
         "edited_title": after["title"], "edited_bullets": after["bullets"], "edited_extras": after["sections"],
         "edited_by": editor, "edited_at": _now(),
     }).eq("id", item_id).execute()
+    clear_public_cache()
     logger.info(f"[briefing] item {item_id} rewritten by {editor}")
     return {"status": "rewritten", "edited_by": editor}
 
@@ -191,6 +217,7 @@ def leave_out_item(item_id: str, body: LeaveOut, authorization: str = Header(...
     supabase.table("briefing_editions").update({
         "left_out_by": editor, "left_out_reason": body.reason.strip(), "left_out_at": _now(),
     }).eq("id", item_id).execute()
+    clear_public_cache()
     return {"status": "left_out", "left_out_by": editor}
 
 
@@ -205,6 +232,7 @@ def restore_item(item_id: str, authorization: str = Header(...),
     supabase.table("briefing_editions").update({
         "left_out_by": None, "left_out_reason": None, "left_out_at": None,
     }).eq("id", item_id).execute()
+    clear_public_cache()
     return {"status": "restored"}
 
 
@@ -259,6 +287,7 @@ def approve_item(item_id: str, body: Approval, authorization: str = Header(...),
                 "approved_by": editor, "approved_at": _now(), "approval_checklist": record,
                 "second_approved_by": row["approved_by"], "second_approved_at": row.get("approved_at"),
             }).eq("id", item_id).execute()
+            clear_public_cache()
             logger.info(f"[briefing] item {item_id} approved by {editor}; senior approval by {row['approved_by']}")
             return {"status": "approved", "approved_by": editor, "second_approved_by": row["approved_by"]}
         if not is_senior_approver(editor):
@@ -267,6 +296,7 @@ def approve_item(item_id: str, body: Approval, authorization: str = Header(...),
         supabase.table("briefing_editions").update({
             "second_approved_by": editor, "second_approved_at": _now(),
         }).eq("id", item_id).execute()
+        clear_public_cache()
         logger.info(f"[briefing] item {item_id} second approval by {editor}")
         return {"status": "approved", "approved_by": row["approved_by"], "second_approved_by": editor}
 
@@ -280,6 +310,7 @@ def approve_item(item_id: str, body: Approval, authorization: str = Header(...),
         "second_approved_by": None,
         "second_approved_at": None,
     }).eq("id", item_id).execute()
+    clear_public_cache()
     logger.info(f"[briefing] item {item_id} approved by {editor}")
     return {"status": "approved", "approved_by": editor,
             "needs_second_approver": lane == LANE_SENIOR_REVIEW}

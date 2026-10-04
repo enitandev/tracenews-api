@@ -380,6 +380,8 @@ UI = {
     "correction_link": SUMMARY_UI["correction_link"],       # "Report an error in this summary"
     "methodology_link": "How TraceNews classifies outlets",
     "coverage_heading": "Outlets that reported this story",
+    "all_sources": "View all sources",
+    "more_heading": "More from today's Briefing",
     "sections": {
         "what_happened": "What happened",
         "quotes": "Who said what",
