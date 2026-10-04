@@ -186,6 +186,18 @@ HEADLINE_CASUALTY_TERMS = (
     "casualties", "massacre", "massacred", "slaughter", "slaughtered", "slain",
     "neutralise", "neutralised", "neutralize", "neutralized",
 )
+# Court phrases that contain a casualty word but report no death.
+HEADLINE_NON_CASUALTY_PHRASES = (
+    "sentenced to death", "death sentence", "death sentences", "death penalty",
+    "death row", "death warrant", "death warrants",
+)
+# A headline in Nigerian Pidgin is not used: the Briefing is written in English.
+HEADLINE_PIDGIN_MARKERS = ("kpai", "wetin", "afta", "dem don", "make dem", "say make", "una", "wat next", "don kpai", "dey")
+# A speaker "emphasised" something: reported speech, written as "said"
+# (the model never sees outlets, so the word cannot describe coverage).
+SPEECH_VERB_FIXES = {"emphasised": "said", "emphasized": "said", "emphasises": "says", "emphasizes": "says"}
+# "the press" inside these is about journalists' access, not about coverage.
+PRESS_ACCESS_PHRASES = r"\bthe press (?:pass(?:es)?|conference|secretary|freedom|briefing|room|corps|access|office|pool|gallery)\b"
 # Any of these in the headline counts as attribution ("Military says...",
 # "... — Police", "Police: ...").
 HEADLINE_ATTRIBUTION_PATTERN = (

@@ -21,7 +21,8 @@ from datetime import datetime, time, timedelta, timezone
 from app.briefingStrings import (
     ACTOR_ROLE_WORDS, AUTHORITY_WORDS, CANDIDACY_WORDS, EDITION_CUTOFF_HOUR_LAGOS, EDITOR_LANE_TRIGGERS,
     FORBIDDEN_TOKENS, HEADLINE_ATTRIBUTION_PATTERN, HEADLINE_BODY_TERMS, HEADLINE_CASUALTY_TERMS,
-    HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS, HEADLINE_TRAILING_PHRASES, LANE_AUTO, LANE_LEFT_OUT,
+    HEADLINE_NON_CASUALTY_PHRASES, HEADLINE_PIDGIN_MARKERS, HEADLINE_PREFIXES, HEADLINE_QUANTITY_WORDS,
+    PRESS_ACCESS_PHRASES, SPEECH_VERB_FIXES, HEADLINE_TRAILING_PHRASES, LANE_AUTO, LANE_LEFT_OUT,
     LANE_REVIEW, LANE_SENIOR_REVIEW, LANES_NEEDING_EDITOR, MAX_STORIES, MIN_DISTINCT_OUTLETS, SENIOR_SECOND_APPROVERS,
     PARTY_ALIASES, PARTY_NAMES, SUSPENSION_TRIGGERS, WINDOW_HOURS,
 )
@@ -172,8 +173,13 @@ def headline_issues(title, body):
     words = [w for w in HEADLINE_QUANTITY_WORDS if _has(w, title) and not _has(w, body)]
     if words:
         issues.append("quantity word not in body: " + ", ".join(words))
-    if any(_has(t, title) for t in HEADLINE_CASUALTY_TERMS) and not re.search(HEADLINE_ATTRIBUTION_PATTERN, title, re.IGNORECASE):
+    casualty_title = title
+    for phrase in HEADLINE_NON_CASUALTY_PHRASES:
+        casualty_title = re.sub(re.escape(phrase), " ", casualty_title, flags=re.IGNORECASE)
+    if any(_has(t, casualty_title) for t in HEADLINE_CASUALTY_TERMS) and not re.search(HEADLINE_ATTRIBUTION_PATTERN, title, re.IGNORECASE):
         issues.append("unattributed casualty claim")
+    if any(_has(m, title) for m in HEADLINE_PIDGIN_MARKERS):
+        issues.append("not in English")
     return issues
 
 
@@ -203,7 +209,7 @@ def bullet_problem(bullet, articles_text):
     token = has_forbidden_token([bullet])
     if token:
         return f"forbidden word: {token}"
-    ev = evaluate_summary([bullet, "-"], articles_text)
+    ev = evaluate_summary([re.sub(PRESS_ACCESS_PHRASES, "journalists' access", bullet, flags=re.IGNORECASE), "-"], articles_text)
     bad = [f for f in ev["flags"] if f.startswith(("forbidden_coverage", "escalation", "bullet_type"))]
     return "; ".join(bad) or None
 
@@ -255,6 +261,15 @@ def correct_descriptors(text, registry):
     return text, notes
 
 
+def fix_speech_verbs(text):
+    """"X emphasised that ..." is reported speech: written as "said"."""
+    fixed = text
+    for verb, plain in SPEECH_VERB_FIXES.items():
+        fixed = re.sub(r"(?<![\w-])" + verb + r"(?![\w-])", plain, fixed, flags=re.IGNORECASE)
+    notes = [f"reporting verb replaced with 'said': {text[:80]}"] if fixed != text else []
+    return fixed, notes
+
+
 def auto_correct(headlines, bullets, extras, articles_text, registry):
     """Apply every automatic correction. headlines: the story's source
     headlines, representative one first. Returns (title, bullets, extras,
@@ -262,6 +277,8 @@ def auto_correct(headlines, bullets, extras, articles_text, registry):
     corrections = []
     kept = []
     for b in [b for b in bullets if isinstance(b, str)]:
+        b, notes = fix_speech_verbs(b)
+        corrections += notes
         problem = bullet_problem(b, articles_text)
         if problem:
             corrections.append(f"bullet removed ({problem}): {b[:80]}")
@@ -273,6 +290,8 @@ def auto_correct(headlines, bullets, extras, articles_text, registry):
     for key in ("next", "background"):
         fixed = []
         for t in extras.get(key) or []:
+            t, notes = fix_speech_verbs(t)
+            corrections += notes
             problem = bullet_problem(t, articles_text)
             if problem:
                 corrections.append(f"{key} removed ({problem}): {t[:80]}")
@@ -333,7 +352,12 @@ def _subjects(sentence, registry):
 
 
 # Everyday phrases that contain a trigger word but are not a proceeding.
-_BENIGN = re.compile(r"\b(in charge( of)?|free of charge|charge d'affaires|chargé d'affaires|court of public opinion)\b", re.IGNORECASE)
+_BENIGN = re.compile(r"\b(in charge( of)?|free of charge|charge d'affaires|chargé d'affaires|court of public opinion"
+                     r"|commut\w*(?:\s+of)?(?:\s+\w+){0,3}\s+sentences?|sentences?\s+(?:were\s+|was\s+)?commuted"
+                     r"|inmates and convicts)\b", re.IGNORECASE)
+# A quoted span: the opening mark not after a letter, the closing mark not
+# before one, so apostrophes ("Tinubu's") never count as quotation marks.
+_QUOTED = re.compile(r"(?<!\w)[\"“‘'][^\"“”‘’]{2,60}?[\"”’'](?!\w)")
 
 
 def lane_triggers(texts, registry):
@@ -352,7 +376,8 @@ def lane_triggers(texts, registry):
                     hits += susp
             if hits and subjects:
                 reasons.append(f"{', '.join(dict.fromkeys(hits))} — {', '.join(subjects)}")
-                if any(_has(p, sentence) for p in PRINCIPAL_OFFICEHOLDERS):
+                # A principal named only inside a quoted slogan or title is not the subject.
+                if any(_has(p, _QUOTED.sub(" ", sentence)) for p in PRINCIPAL_OFFICEHOLDERS):
                     principal = True
     return ("editor lane: " + "; ".join(dict.fromkeys(reasons)) if reasons else None), principal
 
