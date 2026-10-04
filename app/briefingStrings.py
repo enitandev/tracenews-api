@@ -114,7 +114,7 @@ PARTY_NAMES = (
     "New Nigeria Peoples Party", "APGA", "All Progressives Grand Alliance",
     "SDP", "Social Democratic Party", "YPP", "Young Progressives Party",
     "ADP", "Action Democratic Party", "PRP", "Peoples Redemption Party",
-    "NDC", "National Democratic Congress", "AA", "Action Alliance",
+    "NDC", "Nigeria Democratic Congress", "AA", "Action Alliance",
     "ZLP", "Zenith Labour Party", "Accord", "Accord Party", "APM", "BP", "NRM", "AAC",
 )
 # Full name -> abbreviation, so "Peoples Democratic Party" and "PDP" count as the same party.
@@ -123,7 +123,7 @@ PARTY_ALIASES = {
     "African Democratic Congress": "ADC", "New Nigeria Peoples Party": "NNPP",
     "All Progressives Grand Alliance": "APGA", "Social Democratic Party": "SDP",
     "Young Progressives Party": "YPP", "Action Democratic Party": "ADP",
-    "Peoples Redemption Party": "PRP", "National Democratic Congress": "NDC",
+    "Peoples Redemption Party": "PRP", "Nigeria Democratic Congress": "NDC",
     "Action Alliance": "AA", "Zenith Labour Party": "ZLP", "Accord Party": "Accord",
 }
 CANDIDACY_WORDS = ("candidate", "flagbearer", "flag bearer", "running mate", "aspirant", "presidential hopeful")
@@ -146,11 +146,16 @@ EDITOR_LANE_TRIGGERS = {
     "investigate": r"\binvestigat(e|es|ed|ing|ion|ions)\b",
     "sue": r"\b(sue|sues|sued|suing|lawsuit|lawsuits)\b",
     "court": r"\bcourts?\b",
+    # Counsel, 4 Oct 2026, fix 5.
+    "legal challenge": r"\blegal challenges?\b",
+    "petition": r"\bpetition(s|ed|ing|er|ers)?\b",
 }
-# A named person suspended or dismissed.
+# A named person suspended or dismissed: counts only where the person is the
+# object ("suspended Musa Bello", "Musa Bello was suspended", "suspension of
+# Musa Bello"), never for a ban or an activity (counsel, 4 Oct 2026, fix 5).
 SUSPENSION_TRIGGERS = {
-    "suspend": r"\bsuspen(d|ds|ded|ding|sion)\b",
-    "dismiss": r"\bdismiss(es|ed|ing|al)?\b",
+    "suspend": r"suspen(?:d|ds|ded|ding|sion)",
+    "dismiss": r"dismiss(?:es|ed|ing|al)?",
 }
 # Organisations that act (arrest, charge, try, investigate) rather than being
 # the subject. A sentence naming only these does not trigger the lane.
@@ -184,8 +189,52 @@ HEADLINE_QUANTITY_WORDS = (
 HEADLINE_CASUALTY_TERMS = (
     "kill", "kills", "killed", "die", "dies", "died", "dead", "death", "deaths",
     "casualties", "massacre", "massacred", "slaughter", "slaughtered", "slain",
-    "neutralise", "neutralised", "neutralize", "neutralized",
+    "neutralise", "neutralised", "neutralises", "neutralize", "neutralized", "neutralizes",
+    # Counsel, 4 Oct 2026, fix 1.
+    "eliminate", "eliminated", "eliminates", "wipe out", "wiped out", "wipes out",
+    "gun down", "gunned down", "guns down", "success", "successes",
 )
+# Counsel, 4 Oct 2026, fix 1: an offender label in a headline needs a
+# conviction or sentence in the body, or "suspected", "alleged" or a "says"
+# attribution in the headline itself.
+HEADLINE_OFFENDER_LABELS = (
+    "kingpin", "kingpins", "fraudster", "fraudsters", "kidnapper", "kidnappers", "thief", "thieves",
+    "cultist", "cultists", "robber", "robbers", "trafficker", "traffickers", "smuggler", "smugglers",
+    "rapist", "rapists", "murderer", "murderers", "killer", "killers", "drug baron", "drug barons",
+    "drug lord", "drug lords", "ritualist", "ritualists", "impostor", "impostors", "imposter", "imposters",
+    "embezzler", "embezzlers", "looter", "looters",
+)
+HEADLINE_OFFENDER_QUALIFIERS = r"\b(suspected|alleged|allegedly|says|said|accused)\b"
+BODY_CONVICTION_PATTERN = r"\b(convicted|sentenced|found guilty|pleaded guilty|guilty verdict)\b"
+# ═══ COUNSEL, 4 OCT 2026, FIXES 2-4 ════════════════════════════════════════
+# Fix 2: a critical or adverse characterisation whose origin is collective or
+# unnamed is removed from every section.
+COLLECTIVE_ORIGINS = (
+    "critics", "commentators", "public figures", "some voices", "voices", "lawyers",
+    "civil society", "observers", "early users", "analysts", "experts", "some nigerians",
+    "many nigerians", "stakeholders", "pundits",
+)
+ADVERSE_CHARACTERISATION_TERMS = (
+    "concern", "concerns", "criticise", "criticised", "criticize", "criticized", "criticism",
+    "critical of", "condemn", "condemned", "condemnation", "decry", "decried", "fault", "faulted",
+    "slam", "slammed", "lament", "lamented", "described the", "colonised", "colonized",
+    "disappointment", "mixed feelings", "failure", "failures", "bad governance", "corruption",
+    "nepotism", "insecurity", "mismanagement", "incompetence", "questioned", "questioning",
+    "worried", "worries", "alarm", "outrage", "backlash", "uproar", "complain", "complained",
+)
+# Fewer than this many What happened points after corrections: item left out.
+BRIEFING_MIN_POINTS = 3
+# Fix 4: an outlet named in reader text is allowed only where the outlet is
+# the story's subject (named in the headline) or the venue of a statement.
+EXTRA_OUTLET_NAMES = ("News Agency of Nigeria", "NAN", "Reuters", "AFP", "Agence France-Presse",
+                      "Associated Press", "BBC", "Al Jazeera", "CNN")
+# Outlet names that are also ordinary words: counted only in a reporting
+# context ("told The Nation", "according to Leadership").
+AMBIGUOUS_OUTLET_NAMES = ("Leadership", "Independent", "The Nation", "Nation", "The Sun", "Sun", "Tribune",
+                          "The Guardian", "Guardian", "Blueprint", "Pulse", "Daily Post", "The Cable", "Punch")
+OUTLET_REPORTING_CONTEXT = r"(according to|reported by|made available to|obtained by|seen by|learnt by|quoted by|told|in an interview with|speaking (?:to|with|on)|said on|appearing on)\s+(?:the\s+)?"
+OUTLET_VENUE_CONTEXT = r"(told|in an interview with|speaking (?:to|with|on)|said on|appearing on|in a chat with)\s+(?:the\s+)?"
+SOURCE_NUMBER_PATTERN = r"\s*\((?:Sources?|Src\.?)\s*\d+(?:\s*(?:,|and|&|-|–)\s*\d+)*\)"
 # Court phrases that contain a casualty word but report no death.
 HEADLINE_NON_CASUALTY_PHRASES = (
     "sentenced to death", "death sentence", "death sentences", "death penalty",
