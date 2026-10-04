@@ -114,6 +114,7 @@ from app.routers import auth as auth_router
 from app.routers import reader
 from app.routers import admin_overview
 from app.routers import admin_desk
+from app.routers import notifications as notifications_router
 from app.routers import system, feeds, story, seo, search, profiles, briefing
 
 
@@ -122,6 +123,7 @@ app.include_router(monitoring_spirit_admin.router)
 app.include_router(politicians_admin.router)
 app.include_router(admin_overview.router)
 app.include_router(admin_desk.router)
+app.include_router(notifications_router.router)
 
 app.include_router(auth_router.router)
 app.include_router(reader.router)

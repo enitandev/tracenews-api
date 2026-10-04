@@ -35,8 +35,8 @@ def test_alert_test_on_start_sends_one_alert(monkeypatch):
     monkeypatch.setenv("ALERT_TEST_ON_START", "1")
     monkeypatch.setattr(sched, "send_alert", lambda subject, body: sent.append(subject))
     # Keep the test free of network: replace the jobs that would hit the DB/HTTP.
-    for name in ("run_sitemap_health_check", "check_feed_heartbeat", "check_briefing_heartbeat",
-                 "log_scheduler_alive", "check_version_heartbeat", "run_sitemap_cache_job_sync"):
+    for name in ("run_sitemap_health_check", "run_checks",
+                 "log_scheduler_alive", "run_sitemap_cache_job_sync"):
         monkeypatch.setattr(sched, name, lambda: None)
     try:
         sched.start_scheduler()
@@ -53,8 +53,8 @@ def test_no_test_alert_without_the_flag(monkeypatch):
     import app.scheduler as sched
     monkeypatch.delenv("ALERT_TEST_ON_START", raising=False)
     monkeypatch.setenv("SCHEDULER_ENABLED", "1")
-    for name in ("run_sitemap_health_check", "check_feed_heartbeat", "check_briefing_heartbeat",
-                 "log_scheduler_alive", "check_version_heartbeat", "run_sitemap_cache_job_sync"):
+    for name in ("run_sitemap_health_check", "run_checks",
+                 "log_scheduler_alive", "run_sitemap_cache_job_sync"):
         monkeypatch.setattr(sched, name, lambda: None)
     try:
         sched.start_scheduler()

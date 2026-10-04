@@ -61,6 +61,8 @@ def update_status(politician_id: str, payload: StatusUpdate, actor: str = Depend
         "after_state": {"publication_status": after["publication_status"]},
     }).execute()
 
+    from app.notification_checks import run_work_soon
+    run_work_soon()
     return after
 
 
