@@ -8,6 +8,7 @@ and write every such action to briefing_edit_log.
 """
 import logging
 import re
+import threading
 import time
 from datetime import date, datetime, timezone
 from typing import Dict, List, Optional
@@ -41,29 +42,56 @@ def _require_public():
 # several seconds; readers get a copy at most PUBLIC_CACHE_SECONDS old, and
 # every editor action clears it so an approval shows at once.
 PUBLIC_CACHE_SECONDS = 120
-_public = {"at": 0.0, "day": None, "items": []}
+_public = {"at": 0.0, "day": None, "items": [], "loaded": False}
+_refresh_lock = threading.Lock()
 
 
 def clear_public_cache():
+    """After an editor action: rebuild the copy in the background; readers see
+    the change within seconds and never wait for it."""
     _public["at"] = 0.0
+    threading.Thread(target=_refresh_public_edition, daemon=True).start()
 
 
-def _public_edition():
+def _load_public_edition():
     """(day, items): today's edition, or the most recent one with something to show."""
-    if time.time() - _public["at"] < PUBLIC_CACHE_SECONDS:
-        return _public["day"], _public["items"]
     days = supabase.table("briefing_editions").select("date").eq("is_sample", False) \
         .order("date", desc=True).limit(7).execute().data or []
-    found, items = None, []
     for d in sorted({r["date"] for r in days}, reverse=True):
         day = date.fromisoformat(d)
         if day > lagos_today():
             continue
         items = edition_items(day)
         if items:
-            found = day
-            break
-    _public.update(at=time.time(), day=found, items=items if found else [])
+            return day, items
+    return None, []
+
+
+def _refresh_public_edition():
+    """Rebuild the cached copy; one refresh at a time. A failure is logged and
+    the previous copy stays in place."""
+    if not _refresh_lock.acquire(blocking=False):
+        return
+    try:
+        day, items = _load_public_edition()
+        _public.update(at=time.time(), day=day, items=items, loaded=True)
+    except Exception:
+        logger.exception("[briefing] public edition refresh failed")
+    finally:
+        _refresh_lock.release()
+
+
+def _public_edition():
+    """The cached edition. An expired copy is served while a fresh one is
+    built in the background, so no reader waits; only the first request
+    after a restart builds it in line."""
+    if not _public["loaded"]:
+        with _refresh_lock:
+            if not _public["loaded"]:
+                day, items = _load_public_edition()
+                _public.update(at=time.time(), day=day, items=items, loaded=True)
+    elif time.time() - _public["at"] >= PUBLIC_CACHE_SECONDS:
+        threading.Thread(target=_refresh_public_edition, daemon=True).start()
     return _public["day"], _public["items"]
 
 
