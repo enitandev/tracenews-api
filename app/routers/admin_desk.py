@@ -34,20 +34,20 @@ def _latest(table, column):
     return rows[0][column] if rows else None
 
 
+def is_mine(item, me):
+    """Whether this editor can give the approval an item is waiting for."""
+    first = item.get("approved_by")
+    if not first:
+        return True
+    return bool(item.get("needs_second_approver")) and first != me \
+        and is_senior_approver(me) != is_senior_approver(first)
+
+
 def briefing_waiting(items, me):
     """Held items not yet publishable, and the ones this editor can act on."""
-    waiting, mine = [], []
-    for i in items:
-        if i.get("lane") not in ("review", "senior_review") or i.get("publishable") or i.get("left_out_by"):
-            continue
-        waiting.append(i)
-        first = i.get("approved_by")
-        if not first:
-            mine.append(i)
-        elif i.get("needs_second_approver") and first != me \
-                and is_senior_approver(me) != is_senior_approver(first):
-            mine.append(i)
-    return waiting, mine
+    waiting = [i for i in items
+               if i.get("lane") in ("review", "senior_review") and not i.get("publishable") and not i.get("left_out_by")]
+    return waiting, [i for i in waiting if is_mine(i, me)]
 
 
 def _health():

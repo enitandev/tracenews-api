@@ -46,6 +46,8 @@ def submit_correction(payload: CorrectionSubmit):
         "requester_relationship": payload.requester_relationship,
         "sla_due_at": (datetime.utcnow() + timedelta(hours=12)).isoformat() if payload.subject_type == "cluster_summary" else add_business_days(datetime.utcnow(), 5).isoformat(),
     }).execute()
+    from app.notification_checks import run_work_soon
+    run_work_soon()
     return res.data[0]
 
 
@@ -117,4 +119,6 @@ def update_correction(
         "after_state": after,
     }).execute()
 
+    from app.notification_checks import run_work_soon
+    run_work_soon()
     return after

@@ -42,11 +42,9 @@ def classify_cluster(title: str, summary: str) -> dict:
     except openai.RateLimitError as e:
         logger.error(f"LLM Classification failed due to Rate Limit/Quota: {e}")
         if "insufficient_quota" in str(e) or "credit_balance_exhausted" in str(e):
-            try:
-                from app.heartbeat import send_alert
-                send_alert("TraceNews ALERT: OpenAI Quota Exhausted", f"Classifier hit billing failure: {e}")
-            except Exception:
-                logger.exception("Failed to send quota alert")
+            from app.notification_checks import report_event
+            report_event("health:ai_quota", "The AI provider has stopped accepting requests",
+                         f"OpenAI refused a classification for billing reasons: {str(e)[:300]}")
         return {"category": "General", "confidence": 0.0, "retry": True}
     except Exception:
         logger.exception("LLM Classification failed")

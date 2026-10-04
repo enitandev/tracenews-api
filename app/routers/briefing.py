@@ -60,6 +60,8 @@ def clear_public_cache():
     _public["at"] = 0.0
     _staff.clear()
     threading.Thread(target=_refresh_public_edition, daemon=True).start()
+    from app.notification_checks import run_work_soon
+    run_work_soon()
 
 
 def _load_public_edition():

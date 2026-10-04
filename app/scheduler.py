@@ -1,7 +1,8 @@
 import os
 import logging
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.heartbeat import check_feed_heartbeat, check_briefing_heartbeat, check_version_heartbeat, send_alert
+from app.heartbeat import send_alert
+from app.notification_checks import CHECK_MINUTES, run_checks, sitemap_result
 from app.sitemap_cache import run_sitemap_cache_job_sync
 from datetime import datetime, timezone
 
@@ -39,30 +40,19 @@ def run_sitemap_health_check():
     
     for path in sitemaps_to_check:
         try:
-            r = sitemap_client.get(
-                f"{base}{path}"
-            )
-            count = r.text.count(
-                "<url>"
-            )
-            if count == 0:
-                logger.error(
-                    f"SITEMAP HEALTH "
-                    f"ALERT: {path} "
-                    f"returned 0 URLs!"
-                )
-            else:
-                logger.info(
-                    f"Sitemap health "
-                    f"OK: {path} has "
-                    f"{count} URLs"
-                )
+            r = sitemap_client.get(f"{base}{path}")
+            count = r.text.count("<url>")
+            problem = None if count else f"{path} returned no URLs (HTTP {r.status_code})."
         except Exception as e:
-            logger.error(
-                f"SITEMAP HEALTH "
-                f"ALERT: {path} "
-                f"failed: {e}"
-            )
+            problem = f"{path} could not be fetched: {e}"
+        if problem:
+            logger.error(f"SITEMAP HEALTH ALERT: {problem}")
+        else:
+            logger.info(f"Sitemap health OK: {path} has {count} URLs")
+        try:
+            sitemap_result(path, problem)
+        except Exception:
+            logger.exception(f"[notifications] could not record the sitemap result for {path}")
 
 
 # Variables Railway injects into every deployment. RAILWAY_GIT_COMMIT_SHA is
@@ -125,28 +115,19 @@ def start_scheduler():
         misfire_grace_time=300
     )
 
-    # Feed heartbeat — every 30 min, catches a stalled feed within the hour
+    # Staff notifications (app/notification_checks.py): Briefing approvals,
+    # corrections, held politicians, feed, worker, deploy and Briefing build.
+    # They appear on the Desk; nothing is emailed unless a person opted in.
+    # Replaces the feed, version and briefing heartbeat emails.
     scheduler.add_job(
-        check_feed_heartbeat,
+        run_checks,
         "interval",
-        minutes=30,
-        id="check_feed_heartbeat",
-        replace_existing=True,
-    )
-
-    # Briefing heartbeat — 07:05 UTC (08:05 WAT), after the worker's
-    # briefing window (05:00-06:59 UTC) has closed, so anything not
-    # complete by now will not complete without intervention.
-    scheduler.add_job(
-        check_briefing_heartbeat,
-        "cron",
-        hour=7,
-        minute=5,
-        id="check_briefing_heartbeat",
+        minutes=CHECK_MINUTES,
+        id="run_notification_checks",
         replace_existing=True,
         max_instances=1,
         coalesce=True,
-        misfire_grace_time=300,
+        next_run_time=datetime.now(timezone.utc),
     )
 
     # Scheduler tripwire logging — reports RSS every 5 min
@@ -156,15 +137,6 @@ def start_scheduler():
         minutes=5,
         id="log_scheduler_alive",
         replace_existing=True,
-    )
-
-    scheduler.add_job(
-        check_version_heartbeat,
-        "interval",
-        minutes=15,
-        id="check_version_heartbeat",
-        replace_existing=True,
-        next_run_time=datetime.now(timezone.utc)
     )
 
     # Background Stories Sitemap Generation
@@ -181,7 +153,7 @@ def start_scheduler():
     scheduler.start()
     logger.info(
         f"Scheduler started (web-only mode, enabled by {reason}). "
-        "Heartbeats every 30 min, sitemap every 30 min. "
+        f"Notification checks every {CHECK_MINUTES} min, sitemap every 30 min. "
         "Batch jobs run via separate worker cron service."
     )
 
